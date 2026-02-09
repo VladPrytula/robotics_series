@@ -92,15 +92,60 @@ def load_model(ckpt_path: str, device: str = "auto"):
     raise RuntimeError(f"Could not load checkpoint with PPO/SAC/TD3: {ckpt}")
 
 
+def add_goal_indicator(frame, goal_pos, achieved_pos, width, height):
+    """Add visual indicator showing goal and progress."""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import numpy as np
+
+        img = Image.fromarray(frame)
+        draw = ImageDraw.Draw(img)
+
+        # Calculate distance
+        dist = np.linalg.norm(np.array(achieved_pos) - np.array(goal_pos))
+
+        # Try to load font
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+        except Exception:
+            font = ImageFont.load_default()
+
+        # Show distance to goal in corner
+        status = f"Distance: {dist*100:.1f}cm"
+        if dist < 0.05:
+            status = "SUCCESS!"
+            color = (0, 255, 0)
+        else:
+            color = (255, 255, 255)
+
+        # Draw with shadow
+        draw.text((12, 12), status, fill=(0, 0, 0), font=font)
+        draw.text((10, 10), status, fill=color, font=font)
+
+        return np.array(img)
+    except ImportError:
+        return frame
+
+
 def record_episode(env, model, deterministic: bool = True) -> list:
     """Record a single episode and return frames."""
     frames = []
-    obs, _ = env.reset()
+    obs, info = env.reset()
     done = False
+
+    # Get initial goal for display
+    goal = obs.get("desired_goal", None)
 
     while not done:
         frame = env.render()
         if frame is not None:
+            # Add goal indicator if we have goal info
+            if goal is not None:
+                achieved = obs.get("achieved_goal", goal)
+                frame = add_goal_indicator(
+                    frame, goal, achieved,
+                    frame.shape[1], frame.shape[0]
+                )
             frames.append(frame)
 
         action, _ = model.predict(obs, deterministic=deterministic)
@@ -108,9 +153,15 @@ def record_episode(env, model, deterministic: bool = True) -> list:
         done = terminated or truncated
 
     # Add a few frames at the end to show success
-    for _ in range(10):
+    for _ in range(15):
         frame = env.render()
         if frame is not None:
+            if goal is not None:
+                achieved = obs.get("achieved_goal", goal)
+                frame = add_goal_indicator(
+                    frame, goal, achieved,
+                    frame.shape[1], frame.shape[0]
+                )
             frames.append(frame)
 
     return frames
@@ -258,12 +309,26 @@ def main() -> int:
     import gymnasium as gym
     import gymnasium_robotics  # noqa: F401
 
+    # Create env with better camera settings to show goal
     env = gym.make(
         args.env,
         render_mode="rgb_array",
         width=args.width,
         height=args.height,
     )
+
+    # Try to adjust camera to show goal better (wider view, angled from above)
+    try:
+        if hasattr(env.unwrapped, 'mujoco_renderer'):
+            # Set a better camera angle that shows both robot and goal
+            env.unwrapped.mujoco_renderer.default_cam_config = {
+                "distance": 1.8,  # Zoom out a bit
+                "azimuth": 135,   # Angle from the side
+                "elevation": -25, # Look down slightly
+                "lookat": [1.3, 0.75, 0.4],  # Center on workspace
+            }
+    except Exception as e:
+        print(f"Note: Could not adjust camera: {e}")
 
     try:
         all_episodes = []
