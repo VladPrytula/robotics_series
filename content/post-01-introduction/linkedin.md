@@ -2,35 +2,35 @@
 
 ---
 
-I spent 3 weeks watching a robot fail to pick up a block.
+RL has a reproducibility crisis.
 
-The code was correct. The hyperparameters were from a paper. The reward was zero. Always zero.
+Henderson et al. (2018) showed that published results often fail to replicate--even with the same code.
 
-The problem wasn't the code. The problem was me.
+The problem isn't bad researchers. It's that RL algorithms are sensitive to details tutorials don't mention: reward scaling, observation normalization, random seeds.
 
-I was asking "why doesn't this work?"
+When training fails, most people ask: "Why doesn't my code work?"
 
-The right question: "Is this problem well-posed?"
+Better question: "Under what conditions does this algorithm succeed?"
 
 ---
 
-In the French mathematical tradition, you don't solve a problem before asking:
+The French mathematical tradition asks three questions before solving anything:
 
 → Does a solution exist?
 → Is it unique?
 → Does it depend continuously on the data?
 
-Applied to RL:
+Applied to RL, this becomes:
 
 → Can a neural network policy solve this task?
-→ Are there multiple different solutions?
-→ Will a different random seed give a similar result?
+→ Are there multiple qualitatively different solutions?
+→ Will different random seeds give similar results?
 
-My robot failed because I ignored the first question.
+Example: sparse rewards + random exploration.
 
-Sparse rewards + random exploration = zero probability of success = no gradient signal = no learning.
+The probability of randomly reaching a goal in high-dimensional space is essentially zero. No success = no gradient signal = no learning.
 
-The problem, as I had formulated it, was mathematically impossible.
+This isn't a hyperparameter problem. The problem formulation itself makes learning impossible.
 
 ---
 

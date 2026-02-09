@@ -15,11 +15,11 @@ model.learn(total_timesteps=100000)
 
 Two lines. The robot learns. Magic.
 
-Except it's not magic. It's a black box. And when it stops working--when your robot flails uselessly for 10 million timesteps while the loss decreases but nothing improves--you have no idea why. You can't debug what you don't understand.
+Except when it doesn't. And in reinforcement learning, "doesn't work" is the default state. The field has a reproducibility problem that's well-documented: Henderson et al. (2018) showed that reported results often fail to replicate, even with the same code. Hyperparameters that work in one paper fail silently in another setting.
 
-I've been there. I spent three weeks watching a simulated robot arm fail to pick up a block. The code was "correct" (copied from a tutorial). The hyperparameters were "optimal" (from a paper). The reward was... zero. Always zero.
+This isn't a skill issue--it's a structural one. RL algorithms are sensitive to details that tutorials gloss over: reward scaling, observation normalization, network initialization, the specific random seed. When something fails, the debugging surface is enormous.
 
-The problem wasn't the code. The problem was me. I didn't understand what I was doing.
+The question isn't "why doesn't my code work?" That framing assumes the code is the problem. The deeper question is: "Under what conditions does this algorithm succeed, and have I established those conditions?"
 
 ## The Brezis Tradition
 
