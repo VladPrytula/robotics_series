@@ -272,8 +272,7 @@ def main() -> int:
             print(f"Recording episode {ep + 1}/{args.n_episodes}...")
             frames = record_episode(env, model, deterministic=args.deterministic)
 
-            # Add episode number overlay
-            frames = add_text_overlay(frames, f"Episode {ep + 1}")
+            # No text overlay - let the robot speak for itself
             all_episodes.append(frames)
             print(f"  Recorded {len(frames)} frames")
 
@@ -296,7 +295,7 @@ def main() -> int:
         if args.grid and args.n_episodes >= 4:
             print("\nCreating 2x2 grid video...")
             grid_frames = create_grid_video(all_episodes, (2, 2))
-            grid_frames = add_text_overlay(grid_frames, "Fetch Robot - Goal-Conditioned RL", position="bottom")
+            # Clean video - no text overlay, let the visuals speak
             save_video(grid_frames, out_path.with_name(out_path.stem + "_grid.mp4"), fps=args.fps)
 
         # Create GIF if requested
