@@ -28,6 +28,7 @@ jobs:
             texlive-xetex \
             texlive-latex-extra \
             texlive-fonts-recommended \
+            lmodern \
             imagemagick
 
       - name: Build PDFs
@@ -49,4 +50,3 @@ jobs:
           git add docs/pdfs
           git commit -m "docs: update PDFs"
           git push
-
