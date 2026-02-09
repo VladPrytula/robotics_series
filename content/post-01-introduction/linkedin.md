@@ -49,9 +49,11 @@ It's slow. 10 weeks. Chapters build on each other.
 
 But when something breaks, you'll have the mental model to understand why.
 
+[Attach video: videos/fetch_reach_demo_grid.mp4 showing 4 simultaneous runs of trained policy]
+
 ---
 
-First two chapters are live:
+First three chapters are live:
 github.com/VladPrytula/robotics_series
 
 Feedback welcome--especially on what's confusing or missing.

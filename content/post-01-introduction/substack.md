@@ -55,6 +55,12 @@ The environment is real--a simulated Fetch robot arm, the same one used in resea
 
 Only in **Week 2** do we train anything. And even then, we start with dense rewards (continuous feedback) before attempting sparse rewards (binary success/failure). We establish baselines. We measure variance across seeds. We treat RL as experimental science, not alchemy.
 
+Here's what a trained Week 2 policy looks like--four simultaneous runs reaching different goals:
+
+![Trained PPO Policy](../videos/fetch_reach_demo_grid.gif)
+
+*100% success rate. The robot learned to reach arbitrary positions through trial and error.*
+
 ## The Core Insight
 
 **Hindsight Experience Replay (HER)** is not a trick or a hack. It's the mathematically principled solution to a well-posed problem.
@@ -112,7 +118,7 @@ The curriculum is open-source and in active development:
 **GitHub:** [robotics_series](https://github.com/VladPrytula/robotics_series)
 **Documentation:** [vladprytula.github.io/robotics_series](https://vladprytula.github.io/robotics_series/)
 
-Chapters 0-1 are complete. Chapters 2-10 are in progress.
+Chapters 0-2 are complete. Chapters 3-10 are in progress.
 
 I'll be posting updates here every two weeks--what I've built, what I've learned, what I've gotten wrong. If you're working through the material, I want to hear from you. The goal is shared understanding, and that requires feedback.
 

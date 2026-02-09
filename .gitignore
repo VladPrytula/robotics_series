@@ -17,7 +17,12 @@ __pycache__/
 results/
 checkpoints/
 videos/
+!videos/*_demo*.gif
+!videos/*_demo*.mp4
 runs/
+
+# Keep demo videos in docs
+!docs/videos/
 
 # IDE
 .vscode/

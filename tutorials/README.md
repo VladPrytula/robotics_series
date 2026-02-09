@@ -46,6 +46,12 @@ By the end of this curriculum:
 3. **Diagnostic capability** to understand *why* training succeeds or fails
 4. **Deep understanding** of how problem structure dictates algorithm choice
 
+Here is what a trained policy looks like--four simultaneous runs reaching different goals:
+
+![Fetch Reach Demo](../videos/fetch_reach_demo_grid.gif)
+
+*The robot learns to reach arbitrary 3D positions through trial and error, not programmed kinematics.*
+
 This is a significant investment--expect weeks, not hours. The payoff is genuine research capability, not superficial familiarity with library calls.
 
 ---

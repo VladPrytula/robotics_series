@@ -23,14 +23,16 @@ This curriculum tries to fix that by:
 
 **What's included:**
 
-- Chapters 0-1: Environment setup, Fetch anatomy, reward verification
-- Chapters 2-10: PPO baseline -> SAC -> HER -> harder tasks (in progress)
+- Chapter 0: Environment setup, Docker proof-of-life
+- Chapter 1: Fetch anatomy, reward verification
+- Chapter 2: PPO baseline (100% success on dense Reach)
+- Chapters 3-10: SAC -> HER -> harder tasks (in progress)
 - Docker tooling for DGX/GPU clusters
 - CLI tools for training and evaluation
 
 **Current status:**
 
-Chapters 0-1 are complete and tested. Chapters 2-10 are being written incrementally. The core training/eval infrastructure works.
+Chapters 0-2 are complete and tested. Chapter 2 achieves 100% success rate on FetchReachDense-v4 with PPO. Chapters 3-10 are being written incrementally.
 
 **Links:**
 
