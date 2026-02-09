@@ -2,6 +2,8 @@
 
 *A Docker-first reinforcement learning laboratory for studying sparse-reward manipulation tasks.*
 
+Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble electronics. These aren't science fiction--they're active research problems, and the core challenge is the same: learning to manipulate objects to arbitrary goal positions from minimal feedback.
+
 This repository is structured for step-by-step study. A 10-week curriculum ([`syllabus.md`](syllabus.md)) provides executable commands and verification criteria. Tutorials ([`tutorials/`](tutorials/)) provide theoretical context. The goal is not to run scripts quickly, but to understand deeply.
 
 ---

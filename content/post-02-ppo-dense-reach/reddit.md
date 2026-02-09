@@ -4,6 +4,8 @@
 
 ---
 
+*Building toward robots that pack boxes, fold clothes, assemble products--but first, we need infrastructure that doesn't lie to us.*
+
 **TL;DR:** Before debugging your algorithm, debug your pipeline. New chapter in the open-source robotics RL curriculum uses PPO on dense Reach as a "pipeline truth serum." If this baseline fails, the problem is infrastructure, not algorithms. Achieved 100% success rate.
 
 **The problem this solves:**

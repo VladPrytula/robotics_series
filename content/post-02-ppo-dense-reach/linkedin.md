@@ -2,6 +2,10 @@
 
 ---
 
+Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble circuit boards.
+
+The gap between "works in a demo" and "works reliably" is where most projects die.
+
 Before you debug your algorithm, debug your pipeline.
 
 Here's a failure mode I've seen too many times:
