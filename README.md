@@ -21,7 +21,7 @@ This is an active project. The table below shows what is implemented versus plan
 | **Curriculum** | | |
 | Week 0: DGX setup, proof-of-life | ✓ Complete | `ch00_proof_of_life.py`, tutorial |
 | Week 1: Environment anatomy | ✓ Complete | `ch01_env_anatomy.py`, tutorial |
-| Week 2: PPO on dense Reach | ○ Planned | Syllabus ready, script/tutorial pending |
+| Week 2: PPO on dense Reach | ✓ Complete | `ch02_ppo_dense_reach.py`, tutorial, 100% success |
 | Week 3: SAC on dense Reach | ○ Planned | |
 | Week 4: Sparse + HER | ○ Planned | |
 | Week 5: PickAndPlace | ○ Planned | |
@@ -31,7 +31,7 @@ This is an active project. The table below shows what is implemented versus plan
 | Week 9: Sweeps and ablations | ○ Planned | |
 | Week 10: Capstone | ○ Planned | |
 
-**Current focus:** Weeks 0-1 provide the foundation. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
+**Current focus:** Weeks 0-2 are complete. Week 2 establishes PPO as a "pipeline truth serum"--validating infrastructure before adding complexity. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
 
 ---
 
