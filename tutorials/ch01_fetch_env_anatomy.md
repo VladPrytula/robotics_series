@@ -143,7 +143,7 @@ We now verify that the Fetch environments implement the goal-conditioned MDP str
 First, we enumerate the available Fetch environments:
 
 ```bash
-python scripts/ch01_env_anatomy.py list-envs
+bash docker/dev.sh python scripts/ch01_env_anatomy.py list-envs
 ```
 
 **Expected Output.** Environment IDs including:
@@ -161,7 +161,7 @@ The naming convention encodes task and reward type: environments without "Dense"
 #### 3.1.2 Describing Observation and Action Spaces
 
 ```bash
-python scripts/ch01_env_anatomy.py describe --json-out results/ch01_env_describe.json
+bash docker/dev.sh python scripts/ch01_env_anatomy.py describe --json-out results/ch01_env_describe.json
 ```
 
 This command produces a JSON file documenting the precise structure of observations and actions.
@@ -205,7 +205,7 @@ The 4-dimensional action vector is interpreted as follows:
 We verify the critical invariant that `env.step()` rewards match `compute_reward()` rewards:
 
 ```bash
-python scripts/ch01_env_anatomy.py reward-check --n-steps 500
+bash docker/dev.sh python scripts/ch01_env_anatomy.py reward-check --n-steps 500
 ```
 
 **Expected Output.** A message confirming that all 500 reward comparisons matched within numerical tolerance.
@@ -219,7 +219,7 @@ python scripts/ch01_env_anatomy.py reward-check --n-steps 500
 Before training any agent, we establish baseline performance with a random policy:
 
 ```bash
-python scripts/ch01_env_anatomy.py random-episodes --n-episodes 10 --json-out results/ch01_random_metrics.json
+bash docker/dev.sh python scripts/ch01_env_anatomy.py random-episodes --n-episodes 10 --json-out results/ch01_random_metrics.json
 ```
 
 **Expected Output (FetchReachDense-v4):**
