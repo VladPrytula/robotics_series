@@ -1,6 +1,54 @@
 # Tutorials
 
-## Prologue: On the Purpose of This Collection
+## Prologue: What Problem Are We Solving?
+
+Before diving into mathematics and algorithms, let us be concrete about the situation this curriculum addresses.
+
+### The Practical Problem
+
+You want to build a robot that manipulates objects to arbitrary goal positions. Not a robot that performs one fixed task—that is classical control engineering—but a robot that can:
+
+- Reach any 3D position in its workspace
+- Push any object to any target location
+- Pick up any object and place it anywhere
+
+The key word is **any**. The goal is specified at runtime, not at programming time. The robot must generalize across an infinite space of possible tasks.
+
+### Why This Is Hard
+
+**Sparse rewards.** The natural feedback is binary: did you succeed or not? You don't get partial credit for "almost" reaching the goal. This means most training episodes provide zero learning signal.
+
+**High-dimensional continuous control.** The robot issues 4D velocity commands at 50Hz. Random exploration in this space almost never reaches a specified goal by chance.
+
+**Goal generalization.** You cannot train a separate policy for each possible goal—there are infinitely many. The policy must take the goal as input and generalize to goals it has never seen during training.
+
+### When to Use This Approach
+
+The SAC + HER methodology we teach is appropriate when:
+
+| Condition | Example |
+|-----------|---------|
+| Goals vary at runtime | "Move to position (0.3, 0.2, 0.1)" specified at test time |
+| Rewards are sparse | Success/failure signal, no dense shaping |
+| Actions are continuous | Velocity commands, torques—not discrete choices |
+| Simulation is available | Training requires millions of trials |
+
+If your problem matches these conditions, this curriculum provides the methodologically appropriate solution. If your problem has dense rewards, discrete actions, or a single fixed goal, simpler methods exist and you should use them.
+
+### What You Will Build
+
+By the end of this curriculum:
+
+1. **A working policy** achieving >90% success on FetchReach, FetchPush, and FetchPickAndPlace
+2. **Reproducible infrastructure** with Docker, versioned experiments, and statistical rigor
+3. **Diagnostic capability** to understand *why* training succeeds or fails
+4. **Deep understanding** of how problem structure dictates algorithm choice
+
+This is a significant investment—expect weeks, not hours. The payoff is genuine research capability, not superficial familiarity with library calls.
+
+---
+
+## On the Purpose of This Collection
 
 This collection of tutorials constitutes a systematic treatment of goal-conditioned reinforcement learning for robotic manipulation. It is not a quickstart guide, nor a collection of recipes, nor a reference manual. It is, in the tradition of the great mathematical textbooks, a *course of study*: a carefully sequenced development of ideas, each building on what came before, designed to produce genuine understanding rather than superficial familiarity.
 
