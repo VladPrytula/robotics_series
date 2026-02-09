@@ -57,13 +57,3 @@ github.com/VladPrytula/robotics_series
 Feedback welcome--especially on what's confusing or missing.
 
 #reinforcementlearning #robotics #machinelearning #opensource #zooplus
-
----
-
-## Posting Notes
-
-- Upload the robot GIF as native video (better engagement)
-- Post Tuesday-Thursday, 8-10am local time
-- Respond to every comment in first 2 hours
-- Don't edit post after publishing (kills reach)
-- Tag zooplus SE company page if possible

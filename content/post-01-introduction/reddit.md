@@ -115,13 +115,3 @@ The simulated Fetch matches the kinematics of the real Fetch Mobile Manipulator 
 GitHub: https://github.com/VladPrytula/robotics_series
 
 Happy to answer questions about the Fetch environments or the approach.
-
----
-
-## Posting Notes
-
-- Post on weekday mornings (US time) for best visibility
-- Don't post to multiple subreddits on the same day (looks spammy)
-- Schedule: r/reinforcementlearning Monday, r/MachineLearning Wednesday, r/robotics Friday
-- Engage genuinely with comments--this builds reputation
-- If post gets traction, cross-post to r/learnmachinelearning the following week
