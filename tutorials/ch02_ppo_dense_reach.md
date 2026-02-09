@@ -207,7 +207,15 @@ PPO maintains two neural networks:
 
 **Critic** $V_\phi(s, g)$: Given the state and goal, estimate the expected return. This helps compute advantages.
 
-In practice, these often share a backbone network with separate heads.
+**Why two networks, not one?** A natural question: why not have a single network output both actions and value estimates? Three reasons:
+
+1. **Different objectives.** The actor maximizes expected return (wants to find good actions). The critic minimizes prediction error (wants accurate value estimates). These gradients can conflict--improving one may hurt the other.
+
+2. **Different output types.** The actor outputs a probability distribution (mean and variance for continuous actions). The critic outputs a single scalar. Forcing these through the same final layers creates unnecessary coupling.
+
+3. **Stability.** The critic's value estimates are used to compute advantages, which then train the actor. If actor updates destabilize the critic, the advantages become noisy, which destabilizes the actor further--a vicious cycle.
+
+In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"). This captures shared features while keeping the objectives separate. Stable Baselines 3 uses this approach by default.
 
 ### 2.2 The Training Loop
 
