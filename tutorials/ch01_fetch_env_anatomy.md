@@ -8,6 +8,74 @@ The central result of this chapter is that Fetch environments implement a specif
 
 ---
 
+## Part 0: The Practical Context
+
+### 0.1 Where We Are
+
+You have completed Chapter 0. You now have:
+- A working Docker container with GPU access
+- MuJoCo physics simulation running headlessly
+- A verified training loop that produces checkpoints
+
+You are running on a DGX cluster (or similar GPU workstation), executing all commands through `bash docker/dev.sh`. Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
+
+### 0.2 What We Are Doing
+
+We are about to train neural network policies to control a simulated Fetch robot arm. Before we write any training code, we must understand *exactly* what the robot perceives and what commands it accepts.
+
+This is not academic pedantry. Consider what happens if you misunderstand the interface:
+
+| Misunderstanding | Consequence |
+|-----------------|-------------|
+| Wrong observation shape | Network architecture mismatch, cryptic shape errors |
+| Wrong action semantics | Policy learns to output nonsense commands |
+| Wrong reward interpretation | Hyperparameters tuned for wrong scale |
+| Missing goal structure | Cannot use HER, forced to use inefficient methods |
+
+Every hour spent understanding the environment saves ten hours debugging training failures.
+
+### 0.3 The Fetch Robot
+
+The Fetch robot is a mobile manipulator designed for research. In simulation, we use only the arm: a 7-DOF manipulator with a parallel-jaw gripper. The simulated version in MuJoCo matches the kinematics of the real robot, meaning policies trained in simulation can (with care) transfer to hardware.
+
+The Gymnasium-Robotics package provides four Fetch tasks:
+
+| Task | Goal | Difficulty |
+|------|------|------------|
+| **FetchReach** | Move end-effector to target position | Easiest—no object interaction |
+| **FetchPush** | Push object to target position | Medium—requires contact |
+| **FetchPickAndPlace** | Pick up object, place at target | Hard—requires grasping |
+| **FetchSlide** | Slide object to distant target | Hardest—requires throwing motion |
+
+Each task has two reward variants:
+- **Dense** (e.g., `FetchReachDense-v4`): Reward = negative distance to goal. Provides continuous feedback.
+- **Sparse** (e.g., `FetchReach-v4`): Reward = 0 if goal reached, −1 otherwise. Binary feedback only.
+
+### 0.4 Why Environment Anatomy Matters
+
+The Fetch environments are not arbitrary. They implement a specific interface designed for goal-conditioned learning:
+
+1. **Observations are dictionaries**, not flat arrays. The keys `observation`, `achieved_goal`, and `desired_goal` have precise meanings that algorithms like HER depend on.
+
+2. **Rewards can be recomputed** for any goal via `env.unwrapped.compute_reward()`. This is the API that enables goal relabeling.
+
+3. **Success is defined geometrically**: the achieved goal must be within 5cm of the desired goal.
+
+If you treat the environment as a black box—feeding observations to a network and hoping it learns—you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can debug intelligently when things go wrong.
+
+### 0.5 What This Chapter Produces
+
+By the end of this chapter, you will have:
+
+1. **JSON schemas** documenting observation and action spaces exactly
+2. **Verified reward consistency** between `env.step()` and `compute_reward()`
+3. **Random baseline metrics** establishing the performance floor
+4. **Complete understanding** of why Fetch environments enable HER
+
+These are not optional artifacts. They are the foundation on which all subsequent training rests.
+
+---
+
 ## Part I: The Problem
 
 ### 1.1 WHY: The Goal-Conditioning Paradigm
