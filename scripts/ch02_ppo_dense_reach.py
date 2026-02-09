@@ -53,6 +53,21 @@ def get_eval_output_path(seed: int) -> Path:
     return Path("results") / f"ch02_{ALGO}_{ENV_ID.lower()}_seed{seed}_eval.json"
 
 
+def check_gpu() -> bool:
+    """Check if GPU is available."""
+    try:
+        import torch
+        available = torch.cuda.is_available()
+        if available:
+            print(f"[ch02] GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            print("[ch02] WARNING: No GPU detected, training will be slow")
+        return available
+    except ImportError:
+        print("[ch02] WARNING: PyTorch not available, cannot check GPU")
+        return False
+
+
 def run_command(cmd: list[str], description: str) -> int:
     """Run a command and return the exit code."""
     print(f"\n{'='*60}")
@@ -72,6 +87,7 @@ def run_command(cmd: list[str], description: str) -> int:
 
 def cmd_train(args: argparse.Namespace) -> int:
     """Train PPO on FetchReachDense-v4."""
+    check_gpu()
     checkpoint_path = get_checkpoint_path(args.seed)
 
     cmd = [
