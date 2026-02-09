@@ -6,11 +6,11 @@ Before we dive into math, let's be honest about what we're doing here.
 
 You're about to train a neural network to control a robot arm. The arm will learn to reach arbitrary 3D positions--not because someone programmed the kinematics, but because it tried millions of times and gradually figured out what works.
 
-Here's what the trained policy looks like:
+**The result:** A neural network that figured out robot kinematics through trial and error.
 
-![Trained PPO Policy on FetchReach](../videos/fetch_reach_demo_grid.gif)
+![Robot reaching goals](../videos/fetch_reach_demo_grid.gif)
 
-*Four simultaneous runs showing the robot reaching different goal positions. 100% success rate achieved.*
+*No inverse kinematics. No trajectory planning. Just 500,000 attempts and gradient descent. Four different goals, four successes.*
 
 That's remarkable. But here's the uncomfortable truth: **most RL implementations don't work on the first try.** The field has a reproducibility crisis (Henderson et al., 2018). Hyperparameters matter more than they should. Small bugs can silently cause complete failure.
 

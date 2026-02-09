@@ -55,11 +55,11 @@ The environment is real--a simulated Fetch robot arm, the same one used in resea
 
 Only in **Week 2** do we train anything. And even then, we start with dense rewards (continuous feedback) before attempting sparse rewards (binary success/failure). We establish baselines. We measure variance across seeds. We treat RL as experimental science, not alchemy.
 
-Here's what a trained Week 2 policy looks like--four simultaneous runs reaching different goals:
+This is what 500,000 failed attempts produces:
 
-![Trained PPO Policy](../videos/fetch_reach_demo_grid.gif)
+![Robot reaching goals](../videos/fetch_reach_demo_grid.gif)
 
-*100% success rate. The robot learned to reach arbitrary positions through trial and error.*
+*No inverse kinematics. No motion planning. Just a neural network that learned "goal over there, move arm this way" through pure trial and error.*
 
 ## The Core Insight
 
