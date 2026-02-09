@@ -1,0 +1,52 @@
+name: Build PDFs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'tutorials/**.md'
+      - 'scripts/build_pdfs.py'
+      - '.github/workflows/pdfs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pandoc + PDF deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pandoc \
+            texlive-xetex \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            imagemagick
+
+      - name: Build PDFs
+        run: |
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct -- README.md tutorials || date +%s)"
+          python3 scripts/build_pdfs.py --out-dir docs/pdfs
+
+      - name: Commit and push PDFs
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain docs/pdfs)" ]; then
+            echo "No PDF changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/pdfs
+          git commit -m "docs: update PDFs"
+          git push
+

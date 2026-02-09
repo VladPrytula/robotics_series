@@ -1,5 +1,7 @@
 # Tutorials
 
+**PDFs.** A rendered PDF copy is available under `docs/pdfs/tutorials/` (auto-generated on push to `main`).
+
 ## Prologue: What Problem Are We Solving?
 
 Before diving into mathematics and algorithms, let us be concrete about the situation this curriculum addresses.

@@ -10,6 +10,8 @@ This repository is structured for step-by-step study. A 10-week curriculum ([`sy
 
 This is an active project. The table below shows what is implemented versus planned.
 
+**Prefer PDFs?** See `docs/pdfs/README.pdf` and `docs/pdfs/tutorials/` (auto-generated on push to `main`).
+
 | Component | Status | Notes |
 |-----------|--------|-------|
 | **Infrastructure** | | |
