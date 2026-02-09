@@ -64,16 +64,44 @@ MuJoCo runs the physics at 500Hz internally; the environment exposes control at 
 
 In simulation, we collect a million timesteps in minutes. Policies trained in simulation can later transfer to real hardware (sim-to-real transfer), though that is beyond this curriculum's scope.
 
-**The Simulated Robot: Fetch.** The Fetch robot is a real mobile manipulator manufactured by Fetch Robotics (now part of Zebra Technologies). The MuJoCo model replicates its kinematics:
+**The Simulated Robot: Fetch.** The [Fetch robot](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) is a real mobile manipulator manufactured by Fetch Robotics (now part of Zebra Technologies), designed for warehouse automation and research. The MuJoCo model in [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/) replicates its kinematics.
+
+<div align="center">
+
+| Real Fetch Robot | Simulated FetchReach |
+|:----------------:|:--------------------:|
+| ![Fetch Robot](https://robots.ieee.org/robots/fetch/Photos/SD/fetch-photo1-full.jpg) | ![FetchReach](https://robotics.farama.org/_images/reach.gif) |
+| *Source: [IEEE Robots](https://robots.ieee.org/robots/fetch/)* | *Source: [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/)* |
+
+</div>
+
+**Real Robot Specifications** (from [Fetch Robotics documentation](https://fetchrobotics.borealtech.com/robotics-platforms/fetch-mobile-manipulator/?lang=en)):
 
 | Component | Specification |
 |-----------|---------------|
-| **Arm** | 7 degrees of freedom (DOF) |
+| **Arm** | 7 degrees of freedom, 940mm reach, 6kg payload |
+| **Gripper** | Parallel-jaw, 245N grip force, swappable |
+| **Joints** | Harmonic drives + brushless motors, 14-bit encoders |
+| **Height** | 1.09m – 1.49m (telescoping spine) |
+| **Weight** | 113 kg |
+| **Compute** | Intel i5, Ubuntu + ROS |
+
+**What We Simulate** (the subset relevant for our tasks):
+
+| Component | Simulation Detail |
+|-----------|-------------------|
+| **Arm** | 7 DOF, matches real kinematics |
 | **Gripper** | Parallel-jaw, 2 fingers |
 | **Workspace** | ~1m reach from base |
-| **Control mode** | Cartesian velocity (not joint torques) |
+| **Control mode** | Cartesian velocity (internal IK solver) |
+| **Physics rate** | 500Hz internal, 25Hz control interface |
 
-The simulation includes a table with objects (for Push/PickAndPlace tasks) and a target marker showing the goal position.
+The simulation includes a table with objects (for Push/PickAndPlace tasks) and a red sphere marking the goal position. The arm is mounted on a fixed base (we do not simulate the mobile platform).
+
+**Further Reading:**
+- [Gymnasium-Robotics Fetch documentation](https://robotics.farama.org/envs/fetch/reach/) — official environment docs with action/observation specs
+- [Original OpenAI Gym Robotics paper](https://arxiv.org/abs/1802.09464) — Plappert et al., "Multi-Goal Reinforcement Learning" (introduces these environments)
+- [Fetch Robotics product page](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) — real robot specifications
 
 **What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian velocity commands:
 - `(vx, vy, vz)`: Desired end-effector velocity in world frame
