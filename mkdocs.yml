@@ -10,6 +10,8 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.expand
+    - navigation.indexes
+    - navigation.footer
     - content.code.copy
   palette:
     - scheme: default
@@ -29,6 +31,9 @@ markdown_extensions:
   # Math support (MathJax)
   - pymdownx.arithmatex:
       generic: true
+      inline_syntax: [dollar, round]
+      block_syntax: [dollar, square]
+      smart_dollar: true
   # Code highlighting
   - pymdownx.highlight:
       anchor_linenums: true
