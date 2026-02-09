@@ -215,15 +215,17 @@ PPO maintains two neural networks:
 
 3. **Stability.** The critic's value estimates are used to compute advantages, which then train the actor. If actor updates destabilize the critic, the advantages become noisy, which destabilizes the actor further--a vicious cycle.
 
-**The mathematical view:** From a functional analysis perspective, actor-critic is a *factorization* of a single nonlinear functional. Consider what we're really learning: a mapping from states to "optimal behavior," which encompasses both *what to do* (the policy) and *how good is this state* (the value). A single network would learn:
+**A geometric perspective:** There may be deeper structure here. Consider what we're learning: a mapping from states to "optimal behavior," encompassing both *what to do* (policy) and *how good is this state* (value). Naively, this is a single map:
 
 $$F: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \times \mathbb{R}$$
 
-Instead, we factor this into two simpler functionals:
+Actor-critic separates this into two maps:
 
 $$\pi: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \quad \text{and} \quad V: \mathcal{S} \times \mathcal{G} \to \mathbb{R}$$
 
-This is analogous to matrix factorization (SVD, NMF) or tensor decomposition--we decompose a complex object into simpler components that are easier to learn and have better-behaved optimization landscapes. The shared backbone architecture takes this further: we factor the state representation itself, learning $\phi: \mathcal{S} \times \mathcal{G} \to \mathbb{R}^d$ (the backbone), then composing with simpler heads.
+This *suggests* a factorization--perhaps recognizing product structure in the target space, or projecting through a lower-dimensional "behaviorally-relevant" manifold. The shared backbone makes this more concrete: we learn $\phi: \mathcal{S} \times \mathcal{G} \to \mathcal{Z}$ (a representation), then compose with separate heads. This is genuinely factoring through an intermediate space.
+
+However, the analogy is imperfect. Unlike clean mathematical factorizations, $V$ depends on $\pi$ (it's $V^\pi$), so the components are coupled. The precise geometric interpretation--if one exists--remains to be clarified. What's clear is that the separation has practical benefits; whether it reflects deep structure or is merely a useful engineering heuristic is an open question.
 
 In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"). This captures shared features while keeping the objectives separate. Stable Baselines 3 uses this approach by default.
 
