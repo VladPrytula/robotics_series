@@ -6,11 +6,11 @@ Before we dive into math, let's be honest about what we're doing here.
 
 You're about to train a neural network to control a robot arm. The arm will learn to reach arbitrary 3D positions--not because someone programmed the kinematics, but because it tried millions of times and gradually figured out what works.
 
-**The result:** A neural network that figured out robot kinematics through trial and error.
+**The result:** A neural network that figured out how to reach any point in 3D space.
 
 ![Robot reaching goals](../videos/fetch_reach_demo_grid.gif)
 
-*No inverse kinematics. No trajectory planning. Just 500,000 attempts and gradient descent. Four different goals, four successes.*
+*No inverse kinematics. No trajectory planning. The robot learned this through 500,000 training steps--watch the distance counter drop to zero.*
 
 That's remarkable. But here's the uncomfortable truth: **most RL implementations don't work on the first try.** The field has a reproducibility crisis (Henderson et al., 2018). Hyperparameters matter more than they should. Small bugs can silently cause complete failure.
 

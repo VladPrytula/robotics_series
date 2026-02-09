@@ -55,11 +55,11 @@ The environment is real--a simulated Fetch robot arm, the same one used in resea
 
 Only in **Week 2** do we train anything. And even then, we start with dense rewards (continuous feedback) before attempting sparse rewards (binary success/failure). We establish baselines. We measure variance across seeds. We treat RL as experimental science, not alchemy.
 
-This is what 500,000 failed attempts produces:
+What 500,000 training steps produces:
 
 ![Robot reaching goals](../videos/fetch_reach_demo_grid.gif)
 
-*No inverse kinematics. No motion planning. Just a neural network that learned "goal over there, move arm this way" through pure trial and error.*
+*Watch the distance counter. No inverse kinematics--the robot learned to reach any 3D position through gradient descent.*
 
 ## The Core Insight
 

@@ -46,11 +46,11 @@ By the end of this curriculum:
 3. **Diagnostic capability** to understand *why* training succeeds or fails
 4. **Deep understanding** of how problem structure dictates algorithm choice
 
-**This is what 500,000 failed attempts look like:**
+**What 500,000 training episodes produces:**
 
 ![Robot reaching goals](../videos/fetch_reach_demo_grid.gif)
 
-*No one programmed these movements. The robot discovered them by trying, failing, and adjusting--half a million times.*
+*No one programmed these movements. The robot discovered them through trial and error--mostly error, at first.*
 
 This is a significant investment--expect weeks, not hours. The payoff is genuine research capability, not superficial familiarity with library calls.
 
