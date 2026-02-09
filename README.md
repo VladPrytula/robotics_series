@@ -2,6 +2,8 @@
 
 *A Docker-first reinforcement learning laboratory for studying sparse-reward manipulation tasks.*
 
+This repository is structured for step-by-step study. A 10-week curriculum ([`syllabus.md`](syllabus.md)) provides executable commands and verification criteria. Tutorials ([`tutorials/`](tutorials/)) provide theoretical context. The goal is not to run scripts quickly, but to understand deeply.
+
 ---
 
 ## §1. Problem Formulation
@@ -230,21 +232,40 @@ This repository uses the Fetch robotic arm tasks from Gymnasium-Robotics:
 
 ---
 
-## §11. Curriculum
+## §11. Curriculum: A Step-by-Step Study Plan
 
-The repository includes a 10-week curriculum in `syllabus.md`:
+This repository is designed for systematic study, not casual browsing. The file [`syllabus.md`](syllabus.md) contains an executable 10-week curriculum with concrete commands, verification criteria, and "done when" checkpoints for each week.
 
-- **Weeks 1-2:** Environment anatomy, observation spaces, reward structures
-- **Weeks 3-4:** PPO on dense-reward tasks (FetchReachDense-v4)
-- **Weeks 5-6:** SAC fundamentals, entropy regularization, soft Q-learning
-- **Weeks 7-8:** Hindsight Experience Replay, goal relabeling strategies
-- **Weeks 9-10:** Multi-task policies, advanced diagnostics, research extensions
+**The Progression.**
 
-Each week includes:
-- Theoretical foundations (derivations, not declarations)
-- Implementation in `scripts/chNN_<topic>.py`
-- Verification tests with expected numerical outcomes
-- Exercises requiring independent problem-solving
+| Week | Focus | Key Milestone |
+|------|-------|---------------|
+| 0 | DGX setup, containerization | Proof-of-life passes; reproducibility verified |
+| 1 | Goal-conditioned environment anatomy | Understand dict observations, reward semantics |
+| 2 | PPO on dense Reach | Stable baseline; evaluation protocol locked |
+| 3 | SAC on dense Reach | Off-policy stack verified before adding HER |
+| 4 | Sparse Reach + Push with HER | HER demonstrably outperforms no-HER baseline |
+| 5 | PickAndPlace | Contacts/grasping; curriculum strategies |
+| 6 | Action-interface engineering | Policies as controllers; smoothness metrics |
+| 7 | Robustness | Noise injection, domain randomization, brittleness curves |
+| 8 | Second suite (robosuite or Meta-World) | Avoid overfitting intuition to Fetch |
+| 9 | Sweeps and ablations | Seed discipline; evidence-based conclusions |
+| 10 | Capstone | Sparse PickAndPlace + robustness targets |
+
+**The Structure of Each Week.**
+
+Every week in `syllabus.md` follows the same format:
+- **Goal:** What you will accomplish and why it matters
+- **Steps:** Exact commands to run (copy-paste ready)
+- **Done when:** Unambiguous criteria for completion
+
+This structure serves two purposes. First, it prevents self-deception: you cannot convince yourself you understand something if you cannot produce the specified artifacts. Second, it builds skills incrementally: Week 4 assumes Week 3 is complete; skipping ahead creates gaps that surface later as mysterious failures.
+
+**How to Use the Syllabus.**
+
+Start at Week 0. Complete each step. Verify each "done when" criterion. Only then proceed to the next week. If something fails, diagnose it before moving on. The curriculum is designed to surface problems early, when they are easier to fix.
+
+The tutorials in `tutorials/` provide theoretical context for each chapter. The syllabus provides the executable path. Use both together.
 
 ---
 
