@@ -13,9 +13,18 @@ Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble el
 | Error cost | Regenerate, backtrack, try again | Irreversible: collisions, drops, damage |
 | Stability requirement | Errors cascade in context but are recoverable | **Asymptotic stability**: physical perturbations must not cascade into failure |
 
-That last point--**asymptotic stability**--is what control theorists worry about and ML practitioners often miss. Both LLMs and robots accumulate state (context window vs. physical configuration), and both can suffer error cascades. But there's a crucial difference: LLM errors are *recoverable*--regenerate, adjust the prompt, start fresh. Physical errors are *irreversible*--the robot collided, the object fell, the glass shattered. You can't backtrack physics.
+That last point--**asymptotic stability**--is what control theorists worry about and ML practitioners often miss. The difference isn't just about reversibility; it's **structural**, rooted in dimensionality.
 
-A robot policy must not merely be accurate on average; it must be stable under perturbation, converging back to the goal trajectory even when disturbed. This is closed-loop control in a world that doesn't offer undo.
+**The mathematical crux:** In discrete token spaces, you're either at token A or token B--there's no "infinitesimally wrong" token. Errors are quantized. In continuous $\mathbb{R}^n$, perturbations can be arbitrarily small, and critically, **small errors can grow** through the dynamics. This is where Lyapunov stability theory becomes essential.
+
+A system is **Lyapunov stable** if small perturbations stay small. It's **asymptotically stable** if perturbations actually decay--the system converges back to equilibrium. Formally, you need a Lyapunov function $V(x)$ (think: energy) satisfying:
+- $V(x) > 0$ away from goal, $V(x^*) = 0$ at goal
+- $\dot{V}(x) \leq 0$ along trajectories (energy never increases)
+- $\dot{V}(x) < 0$ strictly for asymptotic stability (energy decreases)
+
+A learned policy induces a vector field on state space. For reliable manipulation, this field must form a **stable attractor** around goal configurations. This is a structural requirement that discrete sequence models simply don't face--you can't take derivatives in a discrete vocabulary, and "small perturbations growing" has no meaning when the smallest perturbation is swapping one token for another.
+
+Physical irreversibility compounds this: not only can errors grow, but their consequences persist. The robot collided, the object fell, the glass shattered. You can't backtrack physics.
 
 The core challenge: learning to manipulate objects to arbitrary goal positions from minimal feedback, while maintaining stability in a continuous, physical world.
 
