@@ -34,6 +34,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-docs.txt
 
+      - name: Resolve symlinks (copy actual files)
+        run: |
+          # Replace symlinks with actual files for GitHub Actions
+          for f in docs/tutorials/*.md docs/syllabus.md; do
+            if [ -L "$f" ]; then
+              target=$(readlink -f "$f")
+              rm "$f"
+              cp "$target" "$f"
+            fi
+          done
+
       - name: Build documentation
         run: mkdocs build --strict
 
