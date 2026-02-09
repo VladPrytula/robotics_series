@@ -2,9 +2,9 @@
 
 ## Abstract
 
-This chapter develops a precise understanding of what a reinforcement learning agent "perceives" when interacting with a Gymnasium-Robotics Fetch environment. We formalize the observation space, action space, and reward function—not as implementation details to be glossed over, but as mathematical structures whose properties determine what algorithms can and cannot accomplish.
+This chapter develops a precise understanding of what a reinforcement learning agent "perceives" when interacting with a Gymnasium-Robotics Fetch environment. We formalize the observation space, action space, and reward function--not as implementation details to be glossed over, but as mathematical structures whose properties determine what algorithms can and cannot accomplish.
 
-The central result of this chapter is that Fetch environments implement a specific mathematical structure: the *goal-conditioned Markov Decision Process*. This structure—characterized by observation dictionaries with explicit goal representations and reward functions that can be evaluated for arbitrary goals—is not merely a design choice; it is the mathematical substrate that enables Hindsight Experience Replay and related techniques. A researcher who does not understand this structure cannot use those techniques correctly.
+The central result of this chapter is that Fetch environments implement a specific mathematical structure: the *goal-conditioned Markov Decision Process*. This structure--characterized by observation dictionaries with explicit goal representations and reward functions that can be evaluated for arbitrary goals--is not merely a design choice; it is the mathematical substrate that enables Hindsight Experience Replay and related techniques. A researcher who does not understand this structure cannot use those techniques correctly.
 
 ---
 
@@ -38,7 +38,7 @@ When you run `bash docker/dev.sh python some_script.py`, the following happens:
 
 1. **Container launches** with GPU access (`--gpus all`) and your repository mounted at `/workspace`
 2. **Virtual environment** is created (first run) or activated in `.venv/`
-3. **Dependencies** from `requirements.txt` are installed (cached by hash—reinstalls only when requirements change)
+3. **Dependencies** from `requirements.txt` are installed (cached by hash--reinstalls only when requirements change)
 4. **Your command executes** inside this isolated environment
 5. **Container exits** when the command completes (or stays open for interactive shells)
 
@@ -82,7 +82,7 @@ In simulation, we collect a million timesteps in minutes. Policies trained in si
 | **Arm** | 7 degrees of freedom, 940mm reach, 6kg payload |
 | **Gripper** | Parallel-jaw, 245N grip force, swappable |
 | **Joints** | Harmonic drives + brushless motors, 14-bit encoders |
-| **Height** | 1.09m – 1.49m (telescoping spine) |
+| **Height** | 1.09m - 1.49m (telescoping spine) |
 | **Weight** | 113 kg |
 | **Compute** | Intel i5, Ubuntu + ROS |
 
@@ -99,15 +99,15 @@ In simulation, we collect a million timesteps in minutes. Policies trained in si
 The simulation includes a table with objects (for Push/PickAndPlace tasks) and a red sphere marking the goal position. The arm is mounted on a fixed base (we do not simulate the mobile platform).
 
 **Further Reading:**
-- [Gymnasium-Robotics Fetch documentation](https://robotics.farama.org/envs/fetch/reach/) — official environment docs with action/observation specs
-- [Original OpenAI Gym Robotics paper](https://arxiv.org/abs/1802.09464) — Plappert et al., "Multi-Goal Reinforcement Learning" (introduces these environments)
-- [Fetch Robotics product page](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) — real robot specifications
+- [Gymnasium-Robotics Fetch documentation](https://robotics.farama.org/envs/fetch/reach/) -- official environment docs with action/observation specs
+- [Original OpenAI Gym Robotics paper](https://arxiv.org/abs/1802.09464) -- Plappert et al., "Multi-Goal Reinforcement Learning" (introduces these environments)
+- [Fetch Robotics product page](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) -- real robot specifications
 
 **What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian velocity commands:
 - `(vx, vy, vz)`: Desired end-effector velocity in world frame
 - `gripper`: Open (<0) or close (>0) command
 
-An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques. This simplification means the agent does not need to learn inverse kinematics—it just says "move left" and the controller figures out which joints to actuate.
+An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques. This simplification means the agent does not need to learn inverse kinematics--it just says "move left" and the controller figures out which joints to actuate.
 
 ### 0.3 What We Are Doing
 
@@ -130,10 +130,10 @@ The Gymnasium-Robotics package provides four manipulation tasks of increasing di
 
 | Task | Goal | Difficulty |
 |------|------|------------|
-| **FetchReach** | Move end-effector to target position | Easiest—no object interaction |
-| **FetchPush** | Push object to target position | Medium—requires contact |
-| **FetchPickAndPlace** | Pick up object, place at target | Hard—requires grasping |
-| **FetchSlide** | Slide object to distant target | Hardest—requires throwing motion |
+| **FetchReach** | Move end-effector to target position | Easiest--no object interaction |
+| **FetchPush** | Push object to target position | Medium--requires contact |
+| **FetchPickAndPlace** | Pick up object, place at target | Hard--requires grasping |
+| **FetchSlide** | Slide object to distant target | Hardest--requires throwing motion |
 
 Each task has two reward variants:
 - **Dense** (e.g., `FetchReachDense-v4`): Reward = negative distance to goal. Provides continuous feedback.
@@ -149,7 +149,7 @@ The Fetch environments are not arbitrary. They implement a specific interface de
 
 3. **Success is defined geometrically**: the achieved goal must be within 5cm of the desired goal.
 
-If you treat the environment as a black box—feeding observations to a network and hoping it learns—you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can debug intelligently when things go wrong.
+If you treat the environment as a black box--feeding observations to a network and hoping it learns--you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can debug intelligently when things go wrong.
 
 ### 0.6 What This Chapter Produces
 
@@ -176,7 +176,7 @@ This formulation is inadequate for two reasons.
 
 First, it conflates the *policy* with the *task*. A policy trained to reach position $(0.5, 0.3, 0.2)$ cannot generalize to position $(0.6, 0.4, 0.3)$ without retraining. If we want a policy that can reach arbitrary positions, we need the policy to accept the target position as input.
 
-Second, the naive formulation provides no mechanism for learning from failure. If the task is "reach position $g$" and the agent fails to reach $g$, the episode provides no useful learning signal—the agent knows it failed, but not how to improve. This is particularly problematic with sparse rewards, where the agent receives no feedback until it succeeds.
+Second, the naive formulation provides no mechanism for learning from failure. If the task is "reach position $g$" and the agent fails to reach $g$, the episode provides no useful learning signal--the agent knows it failed, but not how to improve. This is particularly problematic with sparse rewards, where the agent receives no feedback until it succeeds.
 
 The goal-conditioned formulation resolves both issues:
 
@@ -219,7 +219,7 @@ We begin with precise definitions.
 - *$\phi: \mathcal{S} \to \mathcal{G}$ is the goal-achievement mapping*
 - *$\gamma \in [0, 1)$ is the discount factor*
 
-The goal-achievement mapping $\phi$ is crucial: it extracts from each state the "achieved goal"—the outcome that state represents. For a reaching task, $\phi(s)$ might be the end-effector position; for a pushing task, it might be the object position.
+The goal-achievement mapping $\phi$ is crucial: it extracts from each state the "achieved goal"--the outcome that state represents. For a reaching task, $\phi(s)$ might be the end-effector position; for a pushing task, it might be the object position.
 
 **Definition (Goal-Conditioned Observation).** *A goal-conditioned observation is a tuple $o = (\bar{s}, g_a, g_d)$ where:*
 - *$\bar{s} \in \mathbb{R}^{d_s}$ is the proprioceptive state (joint positions, velocities, etc.)*
@@ -266,7 +266,7 @@ Fetch environments return observations as Python dictionaries with three keys:
 }
 ```
 
-**Remark (Why Dictionaries?).** *The dictionary structure serves two purposes. First, it makes the goal-conditioned structure explicit—the achieved and desired goals are not buried in a flat observation vector but clearly labeled. Second, it enables automatic handling by Stable Baselines 3's `MultiInputPolicy`, which processes each key through a separate encoder before concatenation.*
+**Remark (Why Dictionaries?).** *The dictionary structure serves two purposes. First, it makes the goal-conditioned structure explicit--the achieved and desired goals are not buried in a flat observation vector but clearly labeled. Second, it enables automatic handling by Stable Baselines 3's `MultiInputPolicy`, which processes each key through a separate encoder before concatenation.*
 
 ### 2.4 The compute_reward Function
 
@@ -379,12 +379,12 @@ bash docker/dev.sh python scripts/ch01_env_anatomy.py random-episodes --n-episod
 ```
 
 **Expected Output (FetchReachDense-v4):**
-- `success_rate`: ~0.0–0.1 (random flailing occasionally reaches the goal)
+- `success_rate`: ~0.0-0.1 (random flailing occasionally reaches the goal)
 - `mean_return`: ~−15 to −25 (negative because rewards are negative distances)
 - `mean_episode_length`: 50 (environments truncate at 50 steps)
 
 **Expected Output (FetchReach-v4, sparse):**
-- `success_rate`: ~0.0–0.05 (very unlikely to reach by chance)
+- `success_rate`: ~0.0-0.05 (very unlikely to reach by chance)
 - `mean_return`: ~−50 (constant −1 per step when not at goal)
 
 These baselines establish the performance floor. Any trained agent that does not significantly exceed random performance is not learning.
@@ -422,7 +422,7 @@ The choice between sparse and dense rewards involves a fundamental trade-off:
 - Con: No gradient signal until goal is reached
 - Con: Requires HER or similar techniques for sample-efficient learning
 
-**Remark (When to Use Each).** *For initial development and debugging, use dense rewards—they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards.*
+**Remark (When to Use Each).** *For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards.*
 
 ### 4.3 The Observation Dimension and Policy Architecture
 
@@ -485,23 +485,23 @@ Chapter 4 will introduce HER for sparse-reward tasks. The `compute_reward` funct
 
 | Index | Semantic |
 |-------|----------|
-| 0–2 | Gripper position $(x, y, z)$ |
-| 3–5 | Gripper velocity $(\dot{x}, \dot{y}, \dot{z})$ |
-| 6–7 | Gripper finger positions |
-| 8–9 | Gripper finger velocities |
+| 0-2 | Gripper position $(x, y, z)$ |
+| 3-5 | Gripper velocity $(\dot{x}, \dot{y}, \dot{z})$ |
+| 6-7 | Gripper finger positions |
+| 8-9 | Gripper finger velocities |
 
 ### A.2 FetchPush/PickAndPlace Observation (25 dimensions)
 
 | Index | Semantic |
 |-------|----------|
-| 0–2 | Gripper position |
-| 3–5 | Object position |
-| 6–8 | Object relative position (object − gripper) |
-| 9–11 | Gripper velocity |
-| 12–14 | Object velocity |
-| 15–17 | Object relative velocity |
-| 18–21 | Object rotation (quaternion) |
-| 22–24 | Object angular velocity |
+| 0-2 | Gripper position |
+| 3-5 | Object position |
+| 6-8 | Object relative position (object − gripper) |
+| 9-11 | Gripper velocity |
+| 12-14 | Object velocity |
+| 15-17 | Object relative velocity |
+| 18-21 | Object rotation (quaternion) |
+| 22-24 | Object angular velocity |
 
 ---
 

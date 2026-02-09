@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This chapter establishes the foundational experimental environment upon which all subsequent work depends. We address a problem that is logically prior to reinforcement learning itself: the problem of *reproducible computation*. Our deliverables are not trained policies but verified infrastructure—a container that runs, a renderer that produces images, a training loop that completes without error.
+This chapter establishes the foundational experimental environment upon which all subsequent work depends. We address a problem that is logically prior to reinforcement learning itself: the problem of *reproducible computation*. Our deliverables are not trained policies but verified infrastructure--a container that runs, a renderer that produces images, a training loop that completes without error.
 
 The reader who dismisses this chapter as mere "setup" misunderstands its purpose. In empirical machine learning, the experimental environment is not scaffolding to be discarded; it is the laboratory in which results are produced. A result that cannot be reproduced because the environment cannot be reconstructed is not a result at all. This chapter ensures that our laboratory is sound.
 
@@ -24,7 +24,7 @@ In the tradition of Hadamard, we ask: Is the reproducibility problem *well-posed
 
 **Definition (Well-Posedness for Reproducibility).** *The reproducibility problem is well-posed if: (1) there exists an environment specification $S$ such that running $E$ in any environment satisfying $S$ produces consistent results; (2) the specification $S$ is unique up to equivalence; (3) small perturbations to $S$ produce small perturbations to $R$.*
 
-Condition (1) requires that we can *specify* an environment precisely enough to guarantee consistency. Condition (2) requires that the specification be *canonical*—that there not be multiple incompatible specifications claiming to represent the same environment. Condition (3) requires *stability*—that the result not be arbitrarily sensitive to minor environmental variations.
+Condition (1) requires that we can *specify* an environment precisely enough to guarantee consistency. Condition (2) requires that the specification be *canonical*--that there not be multiple incompatible specifications claiming to represent the same environment. Condition (3) requires *stability*--that the result not be arbitrarily sensitive to minor environmental variations.
 
 Containerization addresses all three conditions. A Docker image provides a complete, self-contained specification of the computational environment. The image is identified by a content-addressable hash, ensuring uniqueness. And the layered filesystem ensures that small changes to the specification (adding a package, changing a configuration) produce small changes to the resulting environment.
 
@@ -38,7 +38,7 @@ Within the general reproducibility framework, this chapter addresses a specific 
 
 Each condition is necessary for the reinforcement learning experiments that follow. Without GPU access, training is prohibitively slow. Without MuJoCo, we cannot simulate the Fetch robot. Without rendering, we cannot generate evaluation videos. Without a working training loop, we cannot learn policies.
 
-The verification is not optional. A researcher who skips this chapter and proceeds directly to training will eventually encounter failures—rendering errors, CUDA misconfigurations, import failures—and will spend more time debugging than if they had verified the environment systematically from the start.
+The verification is not optional. A researcher who skips this chapter and proceeds directly to training will eventually encounter failures--rendering errors, CUDA misconfigurations, import failures--and will spend more time debugging than if they had verified the environment systematically from the start.
 
 ---
 
@@ -52,19 +52,19 @@ Our approach is to specify the environment as a Docker container and to verify e
 
 **Definition (Image).** *An image is an immutable template from which containers are instantiated. Images are identified by a content-addressable hash (digest) and may be tagged with human-readable names (e.g., `robotics-rl:latest`).*
 
-The key property of containers for our purposes is *isolation with specification*. The container is isolated from the host environment—packages installed on the host do not affect the container—but the isolation is precisely specified by the image, which can be versioned, shared, and reconstructed.
+The key property of containers for our purposes is *isolation with specification*. The container is isolated from the host environment--packages installed on the host do not affect the container--but the isolation is precisely specified by the image, which can be versioned, shared, and reconstructed.
 
 **Remark (On the Choice of Docker).** *We use Docker rather than alternatives (Singularity, Podman, etc.) because Docker is ubiquitous, well-documented, and fully supported by the NVIDIA Container Toolkit. For HPC environments where Docker is unavailable, the concepts transfer to Singularity with minor modifications.*
 
 ### 2.2 The Verification Protocol
 
-Verification is not bureaucracy. It is the empirical side of our well-posedness analysis. Each test corresponds to a necessary condition for the experiments that follow. If any test fails, some class of experiments becomes impossible. Understanding *why* each test matters—not just *what* it checks—is essential for diagnosing failures when they occur.
+Verification is not bureaucracy. It is the empirical side of our well-posedness analysis. Each test corresponds to a necessary condition for the experiments that follow. If any test fails, some class of experiments becomes impossible. Understanding *why* each test matters--not just *what* it checks--is essential for diagnosing failures when they occur.
 
 #### Test 1: GPU Access
 
 **What we verify.** The container can access the host GPU via the NVIDIA runtime.
 
-**Why this matters.** Reinforcement learning with neural network function approximators is computationally intensive. A single training run may require $10^6$–$10^7$ gradient updates, each involving forward and backward passes through networks with $10^5$–$10^6$ parameters. On CPU, this takes days or weeks. On GPU, it takes hours.
+**Why this matters.** Reinforcement learning with neural network function approximators is computationally intensive. A single training run may require $10^6$-$10^7$ gradient updates, each involving forward and backward passes through networks with $10^5$-$10^6$ parameters. On CPU, this takes days or weeks. On GPU, it takes hours.
 
 But GPU access inside a container is not automatic. The container runs in an isolated namespace; it cannot see host devices unless explicitly granted access. The `--gpus all` flag instructs Docker to use the NVIDIA Container Toolkit, which mounts the GPU device files and driver libraries into the container.
 
@@ -74,7 +74,7 @@ But GPU access inside a container is not automatic. The container runs in an iso
 3. Docker was not invoked with `--gpus all`
 4. The GPU is in use by another process with exclusive access
 
-Training will still *run* on CPU, but it will be 10–100× slower, making iterative experimentation impractical.
+Training will still *run* on CPU, but it will be 10-100× slower, making iterative experimentation impractical.
 
 **The test.** Run `nvidia-smi` inside the container. This command queries the NVIDIA driver for GPU status. If it succeeds, the container has GPU access. If it fails with "command not found" or "NVIDIA-SMI has failed," the container cannot see the GPU.
 
@@ -101,7 +101,7 @@ Without functional Fetch environments, the entire curriculum is blocked.
 
 **Why this matters.** Evaluation often requires visual inspection: Does the robot reach the goal? Is the motion smooth or jerky? Does the gripper close at the right moment? These questions are answered by watching videos, which requires rendering.
 
-But DGX systems are headless—they have no monitor attached. Rendering typically requires a display server (X11) to manage the graphics context. On a headless system, we must use *offscreen* rendering: EGL (hardware-accelerated via the GPU) or OSMesa (software rasterization).
+But DGX systems are headless--they have no monitor attached. Rendering typically requires a display server (X11) to manage the graphics context. On a headless system, we must use *offscreen* rendering: EGL (hardware-accelerated via the GPU) or OSMesa (software rasterization).
 
 This is where many setups fail. EGL requires specific driver support and library versions. OSMesa requires Mesa to be compiled with offscreen support. If neither works, rendering is impossible.
 
@@ -119,7 +119,7 @@ Training can proceed without rendering, but evaluation will be limited to numeri
 
 #### Test 4: Training Loop Completion
 
-**What we verify.** A complete training loop—environment interaction, gradient computation, parameter updates, checkpoint saving—executes without error.
+**What we verify.** A complete training loop--environment interaction, gradient computation, parameter updates, checkpoint saving--executes without error.
 
 **Why this matters.** The previous tests verified components in isolation: GPU access, physics simulation, rendering. But reinforcement learning combines these components in complex ways. Data flows from the environment to the replay buffer to the neural network and back. Shapes must match. Dtypes must be compatible. Memory must not leak.
 
@@ -159,7 +159,7 @@ Our container architecture consists of two layers:
 
 **Project Layer.** On top of the base, we install system dependencies for MuJoCo rendering (EGL, OSMesa) and Python dependencies for the project (Gymnasium, Gymnasium-Robotics, Stable Baselines 3). These are specified in the `docker/Dockerfile`.
 
-**Remark (On the Two-Layer Architecture).** *The separation into base and project layers reflects a design principle: heavyweight, stable dependencies (CUDA, PyTorch) belong in the base layer; lightweight, project-specific dependencies belong in the project layer. This separation enables faster iteration—changing project dependencies does not require rebuilding the entire CUDA stack—while maintaining reproducibility.*
+**Remark (On the Two-Layer Architecture).** *The separation into base and project layers reflects a design principle: heavyweight, stable dependencies (CUDA, PyTorch) belong in the base layer; lightweight, project-specific dependencies belong in the project layer. This separation enables faster iteration--changing project dependencies does not require rebuilding the entire CUDA stack--while maintaining reproducibility.*
 
 ### 2.4 The Virtual Environment Within the Container
 
@@ -275,7 +275,7 @@ The existence and properties of these artifacts constitute empirical verificatio
 
 The term "proof of life" is borrowed from hostage negotiations, where it refers to evidence that a hostage is still alive. In our context, it refers to evidence that the computational environment is functional.
 
-This is not mere metaphor. A misconfigured environment is, from the perspective of reproducible science, *dead*: it cannot produce results that can be trusted or reproduced. The tests in this chapter establish that our environment is *alive*—capable of producing valid, reproducible results.
+This is not mere metaphor. A misconfigured environment is, from the perspective of reproducible science, *dead*: it cannot produce results that can be trusted or reproduced. The tests in this chapter establish that our environment is *alive*--capable of producing valid, reproducible results.
 
 ### 4.3 What This Chapter Does Not Verify
 

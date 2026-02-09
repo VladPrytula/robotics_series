@@ -6,7 +6,7 @@ Before diving into mathematics and algorithms, let us be concrete about the situ
 
 ### The Practical Problem
 
-You want to build a robot that manipulates objects to arbitrary goal positions. Not a robot that performs one fixed task—that is classical control engineering—but a robot that can:
+You want to build a robot that manipulates objects to arbitrary goal positions. Not a robot that performs one fixed task--that is classical control engineering--but a robot that can:
 
 - Reach any 3D position in its workspace
 - Push any object to any target location
@@ -20,7 +20,7 @@ The key word is **any**. The goal is specified at runtime, not at programming ti
 
 **High-dimensional continuous control.** The robot issues 4D velocity commands at 50Hz. Random exploration in this space almost never reaches a specified goal by chance.
 
-**Goal generalization.** You cannot train a separate policy for each possible goal—there are infinitely many. The policy must take the goal as input and generalize to goals it has never seen during training.
+**Goal generalization.** You cannot train a separate policy for each possible goal--there are infinitely many. The policy must take the goal as input and generalize to goals it has never seen during training.
 
 ### When to Use This Approach
 
@@ -30,7 +30,7 @@ The SAC + HER methodology we teach is appropriate when:
 |-----------|---------|
 | Goals vary at runtime | "Move to position (0.3, 0.2, 0.1)" specified at test time |
 | Rewards are sparse | Success/failure signal, no dense shaping |
-| Actions are continuous | Velocity commands, torques—not discrete choices |
+| Actions are continuous | Velocity commands, torques--not discrete choices |
 | Simulation is available | Training requires millions of trials |
 
 If your problem matches these conditions, this curriculum provides the methodologically appropriate solution. If your problem has dense rewards, discrete actions, or a single fixed goal, simpler methods exist and you should use them.
@@ -44,7 +44,7 @@ By the end of this curriculum:
 3. **Diagnostic capability** to understand *why* training succeeds or fails
 4. **Deep understanding** of how problem structure dictates algorithm choice
 
-This is a significant investment—expect weeks, not hours. The payoff is genuine research capability, not superficial familiarity with library calls.
+This is a significant investment--expect weeks, not hours. The payoff is genuine research capability, not superficial familiarity with library calls.
 
 ---
 
@@ -66,7 +66,7 @@ In the tradition of Hadamard and Lions, we begin every investigation with fundam
 
 **The Stability Question.** Suppose we find a good policy. Does it depend continuously on the training process? If small changes to the random seed, the hyperparameter settings, or the training data produce qualitatively different policies, then our results are not reproducible in any scientifically meaningful sense. The notorious instability of deep RL training makes this question particularly urgent.
 
-These tutorials do not answer these questions in full generality—that would require a treatise, not a tutorial series. But they provide the conceptual framework and empirical tools to investigate these questions for specific tasks and algorithms. The reader who completes this course will know how to *ask* these questions precisely and how to *answer* them through careful experimentation.
+These tutorials do not answer these questions in full generality--that would require a treatise, not a tutorial series. But they provide the conceptual framework and empirical tools to investigate these questions for specific tasks and algorithms. The reader who completes this course will know how to *ask* these questions precisely and how to *answer* them through careful experimentation.
 
 ## The Methodological Framework
 
@@ -76,7 +76,7 @@ Every chapter in this collection follows a tripartite structure: **WHY**, **HOW*
 
 Before presenting any technique, we formulate the problem it addresses. What mathematical object are we seeking? What properties must it satisfy? What makes this problem difficult?
 
-This is not mere throat-clearing. In the tradition of the French school of applied mathematics—Lions, Brezis, and their intellectual descendants—problem formulation is itself a creative act that shapes everything that follows. A poorly formulated problem admits no clean solution; a well-formulated problem often suggests its own resolution.
+This is not mere throat-clearing. In the tradition of the French school of applied mathematics--Lions, Brezis, and their intellectual descendants--problem formulation is itself a creative act that shapes everything that follows. A poorly formulated problem admits no clean solution; a well-formulated problem often suggests its own resolution.
 
 When we introduce Hindsight Experience Replay in Chapter 4, we do not begin with the algorithm. We begin with the problem: sparse binary rewards provide no gradient signal when the goal is never reached; the probability of reaching an arbitrary goal by random exploration decreases exponentially with goal-space dimension; therefore, any practical algorithm must manufacture learning signal from failed attempts. The problem formulation makes the solution almost inevitable.
 
@@ -86,7 +86,7 @@ Having established *what* problem we are solving and *why* it is difficult, we t
 
 Here we follow the pedagogical tradition exemplified by Sergei Levine's CS 285: algorithms are *derived*, not *declared*. We do not present update equations as fait accompli; we show where they come from. We do not invoke design choices as received wisdom; we justify them from first principles.
 
-When we introduce Soft Actor-Critic, we begin with the maximum entropy objective and derive the soft Bellman equation, the Q-function update, and the policy improvement step as logical consequences. A student who has followed this derivation understands not just *what* SAC does but *why* it does it—and therefore knows how to adapt it when standard settings fail.
+When we introduce Soft Actor-Critic, we begin with the maximum entropy objective and derive the soft Bellman equation, the Q-function update, and the policy improvement step as logical consequences. A student who has followed this derivation understands not just *what* SAC does but *why* it does it--and therefore knows how to adapt it when standard settings fail.
 
 ### WHAT: Implementation and Verification
 
@@ -126,13 +126,13 @@ The chapters are ordered to build systematically from foundations to application
 
 **Chapter 1: The Anatomy of Goal-Conditioned Fetch Environments.** Before training any agent, we must understand precisely what the agent perceives, what actions it can take, and how rewards are computed. This chapter dissects the Fetch environment interface.
 
-*WHY:* Goal-conditioned environments have a specific structure—observation dictionaries with `achieved_goal` and `desired_goal` keys, reward functions that can be queried for arbitrary goals—that enables techniques like Hindsight Experience Replay. Understanding this structure is prerequisite to using those techniques correctly.
+*WHY:* Goal-conditioned environments have a specific structure--observation dictionaries with `achieved_goal` and `desired_goal` keys, reward functions that can be queried for arbitrary goals--that enables techniques like Hindsight Experience Replay. Understanding this structure is prerequisite to using those techniques correctly.
 
 *HOW:* We inspect observation and action spaces programmatically, verify reward consistency between `env.step()` and `compute_reward()`, and collect baseline metrics with random policies.
 
 *WHAT:* JSON schemas describing the environment interface; verified reward consistency; random baseline metrics establishing the performance floor.
 
-Subsequent chapters—on PPO baselines, SAC, HER, robustness, and beyond—follow the same structure, each building on the foundations laid by its predecessors.
+Subsequent chapters--on PPO baselines, SAC, HER, robustness, and beyond--follow the same structure, each building on the foundations laid by its predecessors.
 
 ## Prerequisites
 
@@ -156,7 +156,7 @@ Subsequent chapters—on PPO baselines, SAC, HER, robustness, and beyond—follo
 
 These tutorials strive for precision and clarity. Where the material is complex, we try to explain the complexity rather than hide it. Where shortcuts exist, we try to show the full path first so the reader understands what the shortcut elides.
 
-This approach reflects a belief that reinforcement learning for robotic manipulation is genuinely difficult, and that readers deserve to be told when something is hard rather than left to wonder why they are struggling. The formality is not a barrier; it is an attempt at respect—for the subject and for the reader's time.
+This approach reflects a belief that reinforcement learning for robotic manipulation is genuinely difficult, and that readers deserve to be told when something is hard rather than left to wonder why they are struggling. The formality is not a barrier; it is an attempt at respect--for the subject and for the reader's time.
 
 These tutorials are imperfect. They contain errors, unclear passages, and explanations that may not work for every learner. Corrections, questions, and suggestions are welcome. The goal is understanding, and if these materials fail to produce it, the fault lies with the materials, not the reader.
 
