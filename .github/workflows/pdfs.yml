@@ -29,6 +29,8 @@ jobs:
             texlive-latex-extra \
             texlive-fonts-recommended \
             lmodern \
+            fonts-dejavu \
+            fonts-dejavu-extra \
             imagemagick
 
       - name: Build PDFs

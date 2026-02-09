@@ -41,17 +41,17 @@ def _convert_gif_to_png(gif_path: Path, png_path: Path) -> None:
 
     magick = shutil.which("magick")
     if magick:
-        subprocess.run([magick, str(gif_path), str(png_path)], check=True)
+        subprocess.run([magick, f"{gif_path}[0]", str(png_path)], check=True)
         return
 
     convert = shutil.which("convert")
     if convert:
-        subprocess.run([convert, str(gif_path), str(png_path)], check=True)
+        subprocess.run([convert, f"{gif_path}[0]", str(png_path)], check=True)
         return
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
-        subprocess.run([ffmpeg, "-y", "-i", str(gif_path), str(png_path)], check=True)
+        subprocess.run([ffmpeg, "-y", "-i", str(gif_path), "-frames:v", "1", str(png_path)], check=True)
         return
 
     raise RuntimeError("GIF conversion requires one of: magick, convert, ffmpeg")
@@ -65,7 +65,7 @@ def _local_filename_for_url(url: str) -> str:
     return name
 
 
-def _rewrite_remote_images(markdown_text: str, asset_dir: Path, build_dir: Path) -> str:
+def _rewrite_remote_images(markdown_text: str, asset_dir: Path, markdown_dir: Path) -> str:
     url_to_relpath: dict[str, str] = {}
 
     def repl(match: re.Match[str]) -> str:
@@ -82,7 +82,7 @@ def _rewrite_remote_images(markdown_text: str, asset_dir: Path, build_dir: Path)
                 final_path = downloaded.with_suffix(".png")
                 _convert_gif_to_png(downloaded, final_path)
 
-            url_to_relpath[url] = str(final_path.relative_to(build_dir))
+            url_to_relpath[url] = os.path.relpath(final_path, start=markdown_dir).replace(os.sep, "/")
         return f"![{alt_text}]({url_to_relpath[url]})"
 
     return _REMOTE_IMAGE_RE.sub(repl, markdown_text)
@@ -106,6 +106,10 @@ def _render_pdf(pandoc: str, source_md: Path, output_pdf: Path, resource_path: P
             "--number-sections",
             "-V",
             "geometry:margin=1in",
+            "-V",
+            "mainfont=DejaVu Sans",
+            "-V",
+            "monofont=DejaVu Sans Mono",
             "-o",
             str(output_pdf),
         ],
@@ -192,7 +196,7 @@ def main() -> int:
 
             text = item.source_path.read_text(encoding="utf-8")
             asset_dir = build_dir / "_assets" / rel.parent
-            rewritten = _rewrite_remote_images(text, asset_dir=asset_dir, build_dir=build_dir)
+            rewritten = _rewrite_remote_images(text, asset_dir=asset_dir, markdown_dir=build_md.parent)
             build_md.write_text(rewritten, encoding="utf-8")
 
             _render_pdf(
@@ -208,4 +212,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
