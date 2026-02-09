@@ -1,0 +1,58 @@
+site_name: Goal-Conditioned Robotic Manipulation
+site_description: A Docker-first RL research platform for Fetch manipulation tasks
+site_url: https://vladprytula.github.io/robotics_series/
+repo_url: https://github.com/VladPrytula/robotics_series
+repo_name: VladPrytula/robotics_series
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  # Math support (MathJax)
+  - pymdownx.arithmatex:
+      generic: true
+  # Code highlighting
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  # Admonitions (notes, warnings, etc.)
+  - admonition
+  - pymdownx.details
+  # Tables
+  - tables
+  # Task lists
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Tutorials:
+    - Overview: tutorials/index.md
+    - "Chapter 0: Proof of Life": tutorials/ch00_containerized_dgx_proof_of_life.md
+    - "Chapter 1: Environment Anatomy": tutorials/ch01_fetch_env_anatomy.md
+  - Syllabus: syllabus.md
+  - Reference:
+    - CLI: reference/cli.md

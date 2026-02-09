@@ -29,7 +29,7 @@ The algorithm choice is not arbitrary. It follows from the problem constraints:
 The action space is $\mathbb{R}^4$. Pure value-based methods (DQN) require $\arg\max_a Q(s,a)$, which is intractable for continuous $a$ without expensive discretization. We need a policy network that outputs actions directly, plus a critic to reduce variance. This means actor-critic.
 
 **2. Sparse rewards → Off-Policy.**
-The reward is binary: 1 if goal reached, 0 otherwise. Most trajectories get zero reward. On-policy methods (PPO) discard data after each update—wasteful when positive signal is rare. Off-policy methods (SAC, TD3) store transitions in a replay buffer and reuse them. This is essential for sample efficiency with sparse rewards.
+In Gymnasium-Robotics, sparse step rewards are 0 when the success threshold is met and −1 otherwise (equivalently, a binary success indicator 1/0 up to a constant shift). Either way, informative signal is rare. On-policy methods (PPO) discard data after each update—wasteful when positive signal is scarce. Off-policy methods (SAC, TD3) store transitions in a replay buffer and reuse them. This is essential for sample efficiency with sparse rewards.
 
 **3. Goal-conditioned + sparse → HER.**
 A trajectory that fails to reach goal $g$ still demonstrates how to reach whatever state $s_T$ it ended in. Hindsight Experience Replay relabels transitions: replace $g$ with the achieved goal $g' = g_{\text{achieved}}(s_T)$, recompute rewards, and store both versions. Failed attempts become successful demonstrations for different goals. This manufactures dense signal from sparse feedback.

@@ -90,7 +90,8 @@ def list_fetch_envs() -> list[str]:
     import gymnasium as gym
 
     _import_fetch()
-    return sorted(k for k in gym.registry.keys() if str(k).startswith("Fetch"))
+    # Normalize to plain strings for robustness across Gymnasium versions.
+    return sorted(str(k) for k in gym.registry.keys() if str(k).startswith("Fetch"))
 
 
 def pick_env_id(preferred: Iterable[str] | None, explicit: str | None) -> str:
