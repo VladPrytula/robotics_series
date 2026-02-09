@@ -37,9 +37,9 @@ But here's the thing: these questions translate directly to reinforcement learni
 - **Uniqueness:** Are there multiple qualitatively different solutions? (Often yes. Understanding this helps you interpret what your agent learned.)
 - **Continuous dependence:** If I change the random seed slightly, do I get a similar policy? (Often no. This is why RL is notoriously unstable.)
 
-When my robot failed for three weeks, I was asking "why doesn't this code work?" The right question was: "Is this problem well-posed? What are the necessary conditions for a solution to exist?"
+Consider a common failure mode: you train a robot on a sparse-reward task, and it learns nothing. The instinct is to tune hyperparameters. But the right question is: "Is this problem well-posed? What are the necessary conditions for a solution to exist?"
 
-The answer: sparse rewards. With binary success/failure feedback, the probability of randomly reaching the goal is essentially zero. No gradient signal. No learning. The problem, as I had formulated it, was ill-posed.
+With binary success/failure feedback, the probability of randomly reaching a goal in high-dimensional space is essentially zero. No gradient signal. No learning. The problem, as formulated, is ill-posed--no amount of hyperparameter tuning will fix it.
 
 ## A Different Approach
 
@@ -55,9 +55,7 @@ Only in **Week 2** do we train anything. And even then, we start with dense rewa
 
 ## The Core Insight
 
-Here's what I learned from three weeks of failure:
-
-**Hindsight Experience Replay (HER)** is not a trick. It's the solution to a well-posed problem.
+**Hindsight Experience Replay (HER)** is not a trick or a hack. It's the mathematically principled solution to a well-posed problem.
 
 The problem: sparse rewards provide no gradient signal when the goal is never reached.
 
@@ -77,10 +75,10 @@ These aren't implementation details. They're mathematical preconditions. The Fet
 **The Method:** SAC + HER (Soft Actor-Critic with Hindsight Experience Replay)
 
 This isn't arbitrary. It follows from the problem structure:
-- Continuous actions → actor-critic (can't do argmax over continuous space)
-- Sparse rewards → off-policy (need to reuse failed trajectories)
-- Goal conditioning → HER (manufacture success from failure)
-- Exploration → maximum entropy (SAC's stochastic policies)
+- Continuous actions -> actor-critic (can't do argmax over continuous space)
+- Sparse rewards -> off-policy (need to reuse failed trajectories)
+- Goal conditioning -> HER (manufacture success from failure)
+- Exploration -> maximum entropy (SAC's stochastic policies)
 
 **The Tasks:**
 - FetchReach: Move end-effector to target position
