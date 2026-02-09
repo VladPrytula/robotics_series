@@ -2,7 +2,20 @@
 
 *A Docker-first reinforcement learning laboratory for studying sparse-reward manipulation tasks.*
 
-Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble electronics. These aren't science fiction--they're active research problems, and the core challenge is the same: learning to manipulate objects to arbitrary goal positions from minimal feedback.
+Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble electronics. These aren't science fiction--they're active research problems, and they're *harder* than the ML tasks that dominate headlines.
+
+**Why harder?** Consider the differences:
+
+| Aspect | Language Models | Robotic Manipulation |
+|--------|-----------------|---------------------|
+| Action space | Discrete tokens (~100k vocabulary) | Continuous $\mathbb{R}^4$ (infinite) |
+| Feedback | Next-token prediction (dense, immediate) | Sparse binary (success/failure at episode end) |
+| Error recovery | Generate another token | Physical damage, fallen objects, unsafe states |
+| Stability requirement | None--each token is independent | **Asymptotic stability**: small perturbations must not cascade into failure |
+
+That last point--**asymptotic stability**--is what control theorists worry about and ML practitioners often miss. A language model that occasionally outputs nonsense is annoying. A robot arm that occasionally diverges from its trajectory is *dangerous*. The policy must not merely be accurate on average; it must be stable under perturbation, converging back to the goal even when disturbed.
+
+The core challenge: learning to manipulate objects to arbitrary goal positions from minimal feedback, while maintaining stability in a continuous, physical world.
 
 This repository is structured for step-by-step study. A 10-week curriculum ([`syllabus.md`](syllabus.md)) provides executable commands and verification criteria. Tutorials ([`tutorials/`](tutorials/)) provide theoretical context. The goal is not to run scripts quickly, but to understand deeply.
 
