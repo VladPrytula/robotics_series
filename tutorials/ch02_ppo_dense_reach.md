@@ -54,19 +54,19 @@ And we use **dense rewards** (negative distance to goal) rather than sparse rewa
 
 Here's a scenario that happens more often than anyone admits:
 
-> You implement SAC + HER on sparse Push. Train for 10 hours. Success rate: 0%. What's wrong?
+> You implement an advanced algorithm on a difficult task. Train for 10 hours. Success rate: 0%. What went wrong?
 
 The honest answer: **you have no idea.** It could be:
 - Environment misconfiguration
 - Wrong network architecture
 - Bad hyperparameters
-- Bug in your HER implementation
-- The algorithm simply needing more time
+- Bug in your algorithm implementation
+- The task simply needing more training time
 - A subtle numerical issue
 
-You're debugging in the dark.
+You're debugging in the dark with too many variables.
 
-**The solution:** Establish a baseline where failure is informative. PPO on dense Reach should work with default hyperparameters. If it doesn't, you know exactly where to look.
+**The solution:** Establish a baseline where failure is informative. Start with the simplest algorithm (PPO) on the easiest task (Reach with dense rewards). If this doesn't work, the problem is in your infrastructure, not your algorithm choice.
 
 ---
 
