@@ -17,9 +17,39 @@ If you prefer chapter-style “textbook” notes, start with:
 - Stable-Baselines3 (PPO/SAC/TD3 + `HerReplayBuffer` for sparse goals; HER is off-policy only) ([SB3 HER][sb3-her])
 - Tracking: W&B or TensorBoard
 
-## Non-negotiables (Fetch “shape”)
+## Non-negotiables (Fetch "shape")
 - **Observations** are dicts: `observation`, `desired_goal`, `achieved_goal`. This is what makes HER/relabeling natural. ([Fetch docs][fetch-docs])
 - **Actions** are **4D**: small Cartesian deltas `dx, dy, dz` + gripper open/close. It is not torque control. ([Fetch docs][fetch-docs])
+
+## Why SAC + HER? (Deriving the method from the problem)
+
+The algorithm choice is not arbitrary. It follows from the problem constraints:
+
+**1. Continuous actions → Actor-Critic.**
+The action space is $\mathbb{R}^4$. Pure value-based methods (DQN) require $\arg\max_a Q(s,a)$, which is intractable for continuous $a$ without expensive discretization. We need a policy network that outputs actions directly, plus a critic to reduce variance. This means actor-critic.
+
+**2. Sparse rewards → Off-Policy.**
+The reward is binary: 1 if goal reached, 0 otherwise. Most trajectories get zero reward. On-policy methods (PPO) discard data after each update—wasteful when positive signal is rare. Off-policy methods (SAC, TD3) store transitions in a replay buffer and reuse them. This is essential for sample efficiency with sparse rewards.
+
+**3. Goal-conditioned + sparse → HER.**
+A trajectory that fails to reach goal $g$ still demonstrates how to reach whatever state $s_T$ it ended in. Hindsight Experience Replay relabels transitions: replace $g$ with the achieved goal $g' = g_{\text{achieved}}(s_T)$, recompute rewards, and store both versions. Failed attempts become successful demonstrations for different goals. This manufactures dense signal from sparse feedback.
+
+**4. Large goal space → Maximum Entropy (SAC).**
+HER needs diverse experience to relabel. SAC's entropy bonus encourages exploration without explicit schedules:
+$$\pi^* = \arg\max_\pi \mathbb{E}\left[\sum_t \gamma^t (R_t + \alpha \mathcal{H}(\pi(\cdot|s_t)))\right]$$
+The temperature $\alpha$ (often auto-tuned) balances exploration and exploitation.
+
+**Summary:**
+| Constraint | Requirement | Solution |
+|------------|-------------|----------|
+| Continuous actions | Direct policy output | Actor-critic |
+| Sparse rewards | Sample reuse | Off-policy (replay buffer) |
+| Goal-conditioned sparse | Learn from failures | HER |
+| Large goal space | Exploration | Entropy bonus (SAC) |
+
+**The method is SAC + HER.** This is derived, not chosen from a menu.
+
+**Where does PPO fit?** PPO is on-policy and cannot use HER. It works for dense rewards (where every step provides signal) and serves as a sanity-check baseline in Week 2. But for the core sparse-reward tasks, SAC + HER is required.
 
 ## Reproducibility target (realistic on DGX)
 You are not aiming for bitwise-identical curves. You are aiming for:

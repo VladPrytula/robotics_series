@@ -59,15 +59,63 @@ We seek $\pi^* = \arg\max_\pi \mathbb{E}_{g \sim p(g)} \mathbb{E}_{\tau \sim \pi
 
 ## §2. Methodology
 
-This repository implements **off-policy actor-critic methods with Hindsight Experience Replay** as the solution class. The approach combines three principles:
+The choice of algorithm is not arbitrary. It follows from the problem structure. Let us trace the reasoning.
 
-**Principle 1 (Off-Policy Learning).** Sample reuse is essential for efficiency. On-policy methods like PPO require fresh data for each gradient step; off-policy methods (SAC, TD3) can train on replay buffers containing trajectories from previous policies.
+### Why Actor-Critic?
 
-**Principle 2 (Maximum Entropy RL).** Exploration in continuous action spaces requires stochasticity. SAC optimizes $\pi^* = \arg\max_\pi \mathbb{E}_{\tau} \left[ \sum_{t} \gamma^t (R(s_t, a_t) + \alpha \mathcal{H}(\pi(\cdot | s_t))) \right]$, where $\alpha$ trades off reward and entropy.
+The action space is continuous: $\mathcal{A} \subset \mathbb{R}^4$. This eliminates pure value-based methods like DQN, which require $\arg\max_a Q(s,a)$—intractable when $\mathcal{A}$ is continuous without discretization (which scales exponentially with dimension).
 
-**Principle 3 (Goal Relabeling).** Failed trajectories contain information about achievable goals. HER relabels transitions $(s_t, a_t, s_{t+1}, g)$ with alternative goals $g'$ achieved during the episode, manufacturing dense learning signal from sparse feedback.
+We need a method that:
+- Outputs continuous actions directly (policy gradient)
+- Uses value estimates to reduce gradient variance (critic)
 
-**Remark.** PPO is included for dense-reward baselines but cannot exploit HER (it requires off-policy learning). For sparse-reward tasks, SAC+HER or TD3+HER are required.
+This points to **actor-critic architectures**: a policy network (actor) produces actions; a value network (critic) evaluates them.
+
+### Why Off-Policy?
+
+The reward is sparse: $R(s,a,s',g) = \mathbf{1}[\text{goal reached}]$. Most trajectories receive zero reward. If we discard these trajectories after one gradient step (as on-policy methods like PPO do), we waste the information they contain.
+
+Off-policy methods store transitions in a replay buffer and reuse them across many gradient steps. This is essential when:
+- Positive reward is rare (sparse rewards)
+- Sample collection is expensive (robotics)
+- We want to relabel goals post-hoc (HER requires this)
+
+**Consequence:** We use SAC or TD3, not PPO, for sparse-reward tasks.
+
+### Why Hindsight Experience Replay?
+
+Consider a trajectory where the agent attempts goal $g$ but fails, ending at state $s_T$ with achieved goal $g' \neq g$. Under sparse rewards, this trajectory provides zero learning signal for goal $g$.
+
+But the trajectory *does* demonstrate how to reach $g'$. If we relabel the transitions—replacing $g$ with $g'$ in the reward computation—the same trajectory now shows successful goal-reaching behavior.
+
+This is the HER insight: **failed attempts at one goal are successful demonstrations for another goal**. By storing both original and relabeled transitions, we manufacture dense reward signal from sparse feedback.
+
+**Requirements for HER:**
+1. Goals must be explicit in the observation (Fetch environments provide `achieved_goal`, `desired_goal`)
+2. Rewards must be recomputable for arbitrary goals (Fetch provides `compute_reward(achieved, desired, info)`)
+3. The algorithm must be off-policy (relabeling happens in the replay buffer)
+
+### Why Maximum Entropy (SAC)?
+
+Even with HER, exploration matters. The goal space is large; the agent must visit diverse regions to collect relabelable experience.
+
+SAC adds an entropy bonus to the objective:
+$$\pi^* = \arg\max_\pi \mathbb{E}_{\tau} \left[ \sum_{t} \gamma^t \left( R(s_t, a_t) + \alpha \mathcal{H}(\pi(\cdot | s_t)) \right) \right]$$
+
+This encourages stochastic policies that explore naturally, without requiring explicit exploration bonuses or schedules. The temperature $\alpha$ controls the exploration-exploitation trade-off.
+
+### Summary: The Derived Method
+
+| Problem Constraint | Methodological Requirement | Solution |
+|--------------------|---------------------------|----------|
+| Continuous actions | Direct policy output | Actor-critic |
+| Sparse rewards | Sample reuse | Off-policy (replay buffer) |
+| Goal-conditioned sparse rewards | Learn from failures | HER (goal relabeling) |
+| Large goal space | Sustained exploration | Maximum entropy (SAC) |
+
+**The method is SAC + HER.** This is not a recipe chosen from a menu; it is a consequence of the problem structure.
+
+**Remark.** PPO is included for dense-reward baselines where the above constraints are relaxed. But for sparse goal-conditioned tasks—the core focus of this curriculum—PPO cannot be combined with HER and struggles without reward shaping.
 
 ---
 
