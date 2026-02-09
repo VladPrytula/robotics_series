@@ -75,12 +75,43 @@ This points to **actor-critic architectures**: a policy network (actor) produces
 
 The reward is sparse: $R(s,a,s',g) = \mathbf{1}[\text{goal reached}]$. Most trajectories receive zero reward. If we discard these trajectories after one gradient step (as on-policy methods like PPO do), we waste the information they contain.
 
-Off-policy methods store transitions in a replay buffer and reuse them across many gradient steps. This is essential when:
-- Positive reward is rare (sparse rewards)
-- Sample collection is expensive (robotics)
-- We want to relabel goals post-hoc (HER requires this)
+To understand why HER requires off-policy learning, we must first understand the on-policy/off-policy distinction.
 
-**Consequence:** We use SAC or TD3, not PPO, for sparse-reward tasks.
+**On-Policy Learning (PPO, TRPO, A2C).**
+On-policy methods learn from data collected by the *current* policy $\pi_\theta$. The policy gradient theorem gives:
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_t \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot A^{\pi_\theta}(s_t, a_t) \right]$$
+
+The expectation is over trajectories from $\pi_\theta$. If we use data from an old policy $\pi_{\theta_{\text{old}}}$, the gradient estimate becomes biased. PPO mitigates this with importance sampling and clipping, but only for *small* policy changes. After a few gradient steps, the data becomes "stale" and must be discarded.
+
+**Consequence:** On-policy methods cannot maintain replay buffers. Each batch of experience is used for a few updates, then thrown away.
+
+**Off-Policy Learning (SAC, TD3, DDPG).**
+Off-policy methods learn from data collected by *any* policy—current, past, or even a different agent. They use Q-learning-style updates:
+$$Q(s,a) \leftarrow Q(s,a) + \alpha \left[ r + \gamma Q(s', a') - Q(s,a) \right]$$
+
+The update target $r + \gamma Q(s', a')$ does not depend on which policy collected the transition $(s, a, r, s')$. This allows storing millions of transitions in a replay buffer and sampling them repeatedly.
+
+**Why HER Cannot Work with On-Policy Methods.**
+
+HER performs goal relabeling: after an episode ends, we take transitions $(s_t, a_t, s_{t+1}, g)$ and create new transitions $(s_t, a_t, s_{t+1}, g')$ where $g'$ is a goal achieved later in the episode. This relabeling happens *after* the episode is collected.
+
+The fundamental incompatibility:
+
+1. **HER requires storing transitions.** Relabeling is a post-hoc operation on completed episodes. We must store the original transitions, compute achieved goals, select alternative goals, recompute rewards, and add relabeled transitions. This requires a replay buffer.
+
+2. **On-policy methods cannot use replay buffers.** The moment data enters a buffer and is reused across multiple updates, the policy has changed, and the data no longer comes from $\pi_\theta$. The policy gradient becomes biased.
+
+3. **The timing is wrong.** On-policy methods update immediately after collecting a batch. HER needs the *entire episode* to know what goals were achieved (for the "future" strategy). By the time relabeling could happen, on-policy methods have already used and discarded the data.
+
+**Attempted Workarounds (and Why They Fail).**
+
+*"What if we relabel before the policy update?"* The "future" strategy requires knowing states that come *after* the current transition. We cannot relabel transition $t$ until we know states $t+1, t+2, \ldots, T$. By then, on-policy methods want to update immediately.
+
+*"What if we use importance sampling?"* Importance sampling corrects for distribution mismatch, but the correction factor $\frac{\pi_\theta(a|s)}{\pi_{\theta_{\text{old}}}(a|s)}$ explodes when policies diverge. HER's relabeled data comes from many episodes ago; the importance weights become useless.
+
+*"What about on-policy HER variants?"* Research has explored this (e.g., storing only recent episodes), but the sample efficiency gains of HER come precisely from *reusing* old experience. Restricting to recent data defeats the purpose.
+
+**Consequence:** We use SAC or TD3, not PPO, for sparse-reward goal-conditioned tasks. PPO is included in this curriculum only for dense-reward baselines where HER is unnecessary.
 
 ### Why Hindsight Experience Replay?
 
