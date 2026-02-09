@@ -6,6 +6,33 @@ This repository is structured for step-by-step study. A 10-week curriculum ([`sy
 
 ---
 
+## Project Status
+
+This is an active project. The table below shows what is implemented versus planned.
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **Infrastructure** | | |
+| Docker tooling (`docker/`) | ✓ Complete | `dev.sh`, `build.sh`, `run.sh`, Dockerfile |
+| Training CLI (`train.py`) | ✓ Complete | PPO/SAC/TD3, HER, vectorized envs |
+| Evaluation CLI (`eval.py`) | ✓ Complete | Multi-seed, metrics, JSON output |
+| **Curriculum** | | |
+| Week 0: DGX setup, proof-of-life | ✓ Complete | `ch00_proof_of_life.py`, tutorial |
+| Week 1: Environment anatomy | ✓ Complete | `ch01_env_anatomy.py`, tutorial |
+| Week 2: PPO on dense Reach | ○ Planned | Syllabus ready, script/tutorial pending |
+| Week 3: SAC on dense Reach | ○ Planned | |
+| Week 4: Sparse + HER | ○ Planned | |
+| Week 5: PickAndPlace | ○ Planned | |
+| Week 6: Action-interface engineering | ○ Planned | |
+| Week 7: Robustness | ○ Planned | |
+| Week 8: Second suite | ○ Planned | |
+| Week 9: Sweeps and ablations | ○ Planned | |
+| Week 10: Capstone | ○ Planned | |
+
+**Current focus:** Weeks 0-1 provide the foundation. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
+
+---
+
 ## §1. Problem Formulation
 
 **The Central Question.** Can an agent learn to manipulate objects to arbitrary goal configurations using only sparse binary feedback?
