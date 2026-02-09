@@ -1,0 +1,30 @@
+# Documentation metadata (local only)
+AGENTS.md
+CLAUDE.md
+vlad_prytula_persona.md
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Generated artifacts
+results/
+checkpoints/
+videos/
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

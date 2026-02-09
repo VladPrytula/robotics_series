@@ -1,0 +1,6 @@
+gymnasium
+gymnasium-robotics
+mujoco
+stable-baselines3
+tensorboard
+imageio
