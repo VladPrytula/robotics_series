@@ -10,10 +10,12 @@ Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble el
 |--------|-----------------|---------------------|
 | Action space | Discrete tokens (~100k vocabulary) | Continuous $\mathbb{R}^4$ (infinite) |
 | Feedback | Next-token prediction (dense, immediate) | Sparse binary (success/failure at episode end) |
-| Error recovery | Generate another token | Physical damage, fallen objects, unsafe states |
-| Stability requirement | None--each token is independent | **Asymptotic stability**: small perturbations must not cascade into failure |
+| Error cost | Regenerate, backtrack, try again | Irreversible: collisions, drops, damage |
+| Stability requirement | Errors cascade in context but are recoverable | **Asymptotic stability**: physical perturbations must not cascade into failure |
 
-That last point--**asymptotic stability**--is what control theorists worry about and ML practitioners often miss. A language model that occasionally outputs nonsense is annoying. A robot arm that occasionally diverges from its trajectory is *dangerous*. The policy must not merely be accurate on average; it must be stable under perturbation, converging back to the goal even when disturbed.
+That last point--**asymptotic stability**--is what control theorists worry about and ML practitioners often miss. Both LLMs and robots accumulate state (context window vs. physical configuration), and both can suffer error cascades. But there's a crucial difference: LLM errors are *recoverable*--regenerate, adjust the prompt, start fresh. Physical errors are *irreversible*--the robot collided, the object fell, the glass shattered. You can't backtrack physics.
+
+A robot policy must not merely be accurate on average; it must be stable under perturbation, converging back to the goal trajectory even when disturbed. This is closed-loop control in a world that doesn't offer undo.
 
 The core challenge: learning to manipulate objects to arbitrary goal positions from minimal feedback, while maintaining stability in a continuous, physical world.
 
