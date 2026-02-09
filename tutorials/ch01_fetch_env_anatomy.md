@@ -17,11 +17,73 @@ You have completed Chapter 0. You now have:
 - MuJoCo physics simulation running headlessly
 - A verified training loop that produces checkpoints
 
-You are running on a DGX cluster (or similar GPU workstation), executing all commands through `bash docker/dev.sh`. Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
+You are running on a DGX cluster (or similar GPU workstation). Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
 
-### 0.2 What We Are Doing
+**How to Execute Commands.** All commands in this curriculum run through the Docker wrapper:
 
-We are about to train neural network policies to control a simulated Fetch robot arm. Before we write any training code, we must understand *exactly* what the robot perceives and what commands it accepts.
+```bash
+bash docker/dev.sh <your-command>
+```
+
+For example:
+```bash
+# Run a specific script
+bash docker/dev.sh python scripts/ch01_env_anatomy.py describe
+
+# Start an interactive shell inside the container
+bash docker/dev.sh
+```
+
+When you run `bash docker/dev.sh python some_script.py`, the following happens:
+
+1. **Container launches** with GPU access (`--gpus all`) and your repository mounted at `/workspace`
+2. **Virtual environment** is created (first run) or activated in `.venv/`
+3. **Dependencies** from `requirements.txt` are installed (cached by hash—reinstalls only when requirements change)
+4. **Your command executes** inside this isolated environment
+5. **Container exits** when the command completes (or stays open for interactive shells)
+
+The script preserves your host user ID, so files created inside the container are owned by you, not root.
+
+**First Run.** On first invocation, `dev.sh` builds the Docker image `robotics-rl:latest` from `docker/Dockerfile`. This takes several minutes but only happens once. Subsequent runs start in seconds.
+
+### 0.2 What We Are Simulating
+
+We are training neural network policies to control a **simulated robot** in a **physics engine**. Let us be precise about what this means.
+
+**The Physics Engine: MuJoCo.** MuJoCo (Multi-Joint dynamics with Contact) is a physics simulator designed for robotics and biomechanics research. It computes:
+- Rigid body dynamics (how objects move under forces)
+- Contact forces (what happens when the robot touches objects)
+- Joint constraints (how the robot's links connect)
+
+MuJoCo runs the physics at 500Hz internally; the environment exposes control at 25Hz (every 20 simulation steps). When you call `env.step(action)`, MuJoCo simulates 20 timesteps of physics, then returns the resulting state.
+
+**Why Simulation?** Reinforcement learning requires millions of trials. A real robot would:
+- Break from repeated collisions
+- Take months to collect enough data
+- Pose safety hazards during random exploration
+
+In simulation, we collect a million timesteps in minutes. Policies trained in simulation can later transfer to real hardware (sim-to-real transfer), though that is beyond this curriculum's scope.
+
+**The Simulated Robot: Fetch.** The Fetch robot is a real mobile manipulator manufactured by Fetch Robotics (now part of Zebra Technologies). The MuJoCo model replicates its kinematics:
+
+| Component | Specification |
+|-----------|---------------|
+| **Arm** | 7 degrees of freedom (DOF) |
+| **Gripper** | Parallel-jaw, 2 fingers |
+| **Workspace** | ~1m reach from base |
+| **Control mode** | Cartesian velocity (not joint torques) |
+
+The simulation includes a table with objects (for Push/PickAndPlace tasks) and a target marker showing the goal position.
+
+**What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian velocity commands:
+- `(vx, vy, vz)`: Desired end-effector velocity in world frame
+- `gripper`: Open (<0) or close (>0) command
+
+An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques. This simplification means the agent does not need to learn inverse kinematics—it just says "move left" and the controller figures out which joints to actuate.
+
+### 0.3 What We Are Doing
+
+Before we write any training code, we must understand *exactly* what the robot perceives and what commands it accepts.
 
 This is not academic pedantry. Consider what happens if you misunderstand the interface:
 
@@ -34,11 +96,9 @@ This is not academic pedantry. Consider what happens if you misunderstand the in
 
 Every hour spent understanding the environment saves ten hours debugging training failures.
 
-### 0.3 The Fetch Robot
+### 0.4 The Four Fetch Tasks
 
-The Fetch robot is a mobile manipulator designed for research. In simulation, we use only the arm: a 7-DOF manipulator with a parallel-jaw gripper. The simulated version in MuJoCo matches the kinematics of the real robot, meaning policies trained in simulation can (with care) transfer to hardware.
-
-The Gymnasium-Robotics package provides four Fetch tasks:
+The Gymnasium-Robotics package provides four manipulation tasks of increasing difficulty:
 
 | Task | Goal | Difficulty |
 |------|------|------------|
@@ -51,7 +111,7 @@ Each task has two reward variants:
 - **Dense** (e.g., `FetchReachDense-v4`): Reward = negative distance to goal. Provides continuous feedback.
 - **Sparse** (e.g., `FetchReach-v4`): Reward = 0 if goal reached, −1 otherwise. Binary feedback only.
 
-### 0.4 Why Environment Anatomy Matters
+### 0.5 Why Environment Anatomy Matters
 
 The Fetch environments are not arbitrary. They implement a specific interface designed for goal-conditioned learning:
 
@@ -63,7 +123,7 @@ The Fetch environments are not arbitrary. They implement a specific interface de
 
 If you treat the environment as a black box—feeding observations to a network and hoping it learns—you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can debug intelligently when things go wrong.
 
-### 0.5 What This Chapter Produces
+### 0.6 What This Chapter Produces
 
 By the end of this chapter, you will have:
 
