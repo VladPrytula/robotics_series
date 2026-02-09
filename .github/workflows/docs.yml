@@ -9,19 +9,14 @@ on:
       - 'syllabus.md'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  contents: write
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +31,6 @@ jobs:
 
       - name: Resolve symlinks (copy actual files)
         run: |
-          # Replace symlinks with actual files for GitHub Actions
           for f in docs/tutorials/*.md docs/syllabus.md; do
             if [ -L "$f" ]; then
               target=$(readlink -f "$f")
@@ -45,21 +39,5 @@ jobs:
             fi
           done
 
-      - name: Build documentation
-        run: mkdocs build --strict
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Build and deploy
+        run: mkdocs gh-deploy --force
