@@ -14,17 +14,17 @@ Better question: "Under what conditions does this algorithm succeed?"
 
 ---
 
-The French mathematical tradition asks three questions before solving anything:
+There's a useful habit from applied math and physics: before solving a problem, ask whether it's well-posed.
 
-→ Does a solution exist?
-→ Is it unique?
-→ Does it depend continuously on the data?
+- Does a solution exist?
+- Is it unique?
+- Does it depend continuously on the input?
 
-Applied to RL, this becomes:
+For RL, this translates to:
 
-→ Can a neural network policy solve this task?
-→ Are there multiple qualitatively different solutions?
-→ Will different random seeds give similar results?
+- Can a neural network policy actually solve this task?
+- Are there multiple qualitatively different solutions?
+- Will different random seeds give similar results?
 
 Example: sparse rewards + random exploration.
 
@@ -34,25 +34,25 @@ This isn't a hyperparameter problem. The problem formulation itself makes learni
 
 ---
 
-I'm building an open-source curriculum that teaches RL differently:
+I'm working on an open-source curriculum that tries to teach RL this way:
 
-✓ Problem formulation BEFORE solution
-✓ Real robotics simulation (Fetch arm, MuJoCo physics)
-✓ Derive algorithms, don't just copy-paste them
-✓ Verify with multi-seed experiments, not single lucky runs
+- Problem formulation before solution
+- Real robotics simulation (Fetch arm, MuJoCo physics)
+- Derive algorithms from constraints, don't just copy-paste
+- Multi-seed experiments, not single lucky runs
 
-It's not fast. It's 10 weeks. You can't skip chapters.
+It's slow. 10 weeks. Chapters build on each other.
 
-But when something breaks, you'll know WHY.
+But when something breaks, you'll have the mental model to understand why.
 
 ---
 
 First two chapters are live:
-🔗 github.com/VladPrytula/robotics_series
+github.com/VladPrytula/robotics_series
 
-Who else is tired of tutorials that work until they don't?
+Feedback welcome--especially on what's confusing or missing.
 
-#reinforcementlearning #robotics #machinelearning #opensource #curriculum
+#reinforcementlearning #robotics #machinelearning #opensource
 
 ---
 

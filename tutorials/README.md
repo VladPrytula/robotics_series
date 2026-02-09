@@ -60,7 +60,7 @@ This is the standard we set. Anything less is not worth the reader's time.
 
 ## The Central Questions
 
-In the tradition of Hadamard and Lions, we begin every investigation with fundamental questions about the problem itself. For reinforcement learning in robotic manipulation, these questions are:
+Before diving into algorithms, we ask fundamental questions about the problem itself. This habit--common in applied mathematics and physics--helps avoid wasted effort on ill-posed problems. For reinforcement learning in robotic manipulation, the key questions are:
 
 **The Existence Question.** Does there exist, within our hypothesis class of neural network policies, a function that achieves high success rate on the task distribution? This question is non-trivial. The hypothesis class is constrained (feedforward networks of bounded depth and width); the task distribution may include configurations that are kinematically difficult or dynamically unstable; the reward landscape may be deceptive, with local optima that trap gradient-based methods.
 
@@ -78,7 +78,7 @@ Every chapter in this collection follows a tripartite structure: **WHY**, **HOW*
 
 Before presenting any technique, we formulate the problem it addresses. What mathematical object are we seeking? What properties must it satisfy? What makes this problem difficult?
 
-This is not mere throat-clearing. In the tradition of the French school of applied mathematics--Lions, Brezis, and their intellectual descendants--problem formulation is itself a creative act that shapes everything that follows. A poorly formulated problem admits no clean solution; a well-formulated problem often suggests its own resolution.
+This is not mere throat-clearing. Problem formulation is itself a creative act that shapes everything that follows. A poorly formulated problem admits no clean solution; a well-formulated problem often suggests its own resolution.
 
 When we introduce Hindsight Experience Replay in Chapter 4, we do not begin with the algorithm. We begin with the problem: sparse binary rewards provide no gradient signal when the goal is never reached; the probability of reaching an arbitrary goal by random exploration decreases exponentially with goal-space dimension; therefore, any practical algorithm must manufacture learning signal from failed attempts. The problem formulation makes the solution almost inevitable.
 

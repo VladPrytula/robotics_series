@@ -21,17 +21,19 @@ This isn't a skill issue--it's a structural one. RL algorithms are sensitive to 
 
 The question isn't "why doesn't my code work?" That framing assumes the code is the problem. The deeper question is: "Under what conditions does this algorithm succeed, and have I established those conditions?"
 
-## The Brezis Tradition
+## Asking Better Questions
 
-At the Laboratoire Jacques-Louis Lions in Paris, mathematicians approach problems differently. Before asking "how do I solve this?", they ask three questions:
+There's a habit from applied math and physics that's surprisingly useful for ML: before trying to solve a problem, ask whether it's *well-posed*.
+
+Three questions:
 
 1. **Does a solution exist?**
 2. **Is it unique?**
-3. **Does it depend continuously on the data?**
+3. **Does it depend continuously on the input?**
 
-These are Hadamard's conditions for a *well-posed problem*. They seem abstract--who cares about existence proofs when you just want a robot to pick up a block?
+These seem abstract--who cares about existence proofs when you just want a robot to pick up a block?
 
-But here's the thing: these questions translate directly to reinforcement learning.
+But they translate directly to reinforcement learning.
 
 - **Existence:** Is there a neural network policy that can solve this task? (Not always obvious. Some tasks are impossible for certain architectures.)
 - **Uniqueness:** Are there multiple qualitatively different solutions? (Often yes. Understanding this helps you interpret what your agent learned.)
