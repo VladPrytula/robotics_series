@@ -15,14 +15,11 @@ Robots that fold laundry. Arms that pack warehouse boxes. Hands that assemble el
 
 That last point--**asymptotic stability**--is what control theorists worry about and ML practitioners often miss. The difference isn't just about reversibility; it's **structural**, rooted in dimensionality.
 
-**The mathematical crux:** In discrete token spaces, you're either at token A or token B--there's no "infinitesimally wrong" token. Errors are quantized. In continuous $\mathbb{R}^n$, perturbations can be arbitrarily small, and critically, **small errors can grow** through the dynamics. This is where Lyapunov stability theory becomes essential.
+**The mathematical crux:** In discrete token spaces, you're either at token A or token B--there's no "infinitesimally wrong" token. Errors are quantized. In continuous $\mathbb{R}^n$, perturbations can be arbitrarily small, and critically, **small errors can grow** through the dynamics. This is where Lyapunov stability theory provides the right framework.
 
-A system is **Lyapunov stable** if small perturbations stay small. It's **asymptotically stable** if perturbations actually decay--the system converges back to equilibrium. Formally, you need a Lyapunov function $V(x)$ (think: energy) satisfying:
-- $V(x) > 0$ away from goal, $V(x^*) = 0$ at goal
-- $\dot{V}(x) \leq 0$ along trajectories (energy never increases)
-- $\dot{V}(x) < 0$ strictly for asymptotic stability (energy decreases)
+The intuition (borrowing from continuous-time control, though RL operates in discrete time): a system is **Lyapunov stable** if small perturbations stay small, and **asymptotically stable** if perturbations decay back to equilibrium. The classical tool is a Lyapunov function $V(x)$--an "energy-like" quantity that decreases along trajectories, certifying convergence.
 
-A learned policy induces a vector field on state space. For reliable manipulation, this field must form a **stable attractor** around goal configurations. This is a structural requirement that discrete sequence models simply don't face--you can't take derivatives in a discrete vocabulary, and "small perturbations growing" has no meaning when the smallest perturbation is swapping one token for another.
+A learned policy, combined with environment dynamics, induces a dynamical system on state space. For reliable manipulation, this system should form a **stable attractor** around goal configurations. This structural requirement doesn't arise naturally in discrete sequence models--the action space topology is fundamentally different, and the notion of "small perturbations growing through dynamics" doesn't transfer directly.
 
 Physical irreversibility compounds this: not only can errors grow, but their consequences persist. The robot collided, the object fell, the glass shattered. You can't backtrack physics.
 
