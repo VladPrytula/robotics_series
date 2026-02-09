@@ -58,17 +58,98 @@ The key property of containers for our purposes is *isolation with specification
 
 ### 2.2 The Verification Protocol
 
-Our verification protocol consists of four tests, each corresponding to one requirement from the problem statement:
+Verification is not bureaucracy. It is the empirical side of our well-posedness analysis. Each test corresponds to a necessary condition for the experiments that follow. If any test fails, some class of experiments becomes impossible. Understanding *why* each test matters—not just *what* it checks—is essential for diagnosing failures when they occur.
 
-**Test 1 (GPU Access).** Run `nvidia-smi` inside a container with `--gpus all`. The test passes if the output lists at least one GPU.
+#### Test 1: GPU Access
 
-**Test 2 (MuJoCo Functionality).** Import MuJoCo and create a Fetch environment. The test passes if `env.reset()` returns a valid observation dictionary.
+**What we verify.** The container can access the host GPU via the NVIDIA runtime.
 
-**Test 3 (Headless Rendering).** Render a frame from the Fetch environment using `render_mode="rgb_array"`. The test passes if the output is a non-empty image file.
+**Why this matters.** Reinforcement learning with neural network function approximators is computationally intensive. A single training run may require $10^6$–$10^7$ gradient updates, each involving forward and backward passes through networks with $10^5$–$10^6$ parameters. On CPU, this takes days or weeks. On GPU, it takes hours.
 
-**Test 4 (Training Loop).** Run PPO for a small number of timesteps and save a checkpoint. The test passes if the checkpoint file exists and is non-empty.
+But GPU access inside a container is not automatic. The container runs in an isolated namespace; it cannot see host devices unless explicitly granted access. The `--gpus all` flag instructs Docker to use the NVIDIA Container Toolkit, which mounts the GPU device files and driver libraries into the container.
 
-These tests are implemented in `scripts/ch00_proof_of_life.py`. The script provides subcommands for running each test individually or all tests in sequence.
+**What failure means.** If this test fails, either:
+1. The NVIDIA driver is not installed on the host
+2. The NVIDIA Container Toolkit is not installed
+3. Docker was not invoked with `--gpus all`
+4. The GPU is in use by another process with exclusive access
+
+Training will still *run* on CPU, but it will be 10–100× slower, making iterative experimentation impractical.
+
+**The test.** Run `nvidia-smi` inside the container. This command queries the NVIDIA driver for GPU status. If it succeeds, the container has GPU access. If it fails with "command not found" or "NVIDIA-SMI has failed," the container cannot see the GPU.
+
+#### Test 2: MuJoCo and Gymnasium-Robotics Functionality
+
+**What we verify.** The physics simulator initializes correctly, and the Fetch environments are registered and functional.
+
+**Why this matters.** The Fetch environments are implemented on top of MuJoCo, a physics engine that simulates rigid body dynamics with contact. MuJoCo is not a pure Python library; it includes compiled C code that interfaces with system libraries. If these libraries are missing or incompatible, MuJoCo fails to initialize.
+
+Furthermore, Gymnasium-Robotics must register its environments with Gymnasium's registry. This registration happens at import time. If the import fails silently or the registration is incomplete, `gym.make("FetchReach-v4")` will raise `EnvironmentNameNotFound`.
+
+**What failure means.** If this test fails, either:
+1. MuJoCo's compiled extensions cannot find required system libraries
+2. The `gymnasium-robotics` package is not installed
+3. There is a version incompatibility between `gymnasium`, `gymnasium-robotics`, and `mujoco`
+
+Without functional Fetch environments, the entire curriculum is blocked.
+
+**The test.** Import `gymnasium` and `gymnasium_robotics`, then call `gym.make("FetchReachDense-v4")` and `env.reset()`. If the environment returns a valid observation dictionary with keys `observation`, `achieved_goal`, and `desired_goal`, the physics stack is functional.
+
+#### Test 3: Headless Rendering
+
+**What we verify.** The environment can produce RGB frames without a display.
+
+**Why this matters.** Evaluation often requires visual inspection: Does the robot reach the goal? Is the motion smooth or jerky? Does the gripper close at the right moment? These questions are answered by watching videos, which requires rendering.
+
+But DGX systems are headless—they have no monitor attached. Rendering typically requires a display server (X11) to manage the graphics context. On a headless system, we must use *offscreen* rendering: EGL (hardware-accelerated via the GPU) or OSMesa (software rasterization).
+
+This is where many setups fail. EGL requires specific driver support and library versions. OSMesa requires Mesa to be compiled with offscreen support. If neither works, rendering is impossible.
+
+**What failure means.** If this test fails, either:
+1. EGL libraries (`libEGL.so`) are missing or incompatible
+2. The GPU driver does not expose EGL support
+3. OSMesa libraries (`libOSMesa.so`) are missing
+4. Environment variables (`MUJOCO_GL`, `PYOPENGL_PLATFORM`) are misconfigured
+
+Training can proceed without rendering, but evaluation will be limited to numerical metrics. You will not be able to generate videos or visually debug policy behavior.
+
+**The test.** Create a Fetch environment with `render_mode="rgb_array"`, call `env.render()`, and save the resulting numpy array as a PNG image. If the image file exists and is non-empty, offscreen rendering works.
+
+**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image.
+
+#### Test 4: Training Loop Completion
+
+**What we verify.** A complete training loop—environment interaction, gradient computation, parameter updates, checkpoint saving—executes without error.
+
+**Why this matters.** The previous tests verified components in isolation: GPU access, physics simulation, rendering. But reinforcement learning combines these components in complex ways. Data flows from the environment to the replay buffer to the neural network and back. Shapes must match. Dtypes must be compatible. Memory must not leak.
+
+Many bugs only manifest when components interact. A shape mismatch between the observation space and the policy network. A dtype incompatibility between numpy arrays and PyTorch tensors. A memory leak that only appears after thousands of environment steps. These bugs do not appear in unit tests; they appear when you run training.
+
+**What failure means.** If this test fails, either:
+1. The policy network architecture is incompatible with the observation space
+2. There is a dtype or device mismatch (CPU vs. CUDA tensors)
+3. The training loop has a bug that manifests only after some number of steps
+4. The checkpoint serialization format is incompatible with the model architecture
+
+Until this test passes, you cannot train policies.
+
+**The test.** Run PPO for 50,000 timesteps on `FetchReachDense-v4` with 8 parallel environments, then save a checkpoint. If the checkpoint file exists and is loadable by `PPO.load()`, the training loop is functional.
+
+**Remark (Why PPO, Not SAC).** We use PPO for this smoke test because it is simpler and fails faster if something is wrong. SAC involves additional components (replay buffer, twin critics, entropy tuning) that could mask or compound errors. Once PPO works, we have confidence that the core training infrastructure is sound; SAC-specific issues can be debugged separately.
+
+#### The Logical Structure
+
+The four tests form a dependency chain:
+
+```
+GPU Access → MuJoCo Functionality → Headless Rendering → Training Loop
+```
+
+Each test assumes the previous tests pass. There is no point testing rendering if MuJoCo cannot initialize. There is no point testing training if the GPU is inaccessible (training would "work" but be too slow to iterate).
+
+**Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The proof-of-life script's `all` subcommand respects this ordering and stops at the first failure.
+
+These tests are implemented in `scripts/ch00_proof_of_life.py`. The script provides subcommands for running each test individually (`list-envs`, `render`, `ppo-smoke`) or all tests in sequence (`all`).
 
 ### 2.3 The Container Architecture
 
