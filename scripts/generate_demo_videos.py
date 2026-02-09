@@ -107,20 +107,27 @@ def add_goal_indicator(frame, goal_pos, achieved_pos, width, height):
         # Try to load font
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
         except Exception:
             font = ImageFont.load_default()
+            font_large = font
 
         # Show distance to goal in corner
-        status = f"Distance: {dist*100:.1f}cm"
         if dist < 0.05:
-            status = "SUCCESS!"
+            status = "TARGET REACHED!"
             color = (0, 255, 0)
         else:
+            status = f"Distance to target: {dist*100:.1f}cm"
             color = (255, 255, 255)
 
-        # Draw with shadow
+        # Draw status with shadow
         draw.text((12, 12), status, fill=(0, 0, 0), font=font)
         draw.text((10, 10), status, fill=color, font=font)
+
+        # Draw legend at bottom
+        legend = "Red dot = TARGET    Green dot = GRIPPER"
+        draw.text((12, height - 22), legend, fill=(0, 0, 0), font=font_large)
+        draw.text((10, height - 24), legend, fill=(200, 200, 200), font=font_large)
 
         return np.array(img)
     except ImportError:
@@ -317,15 +324,30 @@ def main() -> int:
         height=args.height,
     )
 
-    # Try to adjust camera to show goal better (wider view, angled from above)
+    # Try to make target more visible
+    try:
+        unwrapped = env.unwrapped
+        if hasattr(unwrapped, 'model'):
+            mj_model = unwrapped.model
+            # Find and enlarge the target site
+            for i in range(mj_model.nsite):
+                site_name = mj_model.site(i).name
+                if 'target' in site_name.lower():
+                    # Make target bigger and brighter
+                    mj_model.site_size[i] = [0.03, 0.03, 0.03]  # Larger sphere
+                    mj_model.site_rgba[i] = [1.0, 0.0, 0.0, 1.0]  # Bright red
+                    print(f"Enlarged target site: {site_name}")
+    except Exception as e:
+        print(f"Note: Could not enlarge target: {e}")
+
+    # Try to adjust camera to show goal better
     try:
         if hasattr(env.unwrapped, 'mujoco_renderer'):
-            # Set a better camera angle that shows both robot and goal
             env.unwrapped.mujoco_renderer.default_cam_config = {
-                "distance": 1.8,  # Zoom out a bit
-                "azimuth": 135,   # Angle from the side
-                "elevation": -25, # Look down slightly
-                "lookat": [1.3, 0.75, 0.4],  # Center on workspace
+                "distance": 1.5,  # Closer view
+                "azimuth": 132,   # Angle from the side
+                "elevation": -20, # Look down slightly
+                "lookat": [1.3, 0.75, 0.5],  # Center on workspace
             }
     except Exception as e:
         print(f"Note: Could not adjust camera: {e}")
