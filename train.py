@@ -174,10 +174,6 @@ def main() -> int:
                     replay_buffer_kwargs=replay_buffer_kwargs,
                 )
 
-        if args.track == "tb":
-            model.set_logger(model.logger)
-            model.logger.record("run/id", run_id)
-
         model.learn(total_timesteps=args.total_steps, tb_log_name=run_id if args.track == "tb" else None)
         model.save(str(out_path))
     finally:

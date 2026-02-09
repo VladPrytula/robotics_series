@@ -48,6 +48,7 @@ exec docker run --rm -it \
   -e HOME=/tmp \
   -e XDG_CACHE_HOME=/tmp/.cache \
   -e TORCH_HOME=/tmp/.cache/torch \
+  -e TORCHINDUCTOR_CACHE_DIR=/tmp/.cache/torch_inductor \
   -e MPLCONFIGDIR=/tmp/.cache/matplotlib \
   -e WANDB_API_KEY \
   -v "${repo_root}":"${workdir}" \
