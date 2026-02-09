@@ -14,7 +14,7 @@ You're about to train a neural network to control a robot arm. The arm will lear
 
 That's remarkable. But here's the uncomfortable truth: **most RL implementations don't work on the first try.** The field has a reproducibility crisis (Henderson et al., 2018). Hyperparameters matter more than they should. Small bugs can silently cause complete failure.
 
-This chapter is about building confidence that your infrastructure is correct *before* you add complexity. We use PPO on a dense-reward task as a **diagnostic**--if this doesn't work, something is broken in your setup, not your algorithm.
+This chapter is about building confidence that your infrastructure is correct *before* you add complexity. We use **Proximal Policy Optimization (PPO)**--a widely-used RL algorithm that learns by repeatedly trying actions and adjusting based on outcomes--on a dense-reward task as a **diagnostic**. If this doesn't work, something is broken in your setup, not your algorithm.
 
 By the end, you will have:
 1. A trained policy achieving >90% success rate (we got 100% in our test run)
