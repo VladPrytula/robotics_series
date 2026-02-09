@@ -215,6 +215,16 @@ PPO maintains two neural networks:
 
 3. **Stability.** The critic's value estimates are used to compute advantages, which then train the actor. If actor updates destabilize the critic, the advantages become noisy, which destabilizes the actor further--a vicious cycle.
 
+**The mathematical view:** From a functional analysis perspective, actor-critic is a *factorization* of a single nonlinear functional. Consider what we're really learning: a mapping from states to "optimal behavior," which encompasses both *what to do* (the policy) and *how good is this state* (the value). A single network would learn:
+
+$$F: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \times \mathbb{R}$$
+
+Instead, we factor this into two simpler functionals:
+
+$$\pi: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \quad \text{and} \quad V: \mathcal{S} \times \mathcal{G} \to \mathbb{R}$$
+
+This is analogous to matrix factorization (SVD, NMF) or tensor decomposition--we decompose a complex object into simpler components that are easier to learn and have better-behaved optimization landscapes. The shared backbone architecture takes this further: we factor the state representation itself, learning $\phi: \mathcal{S} \times \mathcal{G} \to \mathbb{R}^d$ (the backbone), then composing with simpler heads.
+
 In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"). This captures shared features while keeping the objectives separate. Stable Baselines 3 uses this approach by default.
 
 ### 2.2 The Training Loop
