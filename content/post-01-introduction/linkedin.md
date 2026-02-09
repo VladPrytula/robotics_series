@@ -14,13 +14,17 @@ Better question: "Under what conditions does this algorithm succeed?"
 
 ---
 
+At the zooplus SE AI Hub, we think a lot about what makes ML systems reliable at scale. E-commerce logistics--millions of SKUs, dynamic demand, real-time decisions--doesn't forgive brittle models.
+
+That mindset applies to robotics too.
+
 There's a useful habit from applied math and physics: before solving a problem, ask whether it's well-posed.
 
 - Does a solution exist?
 - Is it unique?
 - Does it depend continuously on the input?
 
-For RL, this translates to:
+For RL:
 
 - Can a neural network policy actually solve this task?
 - Are there multiple qualitatively different solutions?
@@ -34,10 +38,10 @@ This isn't a hyperparameter problem. The problem formulation itself makes learni
 
 ---
 
-I'm working on an open-source curriculum that tries to teach RL this way:
+I'm working on an open-source curriculum that teaches RL with this lens:
 
 - Problem formulation before solution
-- Real robotics simulation (Fetch arm, MuJoCo physics)
+- Real robotics simulation (Fetch arm--originally designed for warehouse automation)
 - Derive algorithms from constraints, don't just copy-paste
 - Multi-seed experiments, not single lucky runs
 
@@ -52,7 +56,7 @@ github.com/VladPrytula/robotics_series
 
 Feedback welcome--especially on what's confusing or missing.
 
-#reinforcementlearning #robotics #machinelearning #opensource
+#reinforcementlearning #robotics #machinelearning #opensource #zooplus
 
 ---
 
@@ -62,3 +66,4 @@ Feedback welcome--especially on what's confusing or missing.
 - Post Tuesday-Thursday, 8-10am local time
 - Respond to every comment in first 2 hours
 - Don't edit post after publishing (kills reach)
+- Tag zooplus SE company page if possible
