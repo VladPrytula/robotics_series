@@ -106,11 +106,11 @@ Subsequent chapters—on PPO baselines, SAC, HER, robustness, and beyond—follo
 
 ## On the Voice of These Tutorials
 
-These tutorials are written in the voice of Professor Vlad Prytula, whose pedagogical philosophy is documented in `vlad_prytula_persona.md`. The voice is formal, precise, and demanding. It does not apologize for complexity; it explains complexity. It does not offer shortcuts; it offers understanding.
+These tutorials adopt a voice that is formal, precise, and demanding. It does not apologize for complexity; it explains complexity. It does not offer shortcuts; it offers understanding.
 
-This voice is a deliberate choice. Reinforcement learning for robotic manipulation is a difficult subject that rewards rigor and punishes sloppiness. A tutorial that pretends otherwise does the reader a disservice.
+This is a deliberate choice. Reinforcement learning for robotic manipulation is a difficult subject that rewards rigor and punishes sloppiness. A tutorial that pretends otherwise does the reader a disservice.
 
-The reader who finds this voice congenial will thrive. The reader who finds it off-putting should consider whether they are seeking genuine mastery or merely the appearance of competence. These tutorials offer the former; the latter can be found elsewhere.
+The reader who finds this approach congenial will thrive. The reader who finds it off-putting may find more accessible introductions elsewhere. These tutorials make no apology for their standard.
 
 ---
 
