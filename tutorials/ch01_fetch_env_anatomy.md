@@ -293,7 +293,7 @@ Upon completion of this chapter, the following must exist:
 
 **D1.** The file `results/ch01_env_describe.json` containing the observation and action space schema.
 
-**D2.** The reward consistency check (`python scripts/ch01_env_anatomy.py reward-check`) must pass.
+**D2.** The reward consistency check (`bash docker/dev.sh python scripts/ch01_env_anatomy.py reward-check`) must pass.
 
 **D3.** The file `results/ch01_random_metrics.json` containing random baseline metrics.
 
