@@ -287,4 +287,4 @@ This repository is an educational research platform. Code is provided as-is for 
 
 ---
 
-**A Final Remark.** This repository is not a collection of scripts to copy-paste. It is a laboratory for understanding goal-conditioned reinforcement learning from first principles. The measure of success is not whether you can train a policy—it is whether you understand *why* the policy learns, *when* it fails, and *how* to diagnose the failure. Approach it with rigor.
+**A Final Remark.** This repository attempts to be more than a collection of scripts. It aspires to help readers understand goal-conditioned reinforcement learning from first principles—not just *how* to train a policy, but *why* policies learn and *when* they fail. Whether it succeeds is for the reader to judge. Corrections, criticisms, and improvements are welcome.

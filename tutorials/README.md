@@ -106,11 +106,11 @@ Subsequent chapters—on PPO baselines, SAC, HER, robustness, and beyond—follo
 
 ## On the Voice of These Tutorials
 
-These tutorials adopt a voice that is formal, precise, and demanding. It does not apologize for complexity; it explains complexity. It does not offer shortcuts; it offers understanding.
+These tutorials strive for precision and clarity. Where the material is complex, we try to explain the complexity rather than hide it. Where shortcuts exist, we try to show the full path first so the reader understands what the shortcut elides.
 
-This is a deliberate choice. Reinforcement learning for robotic manipulation is a difficult subject that rewards rigor and punishes sloppiness. A tutorial that pretends otherwise does the reader a disservice.
+This approach reflects a belief that reinforcement learning for robotic manipulation is genuinely difficult, and that readers deserve to be told when something is hard rather than left to wonder why they are struggling. The formality is not a barrier; it is an attempt at respect—for the subject and for the reader's time.
 
-The reader who finds this approach congenial will thrive. The reader who finds it off-putting may find more accessible introductions elsewhere. These tutorials make no apology for their standard.
+These tutorials are imperfect. They contain errors, unclear passages, and explanations that may not work for every learner. Corrections, questions, and suggestions are welcome. The goal is understanding, and if these materials fail to produce it, the fault lies with the materials, not the reader.
 
 ---
 
