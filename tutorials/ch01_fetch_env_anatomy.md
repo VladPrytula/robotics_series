@@ -75,7 +75,7 @@ In simulation, we collect a million timesteps in minutes. Policies trained in si
 
 </div>
 
-**Real Robot Specifications** (from [Fetch Robotics documentation](https://fetchrobotics.borealtech.com/robotics-platforms/fetch-mobile-manipulator/?lang=en)):
+**Real Robot Specifications** (from [Wevolver](https://www.wevolver.com/specs/fetch.mobile.manipulator) and [Robots Guide](https://robotsguide.com/robots/fetch/)):
 
 | Component | Specification |
 |-----------|---------------|
