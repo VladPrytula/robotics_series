@@ -1,7 +1,5 @@
 # Chapter 1: The Anatomy of Goal-Conditioned Fetch Environments
 
-[Home](../index.md) · Prev: [Chapter 0](ch00_containerized_dgx_proof_of_life.md) · [Tutorials index](index.md)
-
 ## Abstract
 
 This chapter develops a precise understanding of what a reinforcement learning agent "perceives" when interacting with a Gymnasium-Robotics Fetch environment. We formalize the observation space, action space, and reward function--not as implementation details to be glossed over, but as mathematical structures whose properties determine what algorithms can and cannot accomplish.
@@ -72,12 +70,12 @@ In simulation, we collect a million timesteps in minutes. Policies trained in si
 
 | Real Fetch Robot | Simulated FetchReach |
 |:----------------:|:--------------------:|
-| ![Fetch Robot](https://robots.ieee.org/robots/fetch/Photos/SD/fetch-photo1-full.jpg) | ![FetchReach](https://robotics.farama.org/_images/reach.gif) |
-| *Source: [IEEE Robots](https://robots.ieee.org/robots/fetch/)* | *Source: [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/)* |
+| ![Fetch Robot](https://cdn.sanity.io/images/7p2whiua/production/f3dbbb6c9d9cf3ca435e531a7dba9750170f6ee3-2048x1536.jpg?w=400) | ![FetchReach](https://robotics.farama.org/_images/reach.gif) |
+| *Source: [Robots Guide](https://robotsguide.com/robots/fetch/)* | *Source: [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/)* |
 
 </div>
 
-**Real Robot Specifications** (from [Fetch Robotics documentation](https://fetchrobotics.borealtech.com/robotics-platforms/fetch-mobile-manipulator/?lang=en)):
+**Real Robot Specifications** (from [Wevolver](https://www.wevolver.com/specs/fetch.mobile.manipulator) and [Robots Guide](https://robotsguide.com/robots/fetch/)):
 
 | Component | Specification |
 |-----------|---------------|
@@ -143,15 +141,40 @@ Each task has two reward variants:
 
 ### 0.5 Why Environment Anatomy Matters
 
-The Fetch environments are not arbitrary. They implement a specific interface designed for goal-conditioned learning:
+The Fetch environments are not arbitrary. They implement a specific interface designed for **goal-conditioned learning**. Understanding this interface is essential because it enables a technique called **Hindsight Experience Replay (HER)** that we will use in Chapter 4.
 
-1. **Observations are dictionaries**, not flat arrays. The keys `observation`, `achieved_goal`, and `desired_goal` have precise meanings that algorithms like HER depend on.
+Here is the key insight, explained simply:
 
-2. **Rewards can be recomputed** for any goal via `env.unwrapped.compute_reward()`. This is the API that enables goal relabeling.
+**The Problem with Sparse Rewards.**
+Imagine you tell the robot "reach position (0.5, 0.3, 0.2)" but it ends up at (0.6, 0.4, 0.3). With sparse rewards, this trajectory gets reward = -1 at every step (failure). The robot learns nothing useful--it just knows it failed.
 
-3. **Success is defined geometrically**: the achieved goal must be within 5cm of the desired goal.
+**The HER Solution.**
+What if we could say: "You failed to reach (0.5, 0.3, 0.2), but you successfully demonstrated how to reach (0.6, 0.4, 0.3)!" We relabel the trajectory with the goal the robot *actually* achieved, recompute the rewards (now it's a success!), and learn from that.
 
-If you treat the environment as a black box--feeding observations to a network and hoping it learns--you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can debug intelligently when things go wrong.
+**Why the Interface Matters.**
+For this relabeling trick to work, the environment must provide three things:
+
+1. **Separate goal information in observations.**
+   The environment returns a dictionary with three keys:
+   - `observation`: Robot state (joint positions, velocities)
+   - `desired_goal`: Where we wanted to go (the target)
+   - `achieved_goal`: Where we actually are (current position)
+
+   Without this separation, we couldn't know what goal was "achieved" by a trajectory.
+
+2. **A `compute_reward()` function that accepts any goal.**
+   ```python
+   reward = env.unwrapped.compute_reward(achieved_goal, any_goal, info)
+   ```
+   This lets us ask "what would the reward have been if the goal were X?" without re-running the simulation. This is how we recompute rewards after relabeling.
+
+3. **A geometric success threshold.**
+   Success means `distance(achieved_goal, desired_goal) < 0.05` (5 centimeters). This concrete definition lets us determine success for any goal we choose to relabel with.
+
+**Bottom Line.**
+These three interface features--dictionary observations, recomputable rewards, geometric success--are not arbitrary design choices. They are the mathematical substrate that makes HER possible. If any feature were missing, HER would not work.
+
+If you treat the environment as a black box--feeding observations to a network and hoping it learns--you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can use HER correctly in Chapter 4 and debug intelligently when things go wrong.
 
 ### 0.6 What This Chapter Produces
 
@@ -526,7 +549,3 @@ All three requirements are verified by `scripts/ch01_env_anatomy.py reward-check
 ---
 
 **Next.** With the environment anatomy understood, proceed to Chapter 2 to establish PPO baselines on dense Reach.
-
----
-
-[Home](../index.md) · Prev: [Chapter 0](ch00_containerized_dgx_proof_of_life.md) · [Tutorials index](index.md)

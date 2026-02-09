@@ -1,7 +1,5 @@
 # Chapter 0: A Containerized "Proof of Life" on Spark DGX
 
-[Home](../index.md) · [Tutorials index](index.md) · Next: [Chapter 1](ch01_fetch_env_anatomy.md)
-
 ## Abstract
 
 This chapter establishes the foundational experimental environment upon which all subsequent work depends. We address a problem that is logically prior to reinforcement learning itself: the problem of *reproducible computation*. Our deliverables are not trained policies but verified infrastructure--a container that runs, a renderer that produces images, a training loop that completes without error.
@@ -352,7 +350,3 @@ These variables are set automatically by `docker/dev.sh`. If you launch containe
 ---
 
 **Next.** With the experimental environment verified, proceed to Chapter 1 to examine the structure of goal-conditioned Fetch environments.
-
----
-
-[Home](../index.md) · [Tutorials index](index.md) · Next: [Chapter 1](ch01_fetch_env_anatomy.md)

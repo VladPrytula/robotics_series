@@ -8,7 +8,7 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 |---------|-------|-----------------|
 | [Chapter 0](ch00_containerized_dgx_proof_of_life.md) | Proof of Life | Working Docker environment, `ppo_smoke.zip` |
 | [Chapter 1](ch01_fetch_env_anatomy.md) | Environment Anatomy | `reward-check` passes, baseline metrics |
-| Chapter 2 | PPO Baseline | *Coming soon* |
+| [Chapter 2](ch02_ppo_dense_reach.md) | PPO Baseline | >90% success on dense Reach, pipeline validated |
 | Chapter 3 | SAC on Dense | *Coming soon* |
 | Chapter 4 | HER for Sparse | *Coming soon* |
 
@@ -61,6 +61,25 @@ Chapters 5-10: Advanced topics
 - What is the observation dimension for FetchReach? *(10)*
 - What does action index 3 control? *(gripper)*
 - Why can HER relabel goals? *(`compute_reward` accepts arbitrary goals)*
+
+---
+
+### [Chapter 2: PPO on Dense Reach](ch02_ppo_dense_reach.md)
+
+**Goal:** Validate the training pipeline with the simplest method that should work.
+
+**You will:**
+
+- Train PPO on FetchReachDense-v4 (continuous reward signal)
+- Understand PPO's clipped surrogate objective and why it exists
+- Learn to read TensorBoard diagnostics for training health
+- Establish baseline metrics for comparison
+
+**Done when:** Success rate > 90% and you can answer:
+
+- Why does PPO clip probability ratios instead of parameter updates?
+- What does `clip_fraction = 0.15` mean in TensorBoard?
+- Why use dense rewards for pipeline validation?
 
 ---
 
