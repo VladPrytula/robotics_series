@@ -285,7 +285,85 @@ The tutorials in `tutorials/` provide theoretical context for each chapter. The 
 
 ---
 
-## §13. References
+## §13. Scope and Limitations
+
+This curriculum focuses on **Hindsight Experience Replay (HER)** as the primary method for sparse-reward goal-conditioned learning. This is a deliberate choice with trade-offs worth understanding.
+
+### Why HER?
+
+**Pedagogical clarity.** HER has a single, elegant insight: failed trajectories contain information about achievable goals. This insight is easy to state, non-trivial to appreciate, and directly addresses *why* sparse rewards are hard. A student who understands HER understands goal relabeling in general.
+
+**Infrastructure maturity.** Stable Baselines 3 provides well-tested HER integration with SAC and TD3. This lets us focus on understanding rather than debugging custom implementations.
+
+**Empirical relevance.** HER remains a strong baseline for goal-conditioned manipulation. Many subsequent methods build on or compare against it. Understanding HER provides a foundation for understanding its extensions.
+
+**Scope constraints.** A 10-week curriculum cannot cover everything. Depth on one method teaches more than superficial exposure to many.
+
+### What This Curriculum Does Not Cover
+
+**Intrinsic motivation and curiosity-driven exploration.**
+Methods like Random Network Distillation (RND), Intrinsic Curiosity Module (ICM), and count-based exploration address sparse rewards through novelty bonuses rather than goal relabeling. These are complementary approaches with different assumptions.
+- *Reference:* [Curiosity-driven Exploration](https://arxiv.org/abs/1705.05363) (Pathak et al., 2017)
+
+**Automatic curriculum and goal generation.**
+Rather than relabeling goals post-hoc, these methods generate goals of appropriate difficulty during training. Asymmetric self-play and goal GAN approaches fall here.
+- *Reference:* [Automatic Goal Generation](https://arxiv.org/abs/1705.06366) (Florensa et al., 2018)
+
+**Learning from demonstrations.**
+Behavioral cloning, GAIL, and demo-augmented RL can bootstrap learning, especially when exploration is dangerous or expensive. These methods change the problem setup (they assume access to demonstrations).
+- *Reference:* [Overcoming Exploration with Demos](https://arxiv.org/abs/1709.10089) (Nair et al., 2018)
+
+**Model-based reinforcement learning.**
+Learning a world model enables planning and imagination-based training. This can improve sample efficiency but introduces model error as a new failure mode.
+- *Reference:* [World Models](https://arxiv.org/abs/1803.10122) (Ha & Schmidhuber, 2018)
+
+**Hierarchical RL and skill primitives.**
+Decomposing long-horizon tasks into reusable skills addresses a limitation of flat policies. HER struggles with very long horizons; hierarchy is one response.
+- *Reference:* [Data-Efficient Hierarchical RL](https://arxiv.org/abs/1805.08296) (Nachum et al., 2018)
+
+**Vision-based control.**
+This curriculum uses proprioceptive state. Pixel observations introduce representation learning challenges that compound the RL difficulties.
+- *Reference:* [SAC-AE](https://arxiv.org/abs/1910.01741) (Yarats et al., 2019)
+
+### When HER Struggles
+
+HER is not universally applicable. It assumes:
+
+1. **Explicit goal representation.** Goals must be represented in observation space with a computable `achieved_goal` function. Tasks without clear goal structure (e.g., "move gracefully") don't fit.
+
+2. **Off-policy learning.** HER requires replay buffers; it cannot be combined with on-policy methods like PPO.
+
+3. **Moderate horizon length.** For very long episodes, the relabeled goals may be too easy (nearby states) or the credit assignment too diffuse.
+
+4. **Goal-independent dynamics.** The transition function should not depend on the goal. (This holds for Fetch tasks but not universally.)
+
+### Next Steps After This Curriculum
+
+For readers who complete the 10-week curriculum and wish to continue:
+
+**Immediate extensions (within the same framework):**
+- TD3+HER comparison with SAC+HER
+- Goal selection strategies beyond "future" (episode, final, random)
+- Prioritized experience replay combined with HER
+
+**Complementary methods (new problem formulations):**
+- Add demonstrations: collect 10-20 expert trajectories and use demo-augmented HER
+- Add curiosity: combine RND bonus with HER for exploration in larger goal spaces
+- Add hierarchy: implement a two-level policy where the high level sets subgoals
+
+**New domains (test generalization of understanding):**
+- Shadow Hand manipulation (higher-dimensional, contact-rich)
+- Navigation tasks (different goal structure, longer horizons)
+- Real robot transfer (sim-to-real gap, safety constraints)
+
+**Research directions (open problems):**
+- Automatic curriculum generation for goal-conditioned tasks
+- Sample-efficient goal representation learning
+- Combining model-based planning with goal-conditioned policies
+
+---
+
+## §14. References
 
 **Foundational Papers.**
 - [Hindsight Experience Replay](https://arxiv.org/abs/1707.01495) (Andrychowicz et al., 2017)
@@ -302,7 +380,7 @@ The tutorials in `tutorials/` provide theoretical context for each chapter. The 
 
 ---
 
-## §14. License
+## §15. License
 
 This repository is an educational research platform. Code is provided as-is for academic use. If you build upon this work, cite the foundational papers and acknowledge the pedagogical structure.
 
