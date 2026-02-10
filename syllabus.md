@@ -20,18 +20,18 @@ By Week 10, you will have trained a robotic arm to **pick up objects and place t
 | 6-7 | Policies as controllers | Action smoothness, robustness, noise injection |
 | 8-10 | Capstone | PickAndPlace with stress testing |
 
-**This is not a tutorial you read. It is a curriculum you execute.** Every week has commands to run and "done when" criteria to verify. You cannot fool yourself into thinking you understand something when the success rate is 12%.
+Each week includes runnable commands and "done when" criteria -- concrete checkpoints that help verify progress. We find this structure useful because RL can be frustrating: code runs without errors but the agent learns nothing. Having a target success rate makes it clear when something is working.
 
-## Why This Curriculum Exists
+## Our Approach
 
-Most RL tutorials teach you to call library functions. This one teaches you to **derive algorithms from problem constraints**:
+We tried to understand *why* certain algorithms work for this problem, not just *how* to use them. The reasoning goes something like:
 
-- Continuous actions → actor-critic (not DQN)
-- Sparse rewards → off-policy with replay (not PPO)
-- Goal-conditioned sparse → HER (failed attempts become training data)
-- Large goal space → entropy bonus (SAC explores naturally)
+- Continuous actions → actor-critic methods (value-based methods like DQN struggle here)
+- Sparse rewards → off-policy learning with replay buffers (on-policy methods discard too much data)
+- Goal-conditioned sparse → HER (failed attempts contain useful information about *other* goals)
+- Large goal space → entropy bonus (encourages exploration without manual schedules)
 
-The method is **SAC + HER**. This is not a recipe chosen from a menu; it is a consequence of the problem structure.
+This leads to **SAC + HER** as the core method. We're not claiming it's the only way -- but we wanted to show how problem structure can guide algorithm choice, rather than just picking something that "usually works."
 
 ## Who This Is For
 
