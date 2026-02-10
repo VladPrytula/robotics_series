@@ -260,6 +260,73 @@ python scripts/ch00_proof_of_life.py all
 
 This is the recommended way to verify a fresh installation.
 
+### 3.2 Mac M4 (Apple Silicon) Support
+
+The platform also supports development on Apple Silicon Macs (M4, M3, M2, M1). The same `docker/dev.sh` command works on both platforms--the script auto-detects the host and configures appropriately.
+
+#### Platform Differences
+
+| Aspect | DGX / NVIDIA | Mac M4 (Apple Silicon) |
+|--------|--------------|------------------------|
+| **Architecture** | x86_64 | ARM64 |
+| **Docker image** | `robotics-rl:latest` | `robotics-rl:mac` |
+| **Dockerfile** | `docker/Dockerfile` | `docker/Dockerfile.mac` |
+| **Base image** | `nvcr.io/nvidia/pytorch:25.12-py3` | `python:3.11-slim` |
+| **Compute device** | CUDA (GPU) | CPU only |
+| **Rendering backend** | EGL (hardware) | OSMesa (software) |
+| **Typical throughput** | ~600 fps | ~60-100 fps |
+
+#### Why CPU-Only on Mac?
+
+Apple's Metal Performance Shaders (MPS) backend for PyTorch exists but has edge cases with certain operations. For maximum compatibility and to avoid subtle bugs, we use CPU on Mac. This is perfectly adequate for development and debugging--the physics simulation in MuJoCo is CPU-bound anyway.
+
+**Remark (On Performance).** *The 6-10x slower throughput on Mac is expected. The bottleneck is MuJoCo physics simulation, which runs on CPU regardless of platform. On DGX, the GPU handles neural network operations in microseconds, so the CPU is the bottleneck. On Mac, both physics and neural networks run on CPU, compounding the slowdown. This is acceptable for development; use DGX for serious training runs.*
+
+#### Usage on Mac
+
+The commands are identical:
+
+```bash
+# Build image (auto-detects Mac, uses Dockerfile.mac)
+bash docker/build.sh
+
+# Run proof of life (auto-detects Mac, uses robotics-rl:mac)
+bash docker/dev.sh python scripts/ch00_proof_of_life.py all
+```
+
+The platform detection uses `uname -s` (Darwin for Mac) and `uname -m` (arm64 for Apple Silicon).
+
+#### Expected Output Differences
+
+When running on Mac, you will see:
+
+- Device reported as `cpu` instead of `cuda`
+- Rendering backend as `osmesa` instead of `egl`
+- Slower training throughput (~100 fps instead of ~600 fps)
+- Slightly different timing for operations
+
+All tests should pass, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX--the learned weights are platform-independent.
+
+#### Known Limitations
+
+1. **Performance**: CPU training is ~10-20x slower than CUDA. Mac is suitable for development, debugging, and small experiments. For serious training (>100k timesteps), use DGX.
+
+2. **Rendering quality**: OSMesa (software rendering) produces identical images to EGL but is slower. This matters only for video generation, not for training.
+
+3. **Docker Desktop memory**: You may need to increase Docker Desktop's memory allocation (Settings -> Resources -> Memory) to 8GB+ for large batch sizes or long training runs.
+
+4. **No MPS support**: We intentionally avoid Metal Performance Shaders despite its availability. MPS has edge cases with certain PyTorch operations that can cause silent numerical issues. CPU is slower but more reliable.
+
+#### Docker Desktop Configuration for Mac
+
+If you encounter out-of-memory errors:
+
+1. Open Docker Desktop
+2. Go to Settings (gear icon)
+3. Select "Resources"
+4. Increase "Memory" to at least 8 GB
+5. Click "Apply & restart"
+
 ---
 
 ## Part IV: Analysis and Verification

@@ -1,0 +1,40 @@
+# Apple Silicon (ARM64) Dockerfile for Mac M4 development
+# Uses CPU-only PyTorch and OSMesa for headless rendering.
+# For serious training, use DGX with the NVIDIA Dockerfile.
+
+FROM python:3.11-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# System deps:
+# - OSMesa + GLFW for MuJoCo headless rendering (no EGL on Mac)
+# - ffmpeg for video writing
+# - git for version control operations
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    git \
+    libgl1 \
+    libglfw3 \
+    libosmesa6 \
+    libosmesa6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# OSMesa for headless rendering (EGL is NVIDIA-specific)
+ENV MUJOCO_GL=osmesa \
+    PYOPENGL_PLATFORM=osmesa \
+    PYTHONUNBUFFERED=1
+
+# Install PyTorch (ARM64 native) and RL dependencies
+# torch is installed first to get the correct ARM64 wheel
+RUN python -m pip install --no-cache-dir -U pip wheel \
+  && python -m pip install --no-cache-dir torch \
+  && python -m pip install --no-cache-dir \
+    gymnasium \
+    gymnasium-robotics \
+    mujoco \
+    stable-baselines3 \
+    tensorboard \
+    imageio \
+    wandb
