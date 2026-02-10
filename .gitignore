@@ -16,9 +16,10 @@ __pycache__/
 # Generated artifacts
 results/
 checkpoints/
-videos/
+videos/*
 !videos/*_demo*.gif
 !videos/*_demo*.mp4
+!videos/*_exploration*.gif
 runs/
 
 # Keep demo videos in docs
