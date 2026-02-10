@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/syllabus/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/reference/cli/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/tutorials/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/tutorials/ch00_containerized_dgx_proof_of_life/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/tutorials/ch01_fetch_env_anatomy/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/tutorials/ch02_ppo_dense_reach/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+    <url>
+         <loc>https://vladprytula.github.io/robotics_series/tutorials/ch03_sac_dense_reach/</loc>
+         <lastmod>2026-02-10</lastmod>
+    </url>
+</urlset>

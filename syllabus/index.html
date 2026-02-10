@@ -1,0 +1,1840 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A Docker-first RL research platform for Fetch manipulation tasks">
+      
+      
+      
+        <link rel="canonical" href="https://vladprytula.github.io/robotics_series/syllabus/">
+      
+      
+        <link rel="prev" href="../tutorials/ch01_fetch_env_anatomy/">
+      
+      
+        <link rel="next" href="../reference/cli/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Syllabus - Goal-Conditioned Robotic Manipulation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#spark-dgx-robotics-rl-syllabus-executable-10-weeks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Goal-Conditioned Robotic Manipulation" class="md-header__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goal-Conditioned Robotic Manipulation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Syllabus
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../tutorials/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Syllabus
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Goal-Conditioned Robotic Manipulation" class="md-nav__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Goal-Conditioned Robotic Manipulation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../tutorials/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/ch00_containerized_dgx_proof_of_life/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 0: Proof of Life
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/ch01_fetch_env_anatomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 1: Environment Anatomy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Syllabus
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Syllabus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-references-keep-open" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core references (keep open)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tooling-stack-standardize-early" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tooling stack (standardize early)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-negotiables-fetch-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-negotiables (Fetch "shape")
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-sac-her-deriving-the-method-from-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SAC + HER? (Deriving the method from the problem)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproducibility-target-realistic-on-dgx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility target (realistic on DGX)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spark-dgx-checklist-do-this-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spark DGX checklist (do this once)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Spark DGX checklist (do this once)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keep-runs-alive-tmux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keep runs alive (tmux)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quickstart-3060-min-dgx-proof-of-life" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quickstart (30–60 min): DGX proof-of-life
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quickstart (30–60 min): DGX proof-of-life">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#0-preflight-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0) Preflight (host)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#1-one-command-proof-of-life-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1) One-command proof-of-life (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-optional-start-an-interactive-docker-dev-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2) (Optional) Start an interactive Docker dev shell
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-fallback-host-venv-only-if-docker-isnt-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3) Fallback: host venv (only if Docker isn’t possible)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-contract-set-up-in-week-0-dont-churn-it-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project contract (set up in Week 0; don’t churn it later)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Project contract (set up in Week 0; don’t churn it later)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#folder-skeleton-minimum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Folder skeleton (minimum)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stable-cli-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stable CLI contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-you-always-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata you always log
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metrics-you-track-from-week-1-onward-dont-change-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics you track from Week 1 onward (don’t change later)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#week-by-week-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week-by-week plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Week-by-week plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#week-0-dgx-setup-workflow-you-can-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 0 — DGX setup + workflow you can trust
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-1-goal-conditioned-rl-literacy-dict-obs-reward-success" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 1 — Goal-conditioned RL literacy (dict obs, reward, success)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-2-ppo-on-dense-reach-pipeline-truth-serum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 2 — PPO on dense Reach (pipeline “truth serum”)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-3-sac-on-dense-reach-replay-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 3 — SAC on dense Reach + replay diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-4-sparse-reach-push-introduce-her-where-it-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 4 — Sparse Reach + Push: introduce HER where it matters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-5-pickandplace-dense-debug-sparseher-curriculum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 5 — PickAndPlace: dense debug → sparse+HER → curriculum
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-6-action-interface-engineering-policies-as-controllers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 6 — Action-interface engineering (“policies as controllers”)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-7-robustness-noise-randomization-brittleness-curves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 7 — Robustness: noise, randomization, brittleness curves
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-8-second-suite-adapter-robosuite-or-meta-world" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 8 — Second suite adapter (robosuite OR Meta-World)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-9-engineering-grade-rl-sweeps-ablations-seed-discipline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 9 — Engineering-grade RL: sweeps, ablations, seed discipline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-10-capstone-sparse-pickandplace-robustness-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 10 — Capstone: sparse PickAndPlace + robustness targets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-references-keep-open" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core references (keep open)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tooling-stack-standardize-early" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tooling stack (standardize early)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-negotiables-fetch-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-negotiables (Fetch "shape")
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-sac-her-deriving-the-method-from-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SAC + HER? (Deriving the method from the problem)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproducibility-target-realistic-on-dgx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility target (realistic on DGX)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spark-dgx-checklist-do-this-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spark DGX checklist (do this once)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Spark DGX checklist (do this once)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keep-runs-alive-tmux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keep runs alive (tmux)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quickstart-3060-min-dgx-proof-of-life" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quickstart (30–60 min): DGX proof-of-life
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quickstart (30–60 min): DGX proof-of-life">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#0-preflight-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0) Preflight (host)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#1-one-command-proof-of-life-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1) One-command proof-of-life (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-optional-start-an-interactive-docker-dev-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2) (Optional) Start an interactive Docker dev shell
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-fallback-host-venv-only-if-docker-isnt-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3) Fallback: host venv (only if Docker isn’t possible)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-contract-set-up-in-week-0-dont-churn-it-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project contract (set up in Week 0; don’t churn it later)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Project contract (set up in Week 0; don’t churn it later)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#folder-skeleton-minimum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Folder skeleton (minimum)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stable-cli-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stable CLI contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-you-always-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata you always log
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metrics-you-track-from-week-1-onward-dont-change-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics you track from Week 1 onward (don’t change later)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#week-by-week-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week-by-week plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Week-by-week plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#week-0-dgx-setup-workflow-you-can-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 0 — DGX setup + workflow you can trust
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-1-goal-conditioned-rl-literacy-dict-obs-reward-success" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 1 — Goal-conditioned RL literacy (dict obs, reward, success)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-2-ppo-on-dense-reach-pipeline-truth-serum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 2 — PPO on dense Reach (pipeline “truth serum”)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-3-sac-on-dense-reach-replay-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 3 — SAC on dense Reach + replay diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-4-sparse-reach-push-introduce-her-where-it-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 4 — Sparse Reach + Push: introduce HER where it matters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-5-pickandplace-dense-debug-sparseher-curriculum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 5 — PickAndPlace: dense debug → sparse+HER → curriculum
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-6-action-interface-engineering-policies-as-controllers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 6 — Action-interface engineering (“policies as controllers”)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-7-robustness-noise-randomization-brittleness-curves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 7 — Robustness: noise, randomization, brittleness curves
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-8-second-suite-adapter-robosuite-or-meta-world" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 8 — Second suite adapter (robosuite OR Meta-World)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-9-engineering-grade-rl-sweeps-ablations-seed-discipline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 9 — Engineering-grade RL: sweeps, ablations, seed discipline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#week-10-capstone-sparse-pickandplace-robustness-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Week 10 — Capstone: sparse PickAndPlace + robustness targets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="spark-dgx-robotics-rl-syllabus-executable-10-weeks">Spark DGX Robotics RL Syllabus (Executable, 10 weeks)</h1>
+<p>This is a step-by-step plan you can execute on <strong>Spark DGX</strong> to learn goal-conditioned manipulation RL and build a reproducible training/evaluation workflow around Gymnasium-Robotics Fetch tasks.</p>
+<p>If you prefer chapter-style “textbook” notes, start with:
+- <code>tutorials/ch00_containerized_dgx_proof_of_life.md</code>
+- <code>tutorials/ch01_fetch_env_anatomy.md</code></p>
+<h2 id="core-references-keep-open">Core references (keep open)</h2>
+<ul>
+<li>Sutton &amp; Barto (concepts)</li>
+<li>Spinning Up PPO/SAC (debugging + failure modes)</li>
+<li>Modern Robotics (kinematics intuition + baselines)</li>
+</ul>
+<h2 id="tooling-stack-standardize-early">Tooling stack (standardize early)</h2>
+<ul>
+<li>Gymnasium-Robotics Fetch suite (goal-conditioned dict observations + success metrics) (<a href="https://robotics.farama.org/envs/fetch/" title="Fetch - Gymnasium-Robotics">Fetch docs</a>)</li>
+<li>MuJoCo (maintained <code>mujoco</code> Python bindings; no <code>mujoco-py</code>) (<a href="https://mujoco.readthedocs.io/" title="MuJoCo documentation">MuJoCo</a>)</li>
+<li>Stable-Baselines3 (PPO/SAC/TD3 + <code>HerReplayBuffer</code> for sparse goals; HER is off-policy only) (<a href="https://stable-baselines3.readthedocs.io/en/master/modules/her.html" title="HER — Stable Baselines3">SB3 HER</a>)</li>
+<li>Tracking: W&amp;B or TensorBoard</li>
+</ul>
+<h2 id="non-negotiables-fetch-shape">Non-negotiables (Fetch "shape")</h2>
+<ul>
+<li><strong>Observations</strong> are dicts: <code>observation</code>, <code>desired_goal</code>, <code>achieved_goal</code>. This is what makes HER/relabeling natural. (<a href="https://robotics.farama.org/envs/fetch/" title="Fetch - Gymnasium-Robotics">Fetch docs</a>)</li>
+<li><strong>Actions</strong> are <strong>4D</strong>: small Cartesian deltas <code>dx, dy, dz</code> + gripper open/close. It is not torque control. (<a href="https://robotics.farama.org/envs/fetch/" title="Fetch - Gymnasium-Robotics">Fetch docs</a>)</li>
+</ul>
+<h2 id="why-sac-her-deriving-the-method-from-the-problem">Why SAC + HER? (Deriving the method from the problem)</h2>
+<p>The algorithm choice is not arbitrary. It follows from the problem constraints:</p>
+<p><strong>1. Continuous actions → Actor-Critic.</strong>
+The action space is <span class="arithmatex">\(\mathbb{R}^4\)</span>. Pure value-based methods (DQN) require <span class="arithmatex">\(\arg\max_a Q(s,a)\)</span>, which is intractable for continuous <span class="arithmatex">\(a\)</span> without expensive discretization. We need a policy network that outputs actions directly, plus a critic to reduce variance. This means actor-critic.</p>
+<p><strong>2. Sparse rewards → Off-Policy.</strong>
+In Gymnasium-Robotics, sparse step rewards are 0 when the success threshold is met and −1 otherwise (equivalently, a binary success indicator 1/0 up to a constant shift). Either way, informative signal is rare. On-policy methods (PPO) discard data after each update—wasteful when positive signal is scarce. Off-policy methods (SAC, TD3) store transitions in a replay buffer and reuse them. This is essential for sample efficiency with sparse rewards.</p>
+<p><strong>3. Goal-conditioned + sparse → HER.</strong>
+A trajectory that fails to reach goal <span class="arithmatex">\(g\)</span> still demonstrates how to reach whatever state <span class="arithmatex">\(s_T\)</span> it ended in. Hindsight Experience Replay relabels transitions: replace <span class="arithmatex">\(g\)</span> with the achieved goal <span class="arithmatex">\(g' = g_{\text{achieved}}(s_T)\)</span>, recompute rewards, and store both versions. Failed attempts become successful demonstrations for different goals. This manufactures dense signal from sparse feedback.</p>
+<p><strong>4. Large goal space → Maximum Entropy (SAC).</strong>
+HER needs diverse experience to relabel. SAC's entropy bonus encourages exploration without explicit schedules:
+$<span class="arithmatex">\(\pi^* = \arg\max_\pi \mathbb{E}\left[\sum_t \gamma^t (R_t + \alpha \mathcal{H}(\pi(\cdot|s_t)))\right]\)</span>$
+The temperature <span class="arithmatex">\(\alpha\)</span> (often auto-tuned) balances exploration and exploitation.</p>
+<p><strong>Summary:</strong>
+| Constraint | Requirement | Solution |
+|------------|-------------|----------|
+| Continuous actions | Direct policy output | Actor-critic |
+| Sparse rewards | Sample reuse | Off-policy (replay buffer) |
+| Goal-conditioned sparse | Learn from failures | HER |
+| Large goal space | Exploration | Entropy bonus (SAC) |</p>
+<p><strong>The method is SAC + HER.</strong> This is derived, not chosen from a menu.</p>
+<p><strong>Where does PPO fit?</strong> PPO is on-policy and cannot use HER. It works for dense rewards (where every step provides signal) and serves as a sanity-check baseline in Week 2. But for the core sparse-reward tasks, SAC + HER is required.</p>
+<h2 id="reproducibility-target-realistic-on-dgx">Reproducibility target (realistic on DGX)</h2>
+<p>You are not aiming for bitwise-identical curves. You are aiming for:
+1) same code + same seed =&gt; evaluation metrics within a tolerance on the same machine class; and
+2) across 3–5 seeds =&gt; mean±std is stable enough for ablations.</p>
+<h2 id="spark-dgx-checklist-do-this-once">Spark DGX checklist (do this once)</h2>
+<ul>
+<li>Prefer running everything in a GPU-enabled container (<code>docker run --gpus all</code>) so you don’t install/pin Python packages on the DGX host.</li>
+<li>If the host does not provide <code>python</code>, do not fight it: run all Python via <code>bash docker/dev.sh python ...</code>.</li>
+<li>Run long jobs in <code>tmux</code>/<code>screen</code> or your scheduler (avoid “SSH session died” losses).</li>
+<li>Prefer a fast filesystem for checkpoints/replay/results if available.</li>
+<li>Headless rendering: try <code>MUJOCO_GL=egl</code> first; fall back to <code>osmesa</code>/<code>xvfb-run</code> if EGL isn’t available.</li>
+</ul>
+<h3 id="keep-runs-alive-tmux">Keep runs alive (tmux)</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>tmux<span class="w"> </span>new<span class="w"> </span>-s<span class="w"> </span>rl
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># detach: Ctrl-b d</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># reattach:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>tmux<span class="w"> </span>attach<span class="w"> </span>-t<span class="w"> </span>rl
+</code></pre></div>
+<hr />
+<h2 id="quickstart-3060-min-dgx-proof-of-life">Quickstart (30–60 min): DGX proof-of-life</h2>
+<p>Goal: “Fetch env loads, can render headless, PPO can train for 50k steps”.</p>
+<h3 id="0-preflight-host">0) Preflight (host)</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>hostname
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>nvidia-smi<span class="w"> </span><span class="p">|</span><span class="w"> </span>head
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>docker<span class="w"> </span>--version
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Minimal GPU-in-container check (pick any CUDA image you have access to):</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--gpus<span class="w"> </span>all<span class="w"> </span>nvcr.io/nvidia/pytorch:25.12-py3<span class="w"> </span>nvidia-smi
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Another local option (CUDA base image):</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--gpus<span class="w"> </span>all<span class="w"> </span>nvcr.io/nvidia/cuda:13.0.1-devel-ubuntu24.04<span class="w"> </span>nvidia-smi
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Docker Hub example (substitute a tag you have/pulled):</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--gpus<span class="w"> </span>all<span class="w"> </span>nvidia/cuda:&lt;tag&gt;<span class="w"> </span>nvidia-smi
+</code></pre></div>
+<h3 id="1-one-command-proof-of-life-recommended">1) One-command proof-of-life (recommended)</h3>
+<p>This runs everything from the host (no interactive shell required):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>all
+</code></pre></div></p>
+<p><strong>Done when</strong>: <code>smoke_frame.png</code> exists and <code>ppo_smoke.zip</code> is created without crashes.</p>
+<h3 id="2-optional-start-an-interactive-docker-dev-shell">2) (Optional) Start an interactive Docker dev shell</h3>
+<p>Recommended (Python + CUDA already included):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>--gpus<span class="w"> </span>all<span class="w"> </span>--ipc<span class="o">=</span>host<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-e<span class="w"> </span><span class="nv">MUJOCO_GL</span><span class="o">=</span>egl<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>-e<span class="w"> </span><span class="nv">PYOPENGL_PLATFORM</span><span class="o">=</span>egl<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/workspace&quot;</span><span class="w"> </span>-w<span class="w"> </span>/workspace<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>nvcr.io/nvidia/pytorch:25.12-py3<span class="w"> </span>bash
+</code></pre></div>
+If this creates root-owned files in your repo, use the wrapper below (runs as your user).</p>
+<p>Convenience wrapper (same thing, but shorter to type):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>bash<span class="w"> </span>docker/run.sh
+</code></pre></div></p>
+<p>Auto-setup wrapper (recommended): creates <code>./.venv</code>, installs <code>requirements.txt</code>, and activates the venv.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>bash<span class="w"> </span>docker/dev.sh
+</code></pre></div>
+Edit <code>requirements.txt</code> to add/remove Python deps; <code>docker/dev.sh</code> will reinstall when it changes.
+If <code>robotics-rl:latest</code> is not present, <code>docker/dev.sh</code> builds it once (MuJoCo EGL/OSMesa system deps).</p>
+<p>Optional: build a pinned “project image” (useful once things work and you want reproducibility):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>bash<span class="w"> </span>docker/build.sh<span class="w"> </span>robotics-rl:latest
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nv">IMAGE</span><span class="o">=</span>robotics-rl:latest<span class="w"> </span>bash<span class="w"> </span>docker/run.sh
+</code></pre></div></p>
+<h3 id="3-fallback-host-venv-only-if-docker-isnt-possible">3) Fallback: host venv (only if Docker isn’t possible)</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>pip<span class="w"> </span>wheel
+</code></pre></div>
+<p>Install packages (pin exact versions after this works)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;gymnasium&gt;=0.29&quot;</span><span class="w"> </span><span class="s2">&quot;gymnasium-robotics&gt;=1.2&quot;</span><span class="w"> </span><span class="s2">&quot;mujoco&gt;=3&quot;</span><span class="w"> </span><span class="s2">&quot;stable-baselines3&gt;=2.2&quot;</span><span class="w"> </span>tensorboard<span class="w"> </span>imageio
+</code></pre></div>
+Optional:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>wandb
+</code></pre></div></p>
+<hr />
+<h2 id="project-contract-set-up-in-week-0-dont-churn-it-later">Project contract (set up in Week 0; don’t churn it later)</h2>
+<h3 id="folder-skeleton-minimum">Folder skeleton (minimum)</h3>
+<p>Create these once and keep the rest of your work inside this structure:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>configs<span class="w"> </span>envs<span class="w"> </span>wrappers<span class="w"> </span>callbacks<span class="w"> </span>scripts<span class="w"> </span>analysis<span class="w"> </span>results<span class="w"> </span>checkpoints<span class="w"> </span>videos
+</code></pre></div></p>
+<h3 id="stable-cli-contract">Stable CLI contract</h3>
+<p>Your future self depends on this being stable.</p>
+<p><code>train.py</code>
+- <code>--algo {ppo,sac,td3}</code>
+- <code>--env {FetchReachDense-v4, FetchReach-v4, FetchPush-v4, FetchPickAndPlace-v4, ...}</code>
+- <code>--seed</code>
+- <code>--device {auto,cpu,cuda}</code>
+- <code>--n-envs</code>
+- <code>--total-steps</code>
+- <code>--track {tb,none}</code></p>
+<p><code>eval.py</code>
+- <code>--ckpt path</code>
+- <code>--env ...</code>
+- <code>--n-episodes</code>
+- <code>--seeds list_or_range</code> (or a base <code>--seed</code>)
+- <code>--deterministic</code> (flag)
+- <code>--json-out results/metrics.json</code>
+- <code>--video</code> (flag)</p>
+<h3 id="metadata-you-always-log">Metadata you always log</h3>
+<p>Commit hash, Python/pip lock, <code>mujoco</code>/<code>gymnasium-robotics</code>/SB3 versions, env id, seed(s), device, <code>n_envs</code>, wallclock, steps/sec, and evaluation protocol.
+This repo’s default mechanism:
+- <code>train.py</code> writes <code>&lt;checkpoint&gt;.meta.json</code> next to the <code>.zip</code>.
+- <code>eval.py</code> writes a JSON report that includes versions + per-episode metrics.
+- <code>scripts/print_versions.py</code> writes an environment snapshot for the machine/container.</p>
+<h3 id="metrics-you-track-from-week-1-onward-dont-change-later">Metrics you track from Week 1 onward (don’t change later)</h3>
+<p>Per-episode:
+- success (env-provided if present, plus your own goal-distance threshold)
+- final goal distance
+- return
+- episode length
+- time-to-success (first timestep that meets success)
+- action smoothness proxy <code>Σ ||a_t - a_{t-1}||^2</code>
+- max <code>|a|</code></p>
+<p>Aggregate:
+- success-rate mean±CI (binomial CI is fine)
+- return mean±std
+- robustness curves (success vs noise/randomization)</p>
+<hr />
+<h2 id="week-by-week-plan">Week-by-week plan</h2>
+<p>Each week has: (1) goal, (2) steps you can run, (3) “done when”.</p>
+<h3 id="week-0-dgx-setup-workflow-you-can-trust">Week 0 — DGX setup + workflow you can trust</h3>
+<p>Goal: end-to-end train/eval works; headless rendering is solved; you can reproduce an eval JSON within tolerance.</p>
+<p>Steps
+- [ ] Snapshot versions (inside container):
+  - <code>bash docker/dev.sh python scripts/print_versions.py --json-out results/versions.json</code>
+- [ ] Validate end-to-end (GPU + Fetch + render + PPO smoke):
+  - <code>bash docker/dev.sh python scripts/ch00_proof_of_life.py all</code>
+- [ ] Repro sanity (train twice, eval both, compare within tolerance):
+  - <code>bash docker/dev.sh python scripts/check_repro.py --algo ppo --env FetchReachDense-v4 --total-steps 50000 --n-eval-episodes 50</code>
+- [ ] Decide how you’ll run on Spark DGX (one of):
+  - <code>tmux</code>-based workflow (simple, interactive)
+  - scheduler job script (better for long runs; adapt to your cluster)</p>
+<p>Done when
+- Same commit runs on Spark DGX reliably.
+- Save/load works and <code>eval.py</code> emits a stable JSON schema.</p>
+<h3 id="week-1-goal-conditioned-rl-literacy-dict-obs-reward-success">Week 1 — Goal-conditioned RL literacy (dict obs, reward, success)</h3>
+<p>Goal: you understand exactly what SB3 “sees” and how the environment computes reward/success.</p>
+<p>Steps
+- [ ] Describe obs/action schema (JSON artifact):
+  - <code>bash docker/dev.sh python scripts/ch01_env_anatomy.py describe --json-out results/ch01_env_describe.json</code>
+- [ ] Reward semantics consistency check (<code>compute_reward</code> vs env reward):
+  - <code>bash docker/dev.sh python scripts/ch01_env_anatomy.py reward-check --n-steps 500</code>
+- [ ] Random-rollout metrics (baseline sanity + metric schema preview):
+  - <code>bash docker/dev.sh python scripts/ch01_env_anatomy.py random-episodes --n-episodes 10 --json-out results/ch01_random_metrics.json</code>
+- [ ] Decide normalization:
+  - start with “none” until Week 2 baseline is stable; add normalization once you can detect regressions via <code>eval.py</code>.</p>
+<p>Done when
+- You can plot success-rate vs steps and distributions of final distance.
+- Reward recomputation matches environment reward semantics.</p>
+<h3 id="week-2-ppo-on-dense-reach-pipeline-truth-serum">Week 2 — PPO on dense Reach (pipeline “truth serum”)</h3>
+<p>Goal: a stable baseline that proves your training loop is correct.</p>
+<p>Steps
+- [ ] Train PPO on a dense Reach env:
+  - <code>bash docker/dev.sh python train.py --algo ppo --env FetchReachDense-v4 --seed 0 --n-envs 8 --total-steps 1000000 --out checkpoints/ppo_reachdense_v4_seed0</code>
+- [ ] Lock an evaluation protocol:
+  - separate eval env
+  - fixed eval seeds
+  - deterministic policy at eval
+  - N=100 episodes (or N=50 for quick iteration)
+  - <code>bash docker/dev.sh python eval.py --ckpt checkpoints/ppo_reachdense_v4_seed0.zip --env FetchReachDense-v4 --n-episodes 100 --seeds 0-99 --deterministic --json-out results/ppo_reachdense_v4_seed0_eval.json</code>
+- [ ] Add an “early warning” dashboard:
+  - value loss explosion, entropy collapse, KL drift, success flatline</p>
+<p>Done when
+- PPO reaches consistently high success on dense Reach.
+- You can explain (practically) what PPO clipping is protecting you from.</p>
+<h3 id="week-3-sac-on-dense-reach-replay-diagnostics">Week 3 — SAC on dense Reach + replay diagnostics</h3>
+<p>Goal: your off-policy stack is correct before you add HER.</p>
+<p>Steps
+- [ ] Train SAC on dense Reach using dict obs (<code>MultiInputPolicy</code>). (<a href="https://stable-baselines3.readthedocs.io/en/master/guide/examples.html" title="Examples — Stable Baselines3">SB3 examples</a>)
+  - <code>bash docker/dev.sh python train.py --algo sac --env FetchReachDense-v4 --seed 0 --n-envs 8 --total-steps 1000000 --out checkpoints/sac_reachdense_v4_seed0</code>
+  - <code>bash docker/dev.sh python eval.py --ckpt checkpoints/sac_reachdense_v4_seed0.zip --env FetchReachDense-v4 --n-episodes 100 --seeds 0-99 --deterministic --json-out results/sac_reachdense_v4_seed0_eval.json</code>
+- [ ] Add replay diagnostics:
+  - reward histogram
+  - achieved vs desired goal distance distribution
+  - Q-values + entropy coefficient trends
+- [ ] Throughput scaling on DGX:
+  - sweep <code>n_envs</code> upward and log steps/sec</p>
+<p>Done when
+- SAC trains stably (no divergence; returns/success improve).
+- You can explain SAC’s entropy objective (maximum-entropy RL) at a practical level. (<a href="https://stable-baselines3.readthedocs.io/en/master/modules/sac.html" title="SAC — Stable Baselines3">SB3 SAC</a>)</p>
+<h3 id="week-4-sparse-reach-push-introduce-her-where-it-matters">Week 4 — Sparse Reach + Push: introduce HER where it matters</h3>
+<p>Goal: demonstrate that HER is the difference-maker on sparse goals.</p>
+<p>Steps
+- [ ] Train SAC on sparse Reach (<code>FetchReach-*</code>) <strong>without</strong> HER (establish baseline difficulty).
+- [ ] Train SAC + <code>HerReplayBuffer</code> on sparse Reach. (<a href="https://stable-baselines3.readthedocs.io/en/master/modules/her.html" title="HER — Stable Baselines3">SB3 HER</a>)
+  - no-HER:
+    - <code>bash docker/dev.sh python train.py --algo sac --env FetchReach-v4 --seed 0 --n-envs 8 --total-steps 1000000 --out checkpoints/sac_reach_v4_seed0</code>
+  - HER:
+    - <code>bash docker/dev.sh python train.py --algo sac --her --her-goal-selection-strategy future --her-n-sampled-goal 4 --env FetchReach-v4 --seed 0 --n-envs 8 --total-steps 1000000 --out checkpoints/sac_her_reach_v4_seed0</code>
+- [ ] Repeat on sparse Push (<code>FetchPush-*</code>):
+  - no-HER baseline
+  - HER with <code>goal_selection_strategy="future"</code> and <code>n_sampled_goal ∈ {2,4,8}</code></p>
+<p>Done when
+- Clear separation in success-rate between HER and no-HER.
+- You can report mean±CI across 3–5 seeds.</p>
+<h3 id="week-5-pickandplace-dense-debug-sparseher-curriculum">Week 5 — PickAndPlace: dense debug → sparse+HER → curriculum</h3>
+<p>Goal: validate the pipeline on contacts/grasping without fooling yourself via accidental shaping.</p>
+<p>Steps
+- [ ] Dense validation first (if a dense PickAndPlace variant exists in your install).
+  - If not: use temporary shaping only for debugging, and document it clearly.
+- [ ] Sparse + HER:
+  - start from stable Push hyperparams
+  - increase training horizon (PickAndPlace takes longer)
+- [ ] Curriculum (explicit schedule):
+  - narrow goal range / easier initial object positions first
+  - gradually expand to the full distribution
+- [ ] Eval split:
+  - “train-like” distribution
+  - “stress” distribution (wider initial placements)</p>
+<p>Done when
+- Dense mode: high success + smooth behavior (no frantic oscillations).
+- Sparse+HER: meaningful upward trend; stress test is worse but improving.</p>
+<h3 id="week-6-action-interface-engineering-policies-as-controllers">Week 6 — Action-interface engineering (“policies as controllers”)</h3>
+<p>Goal: treat learned policies like controllers and quantify stability.</p>
+<p>Steps
+- [ ] Action scaling study: multiply actions by <code>{0.5, 1.0, 2.0}</code>; measure success + smoothness + time-to-success.
+- [ ] Add an action wrapper:
+  - clipping (already bounded) + optional low-pass filter
+  - compare oscillations/contact stability
+- [ ] Classical baseline (Reach + maybe Push):
+  - simple “go-to-goal” PD-like rule in Cartesian delta space
+- [ ] Define a controller-centric metric bundle:
+  - success, time-to-success, smoothness, peak <code>|a|</code>, path-length proxy</p>
+<p>Done when
+- You can compare RL vs baseline on controller metrics (not just return).
+- You can separate “planning” issues from “control” issues with evidence.</p>
+<h3 id="week-7-robustness-noise-randomization-brittleness-curves">Week 7 — Robustness: noise, randomization, brittleness curves</h3>
+<p>Goal: quantify brittleness and improvements (don’t rely on videos).</p>
+<p>Steps
+- [ ] Controlled noise injection sweeps:
+  - observation noise <code>σ</code>
+  - action execution noise <code>σ</code>
+- [ ] Domain randomization (start light):
+  - if physical params are hard to reach, begin with obs/action noise
+- [ ] Plot degradation curves with confidence bands across seeds.</p>
+<p>Done when
+- At least one robustness technique measurably helps.
+- You can quantify “how brittle” with plots.</p>
+<h3 id="week-8-second-suite-adapter-robosuite-or-meta-world">Week 8 — Second suite adapter (robosuite OR Meta-World)</h3>
+<p>Goal: avoid overfitting intuition to Fetch.</p>
+<p>Steps (pick one suite)
+- [ ] Implement an adapter to the same train/eval contract.
+- [ ] Solve 1–2 simple tasks.
+- [ ] If using robosuite, compare controller modes (this is where “torque vs OSC vs position” becomes real).</p>
+<p>Done when
+- You can train/eval in a second ecosystem with minimal harness changes.</p>
+<h3 id="week-9-engineering-grade-rl-sweeps-ablations-seed-discipline">Week 9 — Engineering-grade RL: sweeps, ablations, seed discipline</h3>
+<p>Goal: turn tinkering into evidence.</p>
+<p>Steps
+- [ ] Seed discipline: 5 seeds per config; report mean±std + CI for success.
+- [ ] Minimum ablation grid:
+  - normalization method A vs B
+  - HER <code>n_sampled_goal ∈ {2,4,8}</code>
+  - SAC entropy: auto vs fixed target entropy
+- [ ] Add a launcher:
+  - YAML grid spec
+  - Spark DGX job launcher script (scheduler or local parallel runner)
+  - auto-collect results into a single report</p>
+<p>Done when
+- You can answer “what mattered?” with plots + statistics.
+- A run is reproducible from scratch given commit+lock+config.</p>
+<h3 id="week-10-capstone-sparse-pickandplace-robustness-targets">Week 10 — Capstone: sparse PickAndPlace + robustness targets</h3>
+<p>Goal: one deliverable-grade model + eval protocol + write-up.</p>
+<p>Capstone spec
+- Environment: sparse PickAndPlace (<code>FetchPickAndPlace-*</code>) + HER
+- Training: Spark DGX, vectorized envs, periodic checkpoints
+- Evaluation:
+  - standard test distribution
+  - stress test (wider init positions + mild noise/randomization)
+  - report success-rate, time-to-success, smoothness metrics</p>
+<p>Deliverables
+- model checkpoint(s) + normalization stats
+- <code>eval.py</code> outputs one JSON with metrics + provenance (commit hash, versions, seeds, episode count)
+- short experiment card:
+  - observation handling + normalization
+  - action filtering/scaling
+  - hyperparams that mattered (from ablations)
+  - what failed and how you debugged it</p>
+<p>Stretch (only after capstone is stable)
+- Vision (RGB) will spike sample complexity
+- Demonstrations + BC warm-start can help manipulation
+- CS285 robotics-adjacent assignments as structured extensions</p>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../tutorials/ch01_fetch_env_anatomy/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Chapter 1: Environment Anatomy">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Chapter 1: Environment Anatomy
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../reference/cli/" class="md-footer__link md-footer__link--next" aria-label="Next: CLI">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                CLI
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.footer", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

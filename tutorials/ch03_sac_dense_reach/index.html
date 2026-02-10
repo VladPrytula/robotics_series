@@ -1,0 +1,1851 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A Docker-first RL research platform for Fetch manipulation tasks">
+      
+      
+      
+        <link rel="canonical" href="https://vladprytula.github.io/robotics_series/tutorials/ch03_sac_dense_reach/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Chapter 3: SAC on Dense Reach -- Validating the Off-Policy Stack - Goal-Conditioned Robotic Manipulation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chapter-3-sac-on-dense-reach-validating-the-off-policy-stack" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-header__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goal-Conditioned Robotic Manipulation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Chapter 3: SAC on Dense Reach -- Validating the Off-Policy Stack
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../syllabus/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Syllabus
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-nav__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Goal-Conditioned Robotic Manipulation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ch00_containerized_dgx_proof_of_life/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 0: Proof of Life
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ch01_fetch_env_anatomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 1: Environment Anatomy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../syllabus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Syllabus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-chapter-is-really-about" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What This Chapter Is Really About
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What This Chapter Is Really About">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#early-training-exploration-30k-steps-entropy-047" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Early Training: Exploration (30k steps, entropy = 0.47)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#final-training-exploitation-1m-steps-entropy-00004" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Final Training: Exploitation (1M steps, entropy = 0.0004)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-0-setting-the-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 0: Setting the Stage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 0: Setting the Stage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#01-why-sac-after-ppo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1 Why SAC After PPO?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#02-the-diagnostic-mindset-again" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2 The Diagnostic Mindset (Again)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-1-why-maximum-entropy-reinforcement-learning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 1: WHY -- Maximum Entropy Reinforcement Learning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 1: WHY -- Maximum Entropy Reinforcement Learning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-the-standard-rl-objective-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 The Standard RL Objective (Review)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-why-determinism-is-actually-a-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 Why Determinism Is Actually a Problem
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-the-maximum-entropy-objective" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 The Maximum Entropy Objective
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-automatic-temperature-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 Automatic Temperature Tuning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-why-this-matters-for-robotics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 Why This Matters for Robotics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-2-how-the-sac-algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 2: HOW -- The SAC Algorithm
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 2: HOW -- The SAC Algorithm">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-the-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 The Components
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-training-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 The Training Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-key-differences-from-ppo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Key Differences from PPO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-key-hyperparameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Key Hyperparameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-3-what-running-the-experiment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 3: WHAT -- Running the Experiment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 3: WHAT -- Running the Experiment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-the-one-command-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 The One-Command Version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-what-to-expect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 What to Expect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-what-the-diagnostics-callback-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 What the Diagnostics Callback Logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-what-to-watch-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 What to Watch For
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-throughput-scaling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Throughput Scaling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-actual-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 Actual Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-understanding-gpu-utilization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6 Understanding GPU Utilization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#37-generating-demo-videos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.7 Generating Demo Videos
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-4-understanding-what-you-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 4: Understanding What You Built
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 4: Understanding What You Built">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-the-replay-buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 The Replay Buffer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-the-min-q-trick" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 The Min-Q Trick
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-the-squashed-gaussian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 The Squashed Gaussian
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-5-exercises" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 5: Exercises
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 5: Exercises">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exercise-31-reproduce-the-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3.1: Reproduce the Baseline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-32-compare-learning-curves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3.2: Compare Learning Curves
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-33-throughput-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3.3: Throughput Analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-34-q-value-analysis-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3.4: Q-Value Analysis (Written)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-35-temperature-ablation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 3.5: Temperature Ablation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-6-common-failures-and-solutions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 6: Common Failures and Solutions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 6: Common Failures and Solutions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#q-values-explode-1000" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Q-values explode (&gt;1000)"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entropy-coefficient-goes-to-zero-immediately" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Entropy coefficient goes to zero immediately"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#success-rate-stalls-below-50" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Success rate stalls below 50%"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-is-much-slower-than-ppo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Training is much slower than PPO"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-7-looking-ahead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 7: Looking Ahead
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="chapter-3-sac-on-dense-reach-validating-the-off-policy-stack">Chapter 3: SAC on Dense Reach -- Validating the Off-Policy Stack</h1>
+<h2 id="what-this-chapter-is-really-about">What This Chapter Is Really About</h2>
+<p>Chapter 2 validated our training pipeline with PPO. We achieved 100% success on dense Reach. The infrastructure works. But PPO has a fundamental limitation: <strong>it discards data after every update</strong>.</p>
+<p><strong>The result:</strong> A SAC policy that learned to reach any point in 3D space, matching PPO's performance while building the off-policy machinery we need for HER.</p>
+<h3 id="early-training-exploration-30k-steps-entropy-047">Early Training: Exploration (30k steps, entropy = 0.47)</h3>
+<p><img alt="SAC early exploration" src="../videos/sac_early_exploration_grid.gif" /></p>
+<p><em>At 30k steps, the policy is still exploring. The high entropy coefficient (0.47) encourages random-ish actions. The gripper moves erratically, rarely reaching the target. Success rate: 0%.</em></p>
+<h3 id="final-training-exploitation-1m-steps-entropy-00004">Final Training: Exploitation (1M steps, entropy = 0.0004)</h3>
+<p><img alt="SAC trained policy" src="../videos/sac_reach_demo_grid.gif" /></p>
+<p><em>At 1M steps, the policy has converged. The entropy coefficient dropped to 0.0004 (nearly deterministic). The gripper moves directly to the target. Success rate: 100%.</em></p>
+<p><strong>This is the entropy bonus in action:</strong> Early training explores broadly (high entropy), late training exploits what was learned (low entropy). SAC auto-tunes this tradeoff.</p>
+<hr />
+<p>PPO's data inefficiency is wasteful. Each transition took real simulation time to collect. PPO uses it for a few gradient steps, then throws it away. For dense-reward tasks where signal is plentiful, this inefficiency is tolerable. For sparse-reward tasks (coming in Chapter 4), it's catastrophic.</p>
+<p><strong>Off-policy methods</strong> solve this by storing transitions in a <strong>replay buffer</strong> and reusing them across many updates. This is dramatically more sample-efficient. But it introduces new failure modes: stale data, value overestimation, training instability.</p>
+<p>This chapter validates the off-policy machinery on dense Reach--the same "easy" task where we know success is achievable. If SAC fails here, the bug is in our off-policy implementation, not the task difficulty.</p>
+<p>By the end, you will have:
+1. A trained SAC policy matching or exceeding PPO's performance
+2. Understanding of maximum-entropy RL and why it matters
+3. Replay buffer diagnostics to detect common off-policy pathologies
+4. Throughput benchmarks for scaling to larger experiments</p>
+<hr />
+<h2 id="part-0-setting-the-stage">Part 0: Setting the Stage</h2>
+<h3 id="01-why-sac-after-ppo">0.1 Why SAC After PPO?</h3>
+<p>We're not choosing SAC because it's "better"--we're building toward HER (Hindsight Experience Replay), which requires off-policy learning. The dependency chain:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Dense Reach + PPO (Ch 2)      -- validates training loop
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>        |
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        v
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>Dense Reach + SAC (Ch 3)      -- validates off-policy machinery  &lt;-- YOU ARE HERE
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        |
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        v
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Sparse Reach + SAC + HER (Ch 4) -- validates goal relabeling
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        |
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        v
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>Harder tasks (Ch 5+)          -- builds on validated infrastructure
+</code></pre></div>
+<p>Each step isolates one new component. If SAC fails on dense Reach, we know the bug is in SAC, not the environment. If HER fails on sparse Reach, we know the bug is in HER, not SAC.</p>
+<h3 id="02-the-diagnostic-mindset-again">0.2 The Diagnostic Mindset (Again)</h3>
+<p>Dense Reach with SAC should achieve similar performance to PPO--both are solving the same task with the same amount of signal. If SAC performs much worse:
+- Value overestimation (Q-values growing unbounded)
+- Entropy collapse (exploration stopped too early)
+- Replay buffer issues (stale data, wrong sampling)</p>
+<p>The diagnostics callback we'll use catches these early.</p>
+<hr />
+<h2 id="part-1-why-maximum-entropy-reinforcement-learning">Part 1: WHY -- Maximum Entropy Reinforcement Learning</h2>
+<h3 id="11-the-standard-rl-objective-review">1.1 The Standard RL Objective (Review)</h3>
+<p>Recall from Chapter 2 that standard RL maximizes expected return:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t R_t \right]
+</code></pre></div>
+<p>This finds a policy that gets high reward. But there's a subtle problem: <strong>the optimal policy is deterministic.</strong> Once you know the best action for each state, why ever do anything else?</p>
+<h3 id="12-why-determinism-is-actually-a-problem">1.2 Why Determinism Is Actually a Problem</h3>
+<p>In theory, a deterministic optimal policy is fine. In practice, it causes issues:</p>
+<p><strong>Problem 1: Exploration Dies</strong></p>
+<p>A deterministic policy exploits what it knows. If the current best action gets reward +10, the policy commits to it. But what if there's an action that would get +20, which the policy has never tried because it stopped exploring?</p>
+<p><strong>Problem 2: Brittleness</strong></p>
+<p>A policy that commits fully to one action per state is fragile. Small perturbations (observation noise, model mismatch) can push it into unfamiliar states where it has no idea what to do.</p>
+<p><strong>Problem 3: Training Instability</strong></p>
+<p>When the policy is nearly deterministic, small value estimate changes cause large behavioral changes (the "winning" action flips). This amplifies noise in the training process.</p>
+<h3 id="13-the-maximum-entropy-objective">1.3 The Maximum Entropy Objective</h3>
+<p>SAC modifies the objective to include an <strong>entropy bonus</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t \left( R_t + \alpha \mathcal{H}(\pi(\cdot | s_t)) \right) \right]
+</code></pre></div>
+<p>where:
+- <span class="arithmatex">\(\mathcal{H}(\pi(\cdot | s))\)</span> = <strong>entropy</strong> of the policy at state <span class="arithmatex">\(s\)</span>, measuring how "spread out" the action distribution is
+- <span class="arithmatex">\(\alpha &gt; 0\)</span> = <strong>temperature</strong> parameter, controlling the exploration-exploitation tradeoff</p>
+<p><strong>Definition (Entropy).</strong> For a continuous policy outputting a Gaussian distribution over actions, the entropy is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>\mathcal{H}(\pi(\cdot | s)) = \frac{1}{2} \ln((2\pi e)^d |\Sigma|)
+</code></pre></div>
+<p>where <span class="arithmatex">\(d\)</span> is the action dimension and <span class="arithmatex">\(|\Sigma|\)</span> is the determinant of the covariance matrix. Higher entropy means the policy is more random; lower entropy means more deterministic.</p>
+<p><strong>The key insight:</strong> The optimal policy no longer commits fully to one action. Instead, it prefers actions proportionally to their Q-values:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>\pi^*(a | s) \propto \exp(Q^*(s, a) / \alpha)
+</code></pre></div>
+<p>This is a <strong>Boltzmann distribution</strong> (or "softmax" over continuous actions). High-Q actions are more likely, but low-Q actions still have some probability. The temperature <span class="arithmatex">\(\alpha\)</span> controls the sharpness:
+- <span class="arithmatex">\(\alpha \to 0\)</span>: deterministic (argmax)
+- <span class="arithmatex">\(\alpha \to \infty\)</span>: uniform random</p>
+<h3 id="14-automatic-temperature-tuning">1.4 Automatic Temperature Tuning</h3>
+<p>Choosing <span class="arithmatex">\(\alpha\)</span> manually is tricky--too low and you lose exploration, too high and you never exploit. SAC can learn <span class="arithmatex">\(\alpha\)</span> automatically by targeting a desired entropy level:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>\alpha^* = \arg\min_\alpha \mathbb{E}_{a \sim \pi}\left[ -\alpha \log \pi(a|s) - \alpha \bar{\mathcal{H}} \right]
+</code></pre></div>
+<p>where <span class="arithmatex">\(\bar{\mathcal{H}}\)</span> is the <strong>target entropy</strong> (typically set to <span class="arithmatex">\(-\dim(\mathcal{A})\)</span>, the negative action dimension).</p>
+<p><strong>Translation:</strong> "Adjust <span class="arithmatex">\(\alpha\)</span> so that the policy's entropy stays near <span class="arithmatex">\(\bar{\mathcal{H}}\)</span>."</p>
+<p>This means SAC adapts its exploration automatically. Early in training, when the policy is uncertain, entropy is high naturally. Late in training, when the policy is confident, <span class="arithmatex">\(\alpha\)</span> decreases to allow more exploitation.</p>
+<h3 id="15-why-this-matters-for-robotics">1.5 Why This Matters for Robotics</h3>
+<p>In robotics, brittleness kills. A policy that works perfectly in simulation but fails on real hardware is useless. Maximum entropy encourages:</p>
+<ol>
+<li><strong>Diverse training data</strong>: The policy explores many actions, seeing more of the state space</li>
+<li><strong>Robust behaviors</strong>: The policy doesn't commit fully to any single action, making it more tolerant to noise</li>
+<li><strong>Smoother training</strong>: The Boltzmann-style policy changes gradually as Q-values change</li>
+</ol>
+<hr />
+<h2 id="part-2-how-the-sac-algorithm">Part 2: HOW -- The SAC Algorithm</h2>
+<h3 id="21-the-components">2.1 The Components</h3>
+<p>SAC maintains five networks (in Stable Baselines 3's implementation):</p>
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>Purpose</th>
+<th>Updates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Actor</strong> <span class="arithmatex">\(\pi_\theta\)</span></td>
+<td>Maps states to action distributions</td>
+<td>Policy gradient</td>
+</tr>
+<tr>
+<td><strong>Critic 1</strong> <span class="arithmatex">\(Q_{\phi_1}\)</span></td>
+<td>Estimates Q-values</td>
+<td>Bellman backup</td>
+</tr>
+<tr>
+<td><strong>Critic 2</strong> <span class="arithmatex">\(Q_{\phi_2}\)</span></td>
+<td>Second Q estimate (reduces overestimation)</td>
+<td>Bellman backup</td>
+</tr>
+<tr>
+<td><strong>Target Critic 1</strong> <span class="arithmatex">\(Q_{\bar{\phi}_1}\)</span></td>
+<td>Stable target for critic updates</td>
+<td>Polyak averaging</td>
+</tr>
+<tr>
+<td><strong>Target Critic 2</strong> <span class="arithmatex">\(Q_{\bar{\phi}_2}\)</span></td>
+<td>Stable target for critic updates</td>
+<td>Polyak averaging</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why two critics?</strong> Q-learning tends to overestimate values because we take a max over noisy estimates. Using two critics and taking the minimum reduces this bias. This is called <strong>clipped double Q-learning</strong>.</p>
+<p><strong>Why target networks?</strong> If we update the critic using its own predictions as targets, we get a moving target problem. Target networks are slow-moving copies that provide stable targets:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>\bar{\phi} \leftarrow \tau \phi + (1 - \tau) \bar{\phi}
+</code></pre></div>
+<p>with <span class="arithmatex">\(\tau = 0.005\)</span> typically (slow updates).</p>
+<h3 id="22-the-training-loop">2.2 The Training Loop</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>repeat:
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    1. Collect transitions using current policy, store in replay buffer
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    2. Sample minibatch from replay buffer
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    3. Update critics using Bellman backup (target uses min of two Q-targets)
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    4. Update actor to maximize Q + entropy
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    5. Update temperature alpha (if auto-tuning)
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    6. Soft-update target networks
+</code></pre></div>
+<p><strong>Step 1: Collect Data</strong></p>
+<p>Unlike PPO, SAC collects data continuously. Each step:
+1. Get action from policy (with sampling for exploration)
+2. Execute in environment
+3. Store <span class="arithmatex">\((s, a, r, s', done)\)</span> in replay buffer</p>
+<p>The replay buffer is circular--when full, old transitions are overwritten.</p>
+<p><strong>Step 2: Sample Minibatch</strong></p>
+<p>Uniformly sample <code>batch_size</code> transitions from the buffer. This is where sample reuse happens--the same transition might be sampled many times across training.</p>
+<p><strong>Step 3: Update Critics</strong></p>
+<p>For each critic, minimize the Bellman error:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>L(\phi_i) = \mathbb{E}_{(s,a,r,s&#39;) \sim \mathcal{B}}\left[ \left( Q_{\phi_i}(s, a) - y \right)^2 \right]
+</code></pre></div>
+<p>where the target <span class="arithmatex">\(y\)</span> is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>y = r + \gamma (1 - done) \left[ \min_{j=1,2} Q_{\bar{\phi}_j}(s&#39;, a&#39;) - \alpha \log \pi(a&#39; | s&#39;) \right]
+</code></pre></div>
+<p>with <span class="arithmatex">\(a' \sim \pi(\cdot | s')\)</span>.</p>
+<p><strong>Translation:</strong> "The Q-value of <span class="arithmatex">\((s, a)\)</span> should equal the reward plus the (discounted, entropy-adjusted) value of the next state."</p>
+<p><strong>Step 4: Update Actor</strong></p>
+<p>Maximize expected Q-value plus entropy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>L(\theta) = \mathbb{E}_{s \sim \mathcal{B}, a \sim \pi_\theta}\left[ \alpha \log \pi_\theta(a | s) - \min_{i=1,2} Q_{\phi_i}(s, a) \right]
+</code></pre></div>
+<p><strong>Translation:</strong> "Choose actions that have high Q-values while maintaining high entropy."</p>
+<h3 id="23-key-differences-from-ppo">2.3 Key Differences from PPO</h3>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>PPO</th>
+<th>SAC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data reuse</td>
+<td>None (on-policy)</td>
+<td>Extensive (replay buffer)</td>
+</tr>
+<tr>
+<td>Exploration</td>
+<td>Via entropy bonus (optional)</td>
+<td>Via entropy bonus (core)</td>
+</tr>
+<tr>
+<td>Sample efficiency</td>
+<td>Low</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Stability</td>
+<td>High (clipped updates)</td>
+<td>Medium (moving targets)</td>
+</tr>
+<tr>
+<td>Complexity</td>
+<td>Lower</td>
+<td>Higher (more networks)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-key-hyperparameters">2.4 Key Hyperparameters</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>What It Controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>buffer_size</code></td>
+<td>1,000,000</td>
+<td>Replay buffer capacity</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>256</td>
+<td>Minibatch size for updates</td>
+</tr>
+<tr>
+<td><code>learning_starts</code></td>
+<td>10,000</td>
+<td>Steps before training begins</td>
+</tr>
+<tr>
+<td><code>tau</code></td>
+<td>0.005</td>
+<td>Target network update rate</td>
+</tr>
+<tr>
+<td><code>ent_coef</code></td>
+<td>"auto"</td>
+<td>Entropy temperature (auto-tuned)</td>
+</tr>
+<tr>
+<td><code>learning_rate</code></td>
+<td>3e-4</td>
+<td>Gradient step size</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="part-3-what-running-the-experiment">Part 3: WHAT -- Running the Experiment</h2>
+<h3 id="31-the-one-command-version">3.1 The One-Command Version</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch03_sac_dense_reach.py<span class="w"> </span>all<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span>
+</code></pre></div>
+<p>This runs training (with diagnostics), evaluation, and comparison to PPO.</p>
+<p>For faster iteration (~2 minutes):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch03_sac_dense_reach.py<span class="w"> </span>train<span class="w"> </span>--total-steps<span class="w"> </span><span class="m">100000</span>
+</code></pre></div>
+<h3 id="32-what-to-expect">3.2 What to Expect</h3>
+<p>Training progress milestones for SAC (note: <code>learning_starts=10000</code> means no training for first 10k steps):</p>
+<table>
+<thead>
+<tr>
+<th>Timesteps</th>
+<th>Success Rate</th>
+<th>What's Happening</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-10k</td>
+<td>0%</td>
+<td>Collecting random data (no training yet)</td>
+</tr>
+<tr>
+<td>10k-50k</td>
+<td>0-5%</td>
+<td>Training begins, Q-values learning</td>
+</tr>
+<tr>
+<td>50k-150k</td>
+<td>20-60%</td>
+<td>Rapid improvement, entropy decreasing</td>
+</tr>
+<tr>
+<td>150k-400k</td>
+<td>80-99%</td>
+<td>Policy converging</td>
+</tr>
+<tr>
+<td>400k-1M</td>
+<td>100%</td>
+<td>Fine-tuning, entropy near zero</td>
+</tr>
+</tbody>
+</table>
+<p>Our test run achieved:
+- <strong>100% success rate</strong> after ~300k steps
+- <strong>18.6mm average goal distance</strong> (well within 50mm threshold)
+- <strong>~594 steps/second</strong> throughput on NVIDIA GB10
+- <strong>Entropy coefficient</strong>: dropped from 0.47 to 0.0004 (policy became deterministic)</p>
+<h3 id="32-what-the-diagnostics-callback-logs">3.2 What the Diagnostics Callback Logs</h3>
+<p>Our custom <code>SACDiagnosticsCallback</code> logs to TensorBoard:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What It Means</th>
+<th>Healthy Range</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>replay/q1_mean</code>, <code>q2_mean</code></td>
+<td>Average Q-values</td>
+<td>Should stabilize, not explode</td>
+</tr>
+<tr>
+<td><code>replay/q_min_mean</code></td>
+<td>Min of two Q-values</td>
+<td>Tracks actual value estimates</td>
+</tr>
+<tr>
+<td><code>replay/ent_coef</code></td>
+<td>Temperature <span class="arithmatex">\(\alpha\)</span></td>
+<td>Should decrease over training</td>
+</tr>
+<tr>
+<td><code>replay/reward_mean</code></td>
+<td>Average reward in buffer</td>
+<td>Task-dependent</td>
+</tr>
+<tr>
+<td><code>replay/goal_distance_mean</code></td>
+<td>How far from goals</td>
+<td>Should decrease</td>
+</tr>
+<tr>
+<td><code>replay/goal_within_threshold</code></td>
+<td>Fraction within success</td>
+<td>Should increase</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-what-to-watch-for">3.3 What to Watch For</h3>
+<p><strong>Q-Value Behavior:</strong>
+- Healthy: Q-values stabilize in a reasonable range (we observed <code>q_min_mean ~ -1.5</code>)
+- Unhealthy: Q-values grow unbounded (&gt;100, continuing to increase)</p>
+<p>Our run showed Q-values starting positive (~18 at 30k steps during random exploration) then settling to ~-1.5 as the policy learned. This is healthy--the critic learned accurate value estimates.</p>
+<p><strong>Entropy Coefficient:</strong>
+- Healthy: Starts high, gradually decreases (we observed: 0.47 -&gt; 0.0004)
+- Unhealthy: Drops to near-zero in first 10k steps (exploration collapsed)</p>
+<p>Our run showed gradual decrease over 1M steps, indicating the auto-tuning worked correctly. The final value (0.0004) means the policy became nearly deterministic--appropriate for a solved task.</p>
+<p><strong>Goal Distance (in replay buffer):</strong>
+- Note: This shows the <em>average</em> distance across the entire buffer, not current policy performance
+- Our run showed ~0.20m mean distance (historical average including early random data)
+- Current policy performance is measured by <code>rollout/success_rate</code> and evaluation metrics</p>
+<h3 id="34-throughput-scaling">3.4 Throughput Scaling</h3>
+<p>Off-policy methods can benefit from parallel environments, but the relationship is complex (more envs = more data, but also more stale):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch03_sac_dense_reach.py<span class="w"> </span>throughput<span class="w"> </span>--n-envs-list<span class="w"> </span><span class="m">1</span>,2,4,8,16
+</code></pre></div>
+<p>This measures steps/second for different <code>n_envs</code> values. Expect:
+- Near-linear scaling up to some point
+- Diminishing returns as CPU becomes the bottleneck
+- Sweet spot typically around 4-16 envs for SAC</p>
+<h3 id="35-actual-results">3.5 Actual Results</h3>
+<p>On FetchReachDense-v4 with 1M steps (NVIDIA GB10):</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>PPO (Ch 2)</th>
+<th>SAC (Actual)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Success Rate</td>
+<td>100%</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Mean Return</td>
+<td>-0.40</td>
+<td>-1.06</td>
+</tr>
+<tr>
+<td>Final Distance</td>
+<td>4.6mm</td>
+<td>18.6mm</td>
+</tr>
+<tr>
+<td>Action Smoothness</td>
+<td>1.40</td>
+<td>1.68</td>
+</tr>
+<tr>
+<td>Training Time</td>
+<td>~6 min</td>
+<td>~28 min</td>
+</tr>
+<tr>
+<td>Throughput</td>
+<td>~1300 fps</td>
+<td>~594 fps</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis:</strong>
+- Both achieve 100% success--the off-policy stack is validated
+- SAC has higher final distance (18.6mm vs 4.6mm) but still well within the 50mm success threshold
+- SAC is slower due to more network updates (actor + 2 critics + 2 targets) per step
+- SAC's slightly less smooth actions reflect the entropy bonus encouraging exploration</p>
+<h3 id="36-understanding-gpu-utilization">3.6 Understanding GPU Utilization</h3>
+<p>You may notice low GPU utilization (~5-10%) during training:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>$ nvidia-smi dmon -s u
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a># gpu     sm    mem
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    0      7      0
+</code></pre></div>
+<p><strong>This is expected for RL training.</strong> The bottleneck is CPU, not GPU:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Runs On</th>
+<th>Time Fraction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MuJoCo physics simulation</td>
+<td>CPU</td>
+<td>~60-70%</td>
+</tr>
+<tr>
+<td>Environment step/reset</td>
+<td>CPU</td>
+<td>~10-15%</td>
+</tr>
+<tr>
+<td>Neural network forward</td>
+<td>GPU</td>
+<td>~5-10%</td>
+</tr>
+<tr>
+<td>Neural network backward</td>
+<td>GPU</td>
+<td>~10-15%</td>
+</tr>
+<tr>
+<td>Replay buffer operations</td>
+<td>CPU</td>
+<td>~5%</td>
+</tr>
+</tbody>
+</table>
+<p>With small batch sizes (256) and simple MLPs, GPU operations complete in microseconds. The GPU idles while waiting for CPU-bound simulation. This is why throughput (~600 fps) is limited by CPU, not GPU.</p>
+<p><strong>To increase GPU utilization:</strong>
+- Larger batch sizes (but diminishing returns for small networks)
+- Multiple parallel training workers (adds complexity)
+- Vision-based policies with CNNs (Week 8+)</p>
+<p>For our curriculum, ~600 fps is sufficient. Don't optimize prematurely.</p>
+<hr />
+<h3 id="37-generating-demo-videos">3.7 Generating Demo Videos</h3>
+<p>To visualize your trained policy, use the video generation script:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Generate videos from SAC checkpoint</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/generate_demo_videos.py<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span>--ckpt<span class="w"> </span>checkpoints/sac_FetchReachDense-v4_seed0.zip<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span>--env<span class="w"> </span>FetchReachDense-v4<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span>--n-episodes<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span>--out<span class="w"> </span>videos/sac_reach_demo<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">    </span>--grid<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span>--gif
+</code></pre></div>
+<p>This creates:
+- <code>videos/sac_reach_demo.mp4</code> - Compilation of all episodes
+- <code>videos/sac_reach_demo_grid.mp4</code> - 2x2 grid showing 4 episodes simultaneously
+- <code>videos/sac_reach_demo_grid.gif</code> - GIF version for documentation/social media</p>
+<p><strong>Video annotations:</strong> Each frame shows:
+- <strong>Distance to target</strong> - Real-time distance in centimeters
+- <strong>"TARGET REACHED!"</strong> - Green text when within 5cm threshold
+- <strong>Legend</strong> - Red dot = target position, Green dot = gripper position</p>
+<p>The script automatically:
+1. Loads the trained model (works with PPO, SAC, or TD3)
+2. Enlarges the target sphere for visibility
+3. Adds text overlays with goal distance
+4. Creates both MP4 and GIF formats</p>
+<hr />
+<h2 id="part-4-understanding-what-you-built">Part 4: Understanding What You Built</h2>
+<h3 id="41-the-replay-buffer">4.1 The Replay Buffer</h3>
+<p>The replay buffer is a circular array storing transitions:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>[t_0, t_1, t_2, ..., t_{n-1}, t_n, t_{n+1}, ...]
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a> ^-- oldest                          ^-- newest
+</code></pre></div>
+<p>When full, new transitions overwrite the oldest. This means:
+- Recent experience is always available
+- Very old experience is eventually forgotten
+- Buffer size controls the "memory horizon"</p>
+<p>For 1M buffer and 1M training steps, every transition is seen roughly once on average. Increase buffer size for longer memory; decrease for faster adaptation.</p>
+<h3 id="42-the-min-q-trick">4.2 The Min-Q Trick</h3>
+<p>When computing the target for critic updates, SAC uses:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>\min_{j=1,2} Q_{\bar{\phi}_j}(s&#39;, a&#39;)
+</code></pre></div>
+<p>This seems pessimistic--why take the minimum? Because Q-learning systematically overestimates:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>\mathbb{E}[\max(Q_1, Q_2)] \geq \max(\mathbb{E}[Q_1], \mathbb{E}[Q_2])
+</code></pre></div>
+<p>Taking the min counteracts this bias, leading to more stable training.</p>
+<h3 id="43-the-squashed-gaussian">4.3 The Squashed Gaussian</h3>
+<p>SAC uses a "squashed Gaussian" for the policy:
+1. Sample from a Gaussian: <span class="arithmatex">\(z \sim \mathcal{N}(\mu, \sigma^2)\)</span>
+2. Squash through tanh: <span class="arithmatex">\(a = \tanh(z)\)</span></p>
+<p>This ensures actions are bounded (important for robotics with joint limits). The log probability calculation accounts for the squashing via a Jacobian correction.</p>
+<hr />
+<h2 id="part-5-exercises">Part 5: Exercises</h2>
+<h3 id="exercise-31-reproduce-the-baseline">Exercise 3.1: Reproduce the Baseline</h3>
+<p>Run SAC on FetchReachDense-v4 and verify &gt;95% success rate:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch03_sac_dense_reach.py<span class="w"> </span>all<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span>
+</code></pre></div>
+<h3 id="exercise-32-compare-learning-curves">Exercise 3.2: Compare Learning Curves</h3>
+<p>Open TensorBoard and compare PPO vs SAC:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>tensorboard<span class="w"> </span>--logdir<span class="w"> </span>runs<span class="w"> </span>--bind_all
+</code></pre></div>
+<p>Questions to answer:
+- Which reaches high success faster?
+- How do the value loss curves differ?
+- What happens to SAC's entropy coefficient over training?</p>
+<h3 id="exercise-33-throughput-analysis">Exercise 3.3: Throughput Analysis</h3>
+<p>Run the throughput experiment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch03_sac_dense_reach.py<span class="w"> </span>throughput
+</code></pre></div>
+<p>Plot steps/sec vs n_envs. Where does scaling stop being linear?</p>
+<h3 id="exercise-34-q-value-analysis-written">Exercise 3.4: Q-Value Analysis (Written)</h3>
+<p>Watch the Q-value metrics in TensorBoard. Answer:
+1. Do Q1 and Q2 diverge significantly, or stay close?
+2. What is the typical range of Q-values for this task?
+3. How would you detect Q-value overestimation if it occurred?</p>
+<h3 id="exercise-35-temperature-ablation">Exercise 3.5: Temperature Ablation</h3>
+<p>Train with fixed entropy coefficients instead of auto-tuning:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1"># In train.py, modify ent_coef to a fixed value:</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="c1"># ent_coef=0.1 (high exploration)</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="c1"># ent_coef=0.01 (medium)</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="c1"># ent_coef=0.001 (low exploration)</span>
+</code></pre></div>
+<p>How does fixed vs auto-tuned entropy affect:
+- Final performance?
+- Training stability?
+- Time to convergence?</p>
+<hr />
+<h2 id="part-6-common-failures-and-solutions">Part 6: Common Failures and Solutions</h2>
+<h3 id="q-values-explode-1000">"Q-values explode (&gt;1000)"</h3>
+<p><strong>Symptom:</strong> <code>replay/q_min_mean</code> keeps growing without bound.</p>
+<p><strong>Cause:</strong> Overestimation feedback loop. Q-targets use overestimated Q-values, which train the critic to overestimate further.</p>
+<p><strong>Solutions:</strong>
+1. Verify rewards are bounded (FetchReachDense: [-1, 0])
+2. Check discount factor (should be &lt;1, typically 0.99)
+3. Reduce learning rate
+4. Verify target networks are updating (tau should be small)</p>
+<h3 id="entropy-coefficient-goes-to-zero-immediately">"Entropy coefficient goes to zero immediately"</h3>
+<p><strong>Symptom:</strong> <code>replay/ent_coef</code> drops to &lt;0.01 within first 10k steps.</p>
+<p><strong>Cause:</strong> Target entropy too low, or policy collapsed to near-deterministic.</p>
+<p><strong>Solutions:</strong>
+1. Increase target entropy (default is -dim(action))
+2. Check action space bounds (if very wide, entropy scale changes)
+3. Use fixed entropy coefficient initially to debug</p>
+<h3 id="success-rate-stalls-below-50">"Success rate stalls below 50%"</h3>
+<p><strong>Symptom:</strong> Learning plateaus well below PPO baseline.</p>
+<p><strong>Cause:</strong> Often insufficient exploration or replay buffer issues.</p>
+<p><strong>Solutions:</strong>
+1. Check entropy coefficient isn't too low
+2. Verify <code>learning_starts</code> isn't too high (not using early data)
+3. Check batch size (too small = high variance, too large = slow updates)</p>
+<h3 id="training-is-much-slower-than-ppo">"Training is much slower than PPO"</h3>
+<p><strong>Expected:</strong> SAC is slower per-step (more networks to update).</p>
+<p><strong>Unexpected slowness causes:</strong>
+1. Buffer operations (should be O(1) for sampling)
+2. GPU memory (buffer can be large)
+3. Too many gradient steps per env step</p>
+<hr />
+<h2 id="part-7-looking-ahead">Part 7: Looking Ahead</h2>
+<p>With SAC validated on dense Reach, we've confirmed:
+1. Replay buffer correctly stores and samples transitions
+2. Dual critics work without divergence
+3. Entropy tuning behaves as expected
+4. Off-policy learning achieves good performance</p>
+<p><strong>Chapter 4</strong> introduces HER (Hindsight Experience Replay) for sparse rewards. The key insight: a failed trajectory to goal <span class="arithmatex">\(g\)</span> is a successful trajectory to whatever goal we actually reached. HER relabels transitions to manufacture success signal from failure.</p>
+<p>This requires off-policy learning (SAC or TD3)--on-policy methods like PPO cannot use HER because they can't reuse relabeled data. Our validated SAC stack is the foundation.</p>
+<hr />
+<h2 id="references">References</h2>
+<ol>
+<li>
+<p>Haarnoja, T., Zhou, A., Abbeel, P., &amp; Levine, S. (2018). Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor. ICML.</p>
+</li>
+<li>
+<p>Haarnoja, T., Zhou, A., Hartikainen, K., Tucker, G., Ha, S., Tan, J., Kumar, V., Zhu, H., Gupta, A., Abbeel, P., &amp; Levine, S. (2018). Soft Actor-Critic Algorithms and Applications. arXiv:1812.05905.</p>
+</li>
+<li>
+<p>Fujimoto, S., van Hoof, H., &amp; Meger, D. (2018). Addressing Function Approximation Error in Actor-Critic Methods. ICML. (TD3 paper, introduces clipped double-Q)</p>
+</li>
+<li>
+<p>Stable Baselines3 SAC Documentation: https://stable-baselines3.readthedocs.io/en/master/modules/sac.html</p>
+</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.footer", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

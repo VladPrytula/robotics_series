@@ -1,0 +1,2180 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A Docker-first RL research platform for Fetch manipulation tasks">
+      
+      
+      
+        <link rel="canonical" href="https://vladprytula.github.io/robotics_series/tutorials/ch00_containerized_dgx_proof_of_life/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../ch01_fetch_env_anatomy/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Chapter 0: Proof of Life - Goal-Conditioned Robotic Manipulation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chapter-0-a-containerized-proof-of-life-on-spark-dgx" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-header__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goal-Conditioned Robotic Manipulation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Chapter 0: Proof of Life
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../syllabus/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Syllabus
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-nav__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Goal-Conditioned Robotic Manipulation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 0: Proof of Life
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 0: Proof of Life
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#abstract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Abstract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-i-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part I: The Problem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part I: The Problem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-why-the-reproducibility-crisis-and-its-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 WHY: The Reproducibility Crisis and Its Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-specific-problem-of-this-chapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 The Specific Problem of This Chapter
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-ii-the-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part II: The Method
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part II: The Method">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-how-containerization-as-environment-specification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 HOW: Containerization as Environment Specification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-verification-protocol" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 The Verification Protocol
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.2 The Verification Protocol">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-1-gpu-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 1: GPU Access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-2-mujoco-and-gymnasium-robotics-functionality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 2: MuJoCo and Gymnasium-Robotics Functionality
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-3-headless-rendering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 3: Headless Rendering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-4-training-loop-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 4: Training Loop Completion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-logical-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Logical Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-the-container-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 The Container Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-the-virtual-environment-within-the-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 The Virtual Environment Within the Container
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iii-the-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part III: The Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part III: The Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-what-the-concrete-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 WHAT: The Concrete Steps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 WHAT: The Concrete Steps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-verify-host-prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Verify Host Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-enter-the-development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Enter the Development Environment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-verify-fetch-environment-availability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Verify Fetch Environment Availability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-verify-headless-rendering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Verify Headless Rendering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-verify-training-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Verify Training Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-combined-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Combined Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-mac-m4-apple-silicon-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Mac M4 (Apple Silicon) Support
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.2 Mac M4 (Apple Silicon) Support">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#platform-differences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform Differences
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-cpu-only-on-mac" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why CPU-Only on Mac?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage-on-mac" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage on Mac
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker-desktop-configuration-for-mac" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker Desktop Configuration for Mac
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iv-analysis-and-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part IV: Analysis and Verification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part IV: Analysis and Verification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-interpreting-the-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Interpreting the Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-on-the-meaning-of-proof-of-life" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 On the Meaning of "Proof of Life"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-what-this-chapter-does-not-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 What This Chapter Does Not Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-v-deliverables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part V: Deliverables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-permission-denied-when-running-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 "Permission denied" When Running Docker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-i-have-no-name-in-the-container-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 "I have no name!" in the Container Shell
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a3-egl-initialization-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.3 EGL Initialization Failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a4-dependency-hash-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.4 Dependency Hash Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-environment-variable-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Environment Variable Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ch01_fetch_env_anatomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 1: Environment Anatomy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../syllabus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Syllabus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#abstract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Abstract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-i-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part I: The Problem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part I: The Problem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-why-the-reproducibility-crisis-and-its-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 WHY: The Reproducibility Crisis and Its Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-specific-problem-of-this-chapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 The Specific Problem of This Chapter
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-ii-the-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part II: The Method
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part II: The Method">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-how-containerization-as-environment-specification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 HOW: Containerization as Environment Specification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-verification-protocol" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 The Verification Protocol
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.2 The Verification Protocol">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-1-gpu-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 1: GPU Access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-2-mujoco-and-gymnasium-robotics-functionality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 2: MuJoCo and Gymnasium-Robotics Functionality
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-3-headless-rendering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 3: Headless Rendering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-4-training-loop-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test 4: Training Loop Completion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-logical-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Logical Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-the-container-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 The Container Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-the-virtual-environment-within-the-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 The Virtual Environment Within the Container
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iii-the-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part III: The Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part III: The Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-what-the-concrete-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 WHAT: The Concrete Steps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 WHAT: The Concrete Steps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-verify-host-prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Verify Host Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-enter-the-development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Enter the Development Environment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-verify-fetch-environment-availability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Verify Fetch Environment Availability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-verify-headless-rendering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Verify Headless Rendering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-verify-training-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Verify Training Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-combined-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Combined Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-mac-m4-apple-silicon-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Mac M4 (Apple Silicon) Support
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.2 Mac M4 (Apple Silicon) Support">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#platform-differences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform Differences
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-cpu-only-on-mac" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why CPU-Only on Mac?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage-on-mac" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage on Mac
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker-desktop-configuration-for-mac" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker Desktop Configuration for Mac
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iv-analysis-and-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part IV: Analysis and Verification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part IV: Analysis and Verification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-interpreting-the-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Interpreting the Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-on-the-meaning-of-proof-of-life" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 On the Meaning of "Proof of Life"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-what-this-chapter-does-not-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 What This Chapter Does Not Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-v-deliverables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part V: Deliverables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-permission-denied-when-running-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 "Permission denied" When Running Docker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-i-have-no-name-in-the-container-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 "I have no name!" in the Container Shell
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a3-egl-initialization-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.3 EGL Initialization Failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a4-dependency-hash-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.4 Dependency Hash Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-environment-variable-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Environment Variable Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="chapter-0-a-containerized-proof-of-life-on-spark-dgx">Chapter 0: A Containerized "Proof of Life" on Spark DGX</h1>
+<h2 id="abstract">Abstract</h2>
+<p>This chapter establishes the foundational experimental environment upon which all subsequent work depends. We address a problem that is logically prior to reinforcement learning itself: the problem of <em>reproducible computation</em>. Our deliverables are not trained policies but verified infrastructure--a container that runs, a renderer that produces images, a training loop that completes without error.</p>
+<p>The reader who dismisses this chapter as mere "setup" misunderstands its purpose. In empirical machine learning, the experimental environment is not scaffolding to be discarded; it is the laboratory in which results are produced. A result that cannot be reproduced because the environment cannot be reconstructed is not a result at all. This chapter ensures that our laboratory is sound.</p>
+<hr />
+<h2 id="part-i-the-problem">Part I: The Problem</h2>
+<h3 id="11-why-the-reproducibility-crisis-and-its-resolution">1.1 WHY: The Reproducibility Crisis and Its Resolution</h3>
+<p>Consider the following scenario, which is unfortunately common in empirical machine learning research. A researcher trains a policy that achieves impressive results. They write a paper, submit it, and it is accepted. Six months later, a colleague attempts to reproduce the results. The code is available, but it fails to run: dependencies have changed, the CUDA version is different, an environment variable is missing. After days of debugging, the colleague achieves results that are qualitatively different from the original paper. Was there an error in the original work? Or is the discrepancy due to environmental differences? It is impossible to know.</p>
+<p>This scenario illustrates what we might call the <em>reproducibility problem</em> in empirical machine learning:</p>
+<p><strong>Problem (Reproducibility).</strong> <em>Given a computational experiment <span class="arithmatex">\(E\)</span> that produces result <span class="arithmatex">\(R\)</span> on machine <span class="arithmatex">\(M\)</span> at time <span class="arithmatex">\(t\)</span>, under what conditions can we guarantee that <span class="arithmatex">\(E\)</span> produces result <span class="arithmatex">\(R'\)</span> with <span class="arithmatex">\(\|R - R'\| &lt; \epsilon\)</span> on machine <span class="arithmatex">\(M'\)</span> at time <span class="arithmatex">\(t' &gt; t\)</span>?</em></p>
+<p>The problem is harder than it appears. The result <span class="arithmatex">\(R\)</span> depends not only on the code but on the entire computational environment: the operating system, the installed libraries, the GPU driver version, the CUDA toolkit, the Python interpreter, and dozens of other components. Any of these may change between <span class="arithmatex">\(t\)</span> and <span class="arithmatex">\(t'\)</span>, and any change may affect <span class="arithmatex">\(R\)</span>.</p>
+<p>In the tradition of Hadamard, we ask: Is the reproducibility problem <em>well-posed</em>?</p>
+<p><strong>Definition (Well-Posedness for Reproducibility).</strong> <em>The reproducibility problem is well-posed if: (1) there exists an environment specification <span class="arithmatex">\(S\)</span> such that running <span class="arithmatex">\(E\)</span> in any environment satisfying <span class="arithmatex">\(S\)</span> produces consistent results; (2) the specification <span class="arithmatex">\(S\)</span> is unique up to equivalence; (3) small perturbations to <span class="arithmatex">\(S\)</span> produce small perturbations to <span class="arithmatex">\(R\)</span>.</em></p>
+<p>Condition (1) requires that we can <em>specify</em> an environment precisely enough to guarantee consistency. Condition (2) requires that the specification be <em>canonical</em>--that there not be multiple incompatible specifications claiming to represent the same environment. Condition (3) requires <em>stability</em>--that the result not be arbitrarily sensitive to minor environmental variations.</p>
+<p>Containerization addresses all three conditions. A Docker image provides a complete, self-contained specification of the computational environment. The image is identified by a content-addressable hash, ensuring uniqueness. And the layered filesystem ensures that small changes to the specification (adding a package, changing a configuration) produce small changes to the resulting environment.</p>
+<p>This is why we containerize: not for convenience, but for <em>scientific validity</em>.</p>
+<h3 id="12-the-specific-problem-of-this-chapter">1.2 The Specific Problem of This Chapter</h3>
+<p>Within the general reproducibility framework, this chapter addresses a specific sub-problem:</p>
+<p><strong>Problem (Environment Verification).</strong> <em>Construct and verify a containerized environment <span class="arithmatex">\(S\)</span> such that: (1) GPU computation is available within <span class="arithmatex">\(S\)</span>; (2) MuJoCo physics simulation runs correctly within <span class="arithmatex">\(S\)</span>; (3) headless rendering produces valid images within <span class="arithmatex">\(S\)</span>; (4) a complete training loop executes without error within <span class="arithmatex">\(S\)</span>.</em></p>
+<p>Each condition is necessary for the reinforcement learning experiments that follow. Without GPU access, training is prohibitively slow. Without MuJoCo, we cannot simulate the Fetch robot. Without rendering, we cannot generate evaluation videos. Without a working training loop, we cannot learn policies.</p>
+<p>The verification is not optional. A researcher who skips this chapter and proceeds directly to training will eventually encounter failures--rendering errors, CUDA misconfigurations, import failures--and will spend more time debugging than if they had verified the environment systematically from the start.</p>
+<hr />
+<h2 id="part-ii-the-method">Part II: The Method</h2>
+<h3 id="21-how-containerization-as-environment-specification">2.1 HOW: Containerization as Environment Specification</h3>
+<p>Our approach is to specify the environment as a Docker container and to verify each requirement through explicit tests.</p>
+<p><strong>Definition (Container).</strong> <em>A container is a lightweight, isolated execution environment defined by an image. The image specifies the filesystem contents, environment variables, and default commands. Containers share the host kernel but have isolated process and network namespaces.</em></p>
+<p><strong>Definition (Image).</strong> <em>An image is an immutable template from which containers are instantiated. Images are identified by a content-addressable hash (digest) and may be tagged with human-readable names (e.g., <code>robotics-rl:latest</code>).</em></p>
+<p>The key property of containers for our purposes is <em>isolation with specification</em>. The container is isolated from the host environment--packages installed on the host do not affect the container--but the isolation is precisely specified by the image, which can be versioned, shared, and reconstructed.</p>
+<p><strong>Remark (On the Choice of Docker).</strong> <em>We use Docker rather than alternatives (Singularity, Podman, etc.) because Docker is ubiquitous, well-documented, and fully supported by the NVIDIA Container Toolkit. For HPC environments where Docker is unavailable, the concepts transfer to Singularity with minor modifications.</em></p>
+<h3 id="22-the-verification-protocol">2.2 The Verification Protocol</h3>
+<p>Verification is not bureaucracy. It is the empirical side of our well-posedness analysis. Each test corresponds to a necessary condition for the experiments that follow. If any test fails, some class of experiments becomes impossible. Understanding <em>why</em> each test matters--not just <em>what</em> it checks--is essential for diagnosing failures when they occur.</p>
+<h4 id="test-1-gpu-access">Test 1: GPU Access</h4>
+<p><strong>What we verify.</strong> The container can access the host GPU via the NVIDIA runtime.</p>
+<p><strong>Why this matters.</strong> Reinforcement learning with neural network function approximators is computationally intensive. A single training run may require <span class="arithmatex">\(10^6\)</span>-<span class="arithmatex">\(10^7\)</span> gradient updates, each involving forward and backward passes through networks with <span class="arithmatex">\(10^5\)</span>-<span class="arithmatex">\(10^6\)</span> parameters. On CPU, this takes days or weeks. On GPU, it takes hours.</p>
+<p>But GPU access inside a container is not automatic. The container runs in an isolated namespace; it cannot see host devices unless explicitly granted access. The <code>--gpus all</code> flag instructs Docker to use the NVIDIA Container Toolkit, which mounts the GPU device files and driver libraries into the container.</p>
+<p><strong>What failure means.</strong> If this test fails, either:
+1. The NVIDIA driver is not installed on the host
+2. The NVIDIA Container Toolkit is not installed
+3. Docker was not invoked with <code>--gpus all</code>
+4. The GPU is in use by another process with exclusive access</p>
+<p>Training will still <em>run</em> on CPU, but it will be 10-100× slower, making iterative experimentation impractical.</p>
+<p><strong>The test.</strong> Run <code>nvidia-smi</code> inside the container. This command queries the NVIDIA driver for GPU status. If it succeeds, the container has GPU access. If it fails with "command not found" or "NVIDIA-SMI has failed," the container cannot see the GPU.</p>
+<h4 id="test-2-mujoco-and-gymnasium-robotics-functionality">Test 2: MuJoCo and Gymnasium-Robotics Functionality</h4>
+<p><strong>What we verify.</strong> The physics simulator initializes correctly, and the Fetch environments are registered and functional.</p>
+<p><strong>Why this matters.</strong> The Fetch environments are implemented on top of MuJoCo, a physics engine that simulates rigid body dynamics with contact. MuJoCo is not a pure Python library; it includes compiled C code that interfaces with system libraries. If these libraries are missing or incompatible, MuJoCo fails to initialize.</p>
+<p>Furthermore, Gymnasium-Robotics must register its environments with Gymnasium's registry. This registration happens at import time. If the import fails silently or the registration is incomplete, <code>gym.make("FetchReach-v4")</code> will raise <code>EnvironmentNameNotFound</code>.</p>
+<p><strong>What failure means.</strong> If this test fails, either:
+1. MuJoCo's compiled extensions cannot find required system libraries
+2. The <code>gymnasium-robotics</code> package is not installed
+3. There is a version incompatibility between <code>gymnasium</code>, <code>gymnasium-robotics</code>, and <code>mujoco</code></p>
+<p>Without functional Fetch environments, the entire curriculum is blocked.</p>
+<p><strong>The test.</strong> Import <code>gymnasium</code> and <code>gymnasium_robotics</code>, then call <code>gym.make("FetchReachDense-v4")</code> and <code>env.reset()</code>. If the environment returns a valid observation dictionary with keys <code>observation</code>, <code>achieved_goal</code>, and <code>desired_goal</code>, the physics stack is functional.</p>
+<h4 id="test-3-headless-rendering">Test 3: Headless Rendering</h4>
+<p><strong>What we verify.</strong> The environment can produce RGB frames without a display.</p>
+<p><strong>Why this matters.</strong> Evaluation often requires visual inspection: Does the robot reach the goal? Is the motion smooth or jerky? Does the gripper close at the right moment? These questions are answered by watching videos, which requires rendering.</p>
+<p>But DGX systems are headless--they have no monitor attached. Rendering typically requires a display server (X11) to manage the graphics context. On a headless system, we must use <em>offscreen</em> rendering: EGL (hardware-accelerated via the GPU) or OSMesa (software rasterization).</p>
+<p>This is where many setups fail. EGL requires specific driver support and library versions. OSMesa requires Mesa to be compiled with offscreen support. If neither works, rendering is impossible.</p>
+<p><strong>What failure means.</strong> If this test fails, either:
+1. EGL libraries (<code>libEGL.so</code>) are missing or incompatible
+2. The GPU driver does not expose EGL support
+3. OSMesa libraries (<code>libOSMesa.so</code>) are missing
+4. Environment variables (<code>MUJOCO_GL</code>, <code>PYOPENGL_PLATFORM</code>) are misconfigured</p>
+<p>Training can proceed without rendering, but evaluation will be limited to numerical metrics. You will not be able to generate videos or visually debug policy behavior.</p>
+<p><strong>The test.</strong> Create a Fetch environment with <code>render_mode="rgb_array"</code>, call <code>env.render()</code>, and save the resulting numpy array as a PNG image. If the image file exists and is non-empty, offscreen rendering works.</p>
+<p><strong>Remark (The Fallback Chain).</strong> The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if <em>any</em> backend produces a valid image.</p>
+<h4 id="test-4-training-loop-completion">Test 4: Training Loop Completion</h4>
+<p><strong>What we verify.</strong> A complete training loop--environment interaction, gradient computation, parameter updates, checkpoint saving--executes without error.</p>
+<p><strong>Why this matters.</strong> The previous tests verified components in isolation: GPU access, physics simulation, rendering. But reinforcement learning combines these components in complex ways. Data flows from the environment to the replay buffer to the neural network and back. Shapes must match. Dtypes must be compatible. Memory must not leak.</p>
+<p>Many bugs only manifest when components interact. A shape mismatch between the observation space and the policy network. A dtype incompatibility between numpy arrays and PyTorch tensors. A memory leak that only appears after thousands of environment steps. These bugs do not appear in unit tests; they appear when you run training.</p>
+<p><strong>What failure means.</strong> If this test fails, either:
+1. The policy network architecture is incompatible with the observation space
+2. There is a dtype or device mismatch (CPU vs. CUDA tensors)
+3. The training loop has a bug that manifests only after some number of steps
+4. The checkpoint serialization format is incompatible with the model architecture</p>
+<p>Until this test passes, you cannot train policies.</p>
+<p><strong>The test.</strong> Run PPO for 50,000 timesteps on <code>FetchReachDense-v4</code> with 8 parallel environments, then save a checkpoint. If the checkpoint file exists and is loadable by <code>PPO.load()</code>, the training loop is functional.</p>
+<p><strong>Remark (Why PPO, Not SAC).</strong> We use PPO for this smoke test because it is simpler and fails faster if something is wrong. SAC involves additional components (replay buffer, twin critics, entropy tuning) that could mask or compound errors. Once PPO works, we have confidence that the core training infrastructure is sound; SAC-specific issues can be debugged separately.</p>
+<h4 id="the-logical-structure">The Logical Structure</h4>
+<p>The four tests form a dependency chain:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>GPU Access → MuJoCo Functionality → Headless Rendering → Training Loop
+</code></pre></div>
+<p>Each test assumes the previous tests pass. There is no point testing rendering if MuJoCo cannot initialize. There is no point testing training if the GPU is inaccessible (training would "work" but be too slow to iterate).</p>
+<p><strong>Run the tests in order.</strong> If a test fails, diagnose and fix it before proceeding. The proof-of-life script's <code>all</code> subcommand respects this ordering and stops at the first failure.</p>
+<p>These tests are implemented in <code>scripts/ch00_proof_of_life.py</code>. The script provides subcommands for running each test individually (<code>list-envs</code>, <code>render</code>, <code>ppo-smoke</code>) or all tests in sequence (<code>all</code>).</p>
+<h3 id="23-the-container-architecture">2.3 The Container Architecture</h3>
+<p>Our container architecture consists of two layers:</p>
+<p><strong>Base Layer.</strong> We use the NVIDIA PyTorch image (<code>nvcr.io/nvidia/pytorch:25.12-py3</code>) as the base. This image provides CUDA, cuDNN, PyTorch, and other deep learning infrastructure pre-configured and tested by NVIDIA.</p>
+<p><strong>Project Layer.</strong> On top of the base, we install system dependencies for MuJoCo rendering (EGL, OSMesa) and Python dependencies for the project (Gymnasium, Gymnasium-Robotics, Stable Baselines 3). These are specified in the <code>docker/Dockerfile</code>, which builds the <code>robotics-rl:latest</code> image:</p>
+<ul>
+<li><strong>System packages:</strong> <code>libegl1</code>, <code>libgl1</code>, <code>libosmesa6</code> (headless rendering), <code>libglfw3</code> (windowed rendering), <code>ffmpeg</code> (video encoding)</li>
+<li><strong>Python packages:</strong> <code>gymnasium</code>, <code>gymnasium-robotics</code>, <code>mujoco</code>, <code>stable-baselines3</code>, <code>tensorboard</code>, <code>imageio</code>, <code>wandb</code></li>
+</ul>
+<p>The <code>docker/dev.sh</code> script automatically builds this image on first run if it does not exist locally. If the build fails (e.g., network issues), it falls back to the raw NVIDIA base image--but rendering may be unavailable in that case.</p>
+<p><strong>Remark (On the Two-Layer Architecture).</strong> <em>The separation into base and project layers reflects a design principle: heavyweight, stable dependencies (CUDA, PyTorch) belong in the base layer; lightweight, project-specific dependencies belong in the project layer. This separation enables faster iteration--changing project dependencies does not require rebuilding the entire CUDA stack--while maintaining reproducibility.</em></p>
+<h3 id="24-the-virtual-environment-within-the-container">2.4 The Virtual Environment Within the Container</h3>
+<p>A subtle point deserves elaboration. We use a Python virtual environment <em>inside</em> the container, even though the container already provides isolation.</p>
+<p><strong>Proposition.</strong> <em>A virtual environment inside a container provides additional benefits: (1) it enables <code>pip install -e .</code> for editable installs of the project; (2) it allows project dependencies to shadow container dependencies when necessary; (3) it makes the dependency specification explicit in <code>requirements.txt</code> rather than implicit in the Dockerfile.</em></p>
+<p>The virtual environment is created with <code>--system-site-packages</code>, which allows it to inherit packages from the container's system Python. This avoids reinstalling PyTorch (which is large and CUDA-specific) while still allowing project-specific packages to be installed separately.</p>
+<hr />
+<h2 id="part-iii-the-implementation">Part III: The Implementation</h2>
+<h3 id="31-what-the-concrete-steps">3.1 WHAT: The Concrete Steps</h3>
+<p>We now describe the concrete steps to establish and verify the environment.</p>
+<h4 id="step-1-verify-host-prerequisites">Step 1: Verify Host Prerequisites</h4>
+<p>Before using containers, we must verify that the host system is properly configured.</p>
+<p><strong>Verification (Docker Availability).</strong> Run <code>docker --version</code> on the host. The test passes if Docker reports a version number.</p>
+<p><strong>Verification (NVIDIA Runtime).</strong> Run <code>docker run --rm --gpus all nvcr.io/nvidia/pytorch:25.12-py3 nvidia-smi</code> on the host. The test passes if <code>nvidia-smi</code> output appears showing at least one GPU.</p>
+<p>If either test fails, consult your system administrator. This tutorial does not cover Docker installation or NVIDIA runtime configuration.</p>
+<h4 id="step-2-enter-the-development-environment">Step 2: Enter the Development Environment</h4>
+<p>The repository provides a wrapper script that automates container setup:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">cd</span><span class="w"> </span>/home/vladp/src/robotics
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>bash<span class="w"> </span>docker/dev.sh
+</code></pre></div>
+<p>This script performs the following operations:</p>
+<ol>
+<li>Checks for the <code>robotics-rl:latest</code> image; builds it if missing</li>
+<li>Launches a container with GPU access and appropriate environment variables</li>
+<li>Mounts the repository at <code>/workspace</code></li>
+<li>Runs as your host UID/GID to avoid permission issues</li>
+<li>Creates <code>.venv</code> if it does not exist and installs <code>requirements.txt</code></li>
+<li>Activates the virtual environment and drops you into a shell</li>
+</ol>
+<p>Alternatively, to run a single command without entering an interactive shell:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>all
+</code></pre></div>
+<h4 id="step-3-verify-fetch-environment-availability">Step 3: Verify Fetch Environment Availability</h4>
+<p>Inside the container (or via <code>docker/dev.sh</code>), run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>list-envs
+</code></pre></div>
+<p><strong>Expected Output.</strong> A list of environment IDs including <code>FetchReach-v4</code>, <code>FetchReachDense-v4</code>, <code>FetchPush-v4</code>, <code>FetchPickAndPlace-v4</code>, and their variants.</p>
+<p><strong>Failure Mode.</strong> If no Fetch environments appear, <code>gymnasium-robotics</code> is not installed correctly. Verify with <code>pip list | grep gymnasium</code>.</p>
+<h4 id="step-4-verify-headless-rendering">Step 4: Verify Headless Rendering</h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>render<span class="w"> </span>--out<span class="w"> </span>smoke_frame.png
+</code></pre></div>
+<p><strong>Expected Output.</strong> A message indicating successful rendering and the creation of <code>smoke_frame.png</code>.</p>
+<p><strong>Failure Mode.</strong> If rendering fails with EGL errors, the script attempts fallback to OSMesa. If both fail, rendering is disabled. You can still train policies, but you cannot generate videos.</p>
+<p><strong>Remark (Rendering Backend Hierarchy).</strong> <em>The script implements a fallback chain: EGL (hardware-accelerated) → OSMesa (software) → disabled. EGL requires NVIDIA drivers and EGL libraries; OSMesa requires the Mesa library. The <code>robotics-rl:latest</code> image includes both.</em></p>
+<h4 id="step-5-verify-training-loop">Step 5: Verify Training Loop</h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>ppo-smoke<span class="w"> </span>--n-envs<span class="w"> </span><span class="m">8</span><span class="w"> </span>--total-steps<span class="w"> </span><span class="m">50000</span><span class="w"> </span>--out<span class="w"> </span>ppo_smoke
+</code></pre></div>
+<p><strong>Expected Output.</strong> Training progress messages followed by the creation of <code>ppo_smoke.zip</code>.</p>
+<p><strong>Failure Mode.</strong> CUDA errors indicate GPU misconfiguration. Shape mismatch errors indicate problems with observation space handling. Import errors indicate missing dependencies.</p>
+<h4 id="step-6-combined-verification">Step 6: Combined Verification</h4>
+<p>For convenience, all tests can be run in sequence:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>all
+</code></pre></div>
+<p>This is the recommended way to verify a fresh installation.</p>
+<h3 id="32-mac-m4-apple-silicon-support">3.2 Mac M4 (Apple Silicon) Support</h3>
+<p>The platform also supports development on Apple Silicon Macs (M4, M3, M2, M1). The same <code>docker/dev.sh</code> command works on both platforms--the script auto-detects the host and configures appropriately.</p>
+<h4 id="platform-differences">Platform Differences</h4>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>DGX / NVIDIA</th>
+<th>Mac M4 (Apple Silicon)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Architecture</strong></td>
+<td>x86_64</td>
+<td>ARM64</td>
+</tr>
+<tr>
+<td><strong>Docker image</strong></td>
+<td><code>robotics-rl:latest</code></td>
+<td><code>robotics-rl:mac</code></td>
+</tr>
+<tr>
+<td><strong>Dockerfile</strong></td>
+<td><code>docker/Dockerfile</code></td>
+<td><code>docker/Dockerfile.mac</code></td>
+</tr>
+<tr>
+<td><strong>Base image</strong></td>
+<td><code>nvcr.io/nvidia/pytorch:25.12-py3</code></td>
+<td><code>python:3.11-slim</code></td>
+</tr>
+<tr>
+<td><strong>Compute device</strong></td>
+<td>CUDA (GPU)</td>
+<td>CPU only</td>
+</tr>
+<tr>
+<td><strong>Rendering backend</strong></td>
+<td>EGL (hardware)</td>
+<td>OSMesa (software)</td>
+</tr>
+<tr>
+<td><strong>Typical throughput</strong></td>
+<td>~600 fps</td>
+<td>~60-100 fps</td>
+</tr>
+</tbody>
+</table>
+<h4 id="why-cpu-only-on-mac">Why CPU-Only on Mac?</h4>
+<p>Apple's Metal Performance Shaders (MPS) backend for PyTorch exists but has edge cases with certain operations. For maximum compatibility and to avoid subtle bugs, we use CPU on Mac. This is perfectly adequate for development and debugging--the physics simulation in MuJoCo is CPU-bound anyway.</p>
+<p><strong>Remark (On Performance).</strong> <em>The 6-10x slower throughput on Mac is expected. The bottleneck is MuJoCo physics simulation, which runs on CPU regardless of platform. On DGX, the GPU handles neural network operations in microseconds, so the CPU is the bottleneck. On Mac, both physics and neural networks run on CPU, compounding the slowdown. This is acceptable for development; use DGX for serious training runs.</em></p>
+<h4 id="usage-on-mac">Usage on Mac</h4>
+<p>The commands are identical:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Build image (auto-detects Mac, uses Dockerfile.mac)</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>bash<span class="w"> </span>docker/build.sh
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Run proof of life (auto-detects Mac, uses robotics-rl:mac)</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>all
+</code></pre></div>
+<p>The platform detection uses <code>uname -s</code> (Darwin for Mac) and <code>uname -m</code> (arm64 for Apple Silicon).</p>
+<h4 id="verification">Verification</h4>
+<p>Run the same commands on each platform:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Build image (platform auto-detected)</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>bash<span class="w"> </span>docker/build.sh
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Run proof of life</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch00_proof_of_life.py<span class="w"> </span>all
+</code></pre></div>
+<p><strong>Expected results by platform:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Mac M4</th>
+<th>DGX / NVIDIA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Device reported</td>
+<td><code>cpu</code></td>
+<td><code>cuda</code></td>
+</tr>
+<tr>
+<td>Rendering backend</td>
+<td><code>osmesa</code></td>
+<td><code>egl</code></td>
+</tr>
+<tr>
+<td>Training throughput</td>
+<td>~60-100 fps</td>
+<td>~600 fps</td>
+</tr>
+<tr>
+<td><code>smoke_frame.png</code></td>
+<td>Yes (Fetch robot visible)</td>
+<td>Yes (Fetch robot visible)</td>
+</tr>
+<tr>
+<td><code>ppo_smoke.zip</code></td>
+<td>Yes (loadable)</td>
+<td>Yes (loadable)</td>
+</tr>
+<tr>
+<td>All tests pass</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p>All tests should pass on both platforms, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX--the learned weights are platform-independent.</p>
+<h4 id="known-limitations">Known Limitations</h4>
+<ol>
+<li>
+<p><strong>Performance</strong>: CPU training is ~10-20x slower than CUDA. Mac is suitable for development, debugging, and small experiments. For serious training (&gt;100k timesteps), use DGX.</p>
+</li>
+<li>
+<p><strong>Rendering quality</strong>: OSMesa (software rendering) produces identical images to EGL but is slower. This matters only for video generation, not for training.</p>
+</li>
+<li>
+<p><strong>Docker Desktop memory</strong>: You may need to increase Docker Desktop's memory allocation (Settings -&gt; Resources -&gt; Memory) to 8GB+ for large batch sizes or long training runs.</p>
+</li>
+<li>
+<p><strong>No MPS (Apple GPU) support</strong>: MPS (Metal Performance Shaders) cannot work in Docker containers because Docker runs Linux, not macOS. MPS is a macOS-only API that requires direct access to Apple's Metal framework. Inside a Linux container, <code>torch.backends.mps.is_available()</code> always returns False, regardless of the host being an M4 Mac.</p>
+</li>
+</ol>
+<h4 id="docker-desktop-configuration-for-mac">Docker Desktop Configuration for Mac</h4>
+<p>If you encounter out-of-memory errors:</p>
+<ol>
+<li>Open Docker Desktop</li>
+<li>Go to Settings (gear icon)</li>
+<li>Select "Resources"</li>
+<li>Increase "Memory" to at least 8 GB</li>
+<li>Click "Apply &amp; restart"</li>
+</ol>
+<hr />
+<h2 id="part-iv-analysis-and-verification">Part IV: Analysis and Verification</h2>
+<h3 id="41-interpreting-the-results">4.1 Interpreting the Results</h3>
+<p>Upon successful completion of all tests, the following artifacts should exist:</p>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>Purpose</th>
+<th>Expected Properties</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.venv/</code></td>
+<td>Python virtual environment</td>
+<td>Contains <code>gymnasium</code>, <code>stable-baselines3</code>, etc.</td>
+</tr>
+<tr>
+<td><code>smoke_frame.png</code></td>
+<td>Rendered frame</td>
+<td>Non-empty PNG, shows Fetch robot</td>
+</tr>
+<tr>
+<td><code>ppo_smoke.zip</code></td>
+<td>Trained checkpoint</td>
+<td>Non-empty ZIP, loadable by SB3</td>
+</tr>
+</tbody>
+</table>
+<p>The existence and properties of these artifacts constitute empirical verification that the environment is correctly configured.</p>
+<h3 id="42-on-the-meaning-of-proof-of-life">4.2 On the Meaning of "Proof of Life"</h3>
+<p>The term "proof of life" is borrowed from hostage negotiations, where it refers to evidence that a hostage is still alive. In our context, it refers to evidence that the computational environment is functional.</p>
+<p>This is not mere metaphor. A misconfigured environment is, from the perspective of reproducible science, <em>dead</em>: it cannot produce results that can be trusted or reproduced. The tests in this chapter establish that our environment is <em>alive</em>--capable of producing valid, reproducible results.</p>
+<h3 id="43-what-this-chapter-does-not-verify">4.3 What This Chapter Does Not Verify</h3>
+<p>This chapter verifies that the environment is functional; it does not verify that training produces good policies. The PPO smoke test runs for only 50,000 timesteps, which is insufficient for convergence. The purpose is to confirm that the training loop executes, not that it produces useful results.</p>
+<p>Verification of learning performance is deferred to Chapter 2, where we establish PPO baselines with proper evaluation protocols.</p>
+<hr />
+<h2 id="part-v-deliverables">Part V: Deliverables</h2>
+<p>Upon completion of this chapter, the following must be true:</p>
+<p><strong>D1.</strong> The command <code>bash docker/dev.sh</code> enters a container shell with an activated virtual environment.</p>
+<p><strong>D2.</strong> The file <code>smoke_frame.png</code> exists and contains a valid image (viewable in an image viewer, showing the Fetch robot).</p>
+<p><strong>D3.</strong> The file <code>ppo_smoke.zip</code> exists and is a valid Stable Baselines 3 checkpoint (loadable via <code>PPO.load("ppo_smoke.zip")</code>).</p>
+<p><strong>D4.</strong> All four tests in <code>scripts/ch00_proof_of_life.py all</code> pass without error.</p>
+<p>A reader who cannot satisfy all four conditions has not completed this chapter and should not proceed.</p>
+<hr />
+<h2 id="appendix-a-troubleshooting">Appendix A: Troubleshooting</h2>
+<h3 id="a1-permission-denied-when-running-docker">A.1 "Permission denied" When Running Docker</h3>
+<p><strong>Symptom.</strong> <code>docker: Got permission denied while trying to connect to the Docker daemon socket.</code></p>
+<p><strong>Cause.</strong> Your user is not in the <code>docker</code> group.</p>
+<p><strong>Resolution.</strong> Either add your user to the <code>docker</code> group (<code>sudo usermod -aG docker $USER</code>, then log out and back in) or run Docker commands with <code>sudo</code>.</p>
+<h3 id="a2-i-have-no-name-in-the-container-shell">A.2 "I have no name!" in the Container Shell</h3>
+<p><strong>Symptom.</strong> The shell prompt shows <code>I have no name!@&lt;container-id&gt;</code>.</p>
+<p><strong>Cause.</strong> The container is running as your numeric UID, which has no entry in <code>/etc/passwd</code> inside the container.</p>
+<p><strong>Impact.</strong> None. This is cosmetic. File permissions work correctly.</p>
+<h3 id="a3-egl-initialization-failures">A.3 EGL Initialization Failures</h3>
+<p><strong>Symptom.</strong> <code>mujoco.FatalError: gladLoadGL error</code> or similar EGL errors.</p>
+<p><strong>Cause.</strong> EGL libraries are missing or the GPU driver does not support EGL.</p>
+<p><strong>Resolution.</strong> The <code>robotics-rl:latest</code> image includes EGL libraries. If using a different base image, install <code>libegl1</code> and <code>libgl1</code>. If EGL is unavailable, the script falls back to OSMesa.</p>
+<h3 id="a4-dependency-hash-mismatch">A.4 Dependency Hash Mismatch</h3>
+<p><strong>Symptom.</strong> <code>docker/dev.sh</code> reinstalls packages on every run.</p>
+<p><strong>Cause.</strong> The requirements hash file (<code>.venv/.requirements_hash</code>) is missing or corrupt.</p>
+<p><strong>Resolution.</strong> Delete <code>.venv</code> and re-run <code>docker/dev.sh</code> to recreate the environment.</p>
+<hr />
+<h2 id="appendix-b-environment-variable-reference">Appendix B: Environment Variable Reference</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Value</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MUJOCO_GL</code></td>
+<td><code>egl</code></td>
+<td>Selects EGL rendering backend</td>
+</tr>
+<tr>
+<td><code>PYOPENGL_PLATFORM</code></td>
+<td><code>egl</code></td>
+<td>Configures PyOpenGL for EGL</td>
+</tr>
+<tr>
+<td><code>NVIDIA_DRIVER_CAPABILITIES</code></td>
+<td><code>all</code></td>
+<td>Enables full GPU access in container</td>
+</tr>
+</tbody>
+</table>
+<p>These variables are set automatically by <code>docker/dev.sh</code>. If you launch containers manually, you must set them explicitly.</p>
+<hr />
+<p><strong>Next.</strong> With the experimental environment verified, proceed to Chapter 1 to examine the structure of goal-conditioned Fetch environments.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: Overview">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Overview
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../ch01_fetch_env_anatomy/" class="md-footer__link md-footer__link--next" aria-label="Next: Chapter 1: Environment Anatomy">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Chapter 1: Environment Anatomy
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.footer", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

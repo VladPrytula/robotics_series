@@ -1,0 +1,2288 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A Docker-first RL research platform for Fetch manipulation tasks">
+      
+      
+      
+        <link rel="canonical" href="https://vladprytula.github.io/robotics_series/tutorials/ch01_fetch_env_anatomy/">
+      
+      
+        <link rel="prev" href="../ch00_containerized_dgx_proof_of_life/">
+      
+      
+        <link rel="next" href="../../syllabus/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Chapter 1: Environment Anatomy - Goal-Conditioned Robotic Manipulation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chapter-1-the-anatomy-of-goal-conditioned-fetch-environments" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-header__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goal-Conditioned Robotic Manipulation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Chapter 1: Environment Anatomy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../syllabus/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Syllabus
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-nav__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Goal-Conditioned Robotic Manipulation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ch00_containerized_dgx_proof_of_life/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 0: Proof of Life
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 1: Environment Anatomy
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 1: Environment Anatomy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#abstract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Abstract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-0-the-practical-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 0: The Practical Context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 0: The Practical Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#01-where-we-are" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1 Where We Are
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#02-what-we-are-simulating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2 What We Are Simulating
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#03-what-we-are-doing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3 What We Are Doing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#04-the-four-fetch-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4 The Four Fetch Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#05-why-environment-anatomy-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5 Why Environment Anatomy Matters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#06-what-this-chapter-produces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6 What This Chapter Produces
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-i-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part I: The Problem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part I: The Problem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-why-the-goal-conditioning-paradigm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 WHY: The Goal-Conditioning Paradigm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-specific-questions-of-this-chapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 The Specific Questions of This Chapter
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-ii-the-mathematical-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part II: The Mathematical Framework
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part II: The Mathematical Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-how-the-goal-conditioned-mdp-formalism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 HOW: The Goal-Conditioned MDP Formalism
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-fetch-environment-as-goal-conditioned-mdp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 The Fetch Environment as Goal-Conditioned MDP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-the-dictionary-observation-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 The Dictionary Observation Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-the-compute_reward-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 The compute_reward Function
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iii-the-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part III: The Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part III: The Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-what-empirical-verification-of-the-mathematical-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 WHAT: Empirical Verification of the Mathematical Structure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 WHAT: Empirical Verification of the Mathematical Structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#311-enumerating-available-environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.1 Enumerating Available Environments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#312-describing-observation-and-action-spaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.2 Describing Observation and Action Spaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-action-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Action Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-reward-consistency-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Reward Consistency Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-random-baseline-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Random Baseline Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iv-theoretical-implications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part IV: Theoretical Implications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part IV: Theoretical Implications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-why-the-dictionary-structure-enables-her" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Why the Dictionary Structure Enables HER
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-the-sparse-vs-dense-reward-trade-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 The Sparse vs. Dense Reward Trade-off
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-the-observation-dimension-and-policy-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 The Observation Dimension and Policy Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-v-deliverables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part V: Deliverables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-vi-connections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part VI: Connections
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part VI: Connections">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-connection-to-chapter-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 Connection to Chapter 0
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-connection-to-chapter-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 Connection to Chapter 2
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-connection-to-chapter-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 Connection to Chapter 4
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-observation-component-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Observation Component Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Observation Component Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-fetchreach-observation-10-dimensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 FetchReach Observation (10 dimensions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-fetchpushpickandplace-observation-25-dimensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 FetchPush/PickAndPlace Observation (25 dimensions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-formal-verification-of-her-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Formal Verification of HER Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../syllabus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Syllabus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#abstract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Abstract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-0-the-practical-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 0: The Practical Context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 0: The Practical Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#01-where-we-are" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1 Where We Are
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#02-what-we-are-simulating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2 What We Are Simulating
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#03-what-we-are-doing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3 What We Are Doing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#04-the-four-fetch-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4 The Four Fetch Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#05-why-environment-anatomy-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5 Why Environment Anatomy Matters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#06-what-this-chapter-produces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6 What This Chapter Produces
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-i-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part I: The Problem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part I: The Problem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-why-the-goal-conditioning-paradigm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 WHY: The Goal-Conditioning Paradigm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-specific-questions-of-this-chapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 The Specific Questions of This Chapter
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-ii-the-mathematical-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part II: The Mathematical Framework
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part II: The Mathematical Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-how-the-goal-conditioned-mdp-formalism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 HOW: The Goal-Conditioned MDP Formalism
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-fetch-environment-as-goal-conditioned-mdp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 The Fetch Environment as Goal-Conditioned MDP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-the-dictionary-observation-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 The Dictionary Observation Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-the-compute_reward-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 The compute_reward Function
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iii-the-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part III: The Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part III: The Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-what-empirical-verification-of-the-mathematical-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 WHAT: Empirical Verification of the Mathematical Structure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 WHAT: Empirical Verification of the Mathematical Structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#311-enumerating-available-environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.1 Enumerating Available Environments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#312-describing-observation-and-action-spaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.2 Describing Observation and Action Spaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-action-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Action Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-reward-consistency-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Reward Consistency Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-random-baseline-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Random Baseline Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-iv-theoretical-implications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part IV: Theoretical Implications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part IV: Theoretical Implications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-why-the-dictionary-structure-enables-her" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Why the Dictionary Structure Enables HER
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-the-sparse-vs-dense-reward-trade-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 The Sparse vs. Dense Reward Trade-off
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-the-observation-dimension-and-policy-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 The Observation Dimension and Policy Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-v-deliverables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part V: Deliverables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-vi-connections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part VI: Connections
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part VI: Connections">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-connection-to-chapter-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 Connection to Chapter 0
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-connection-to-chapter-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 Connection to Chapter 2
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-connection-to-chapter-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 Connection to Chapter 4
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-observation-component-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Observation Component Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Observation Component Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-fetchreach-observation-10-dimensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 FetchReach Observation (10 dimensions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-fetchpushpickandplace-observation-25-dimensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 FetchPush/PickAndPlace Observation (25 dimensions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-formal-verification-of-her-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Formal Verification of HER Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="chapter-1-the-anatomy-of-goal-conditioned-fetch-environments">Chapter 1: The Anatomy of Goal-Conditioned Fetch Environments</h1>
+<h2 id="abstract">Abstract</h2>
+<p>This chapter develops a precise understanding of what a reinforcement learning agent "perceives" when interacting with a Gymnasium-Robotics Fetch environment. We formalize the observation space, action space, and reward function--not as implementation details to be glossed over, but as mathematical structures whose properties determine what algorithms can and cannot accomplish.</p>
+<p>The central result of this chapter is that Fetch environments implement a specific mathematical structure: the <em>goal-conditioned Markov Decision Process</em>. This structure--characterized by observation dictionaries with explicit goal representations and reward functions that can be evaluated for arbitrary goals--is not merely a design choice; it is the mathematical substrate that enables Hindsight Experience Replay and related techniques. A researcher who does not understand this structure cannot use those techniques correctly.</p>
+<hr />
+<h2 id="part-0-the-practical-context">Part 0: The Practical Context</h2>
+<h3 id="01-where-we-are">0.1 Where We Are</h3>
+<p>You have completed Chapter 0. You now have:
+- A working Docker container with GPU access
+- MuJoCo physics simulation running headlessly
+- A verified training loop that produces checkpoints</p>
+<p>You are running on a DGX cluster (or similar GPU workstation). Your environment is reproducible: anyone with the same Docker image and code can replicate your results.</p>
+<p><strong>How to Execute Commands.</strong> All commands in this curriculum run through the Docker wrapper:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>&lt;your-command&gt;
+</code></pre></div>
+<p>For example:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Run a specific script</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch01_env_anatomy.py<span class="w"> </span>describe
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Start an interactive shell inside the container</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>bash<span class="w"> </span>docker/dev.sh
+</code></pre></div></p>
+<p>When you run <code>bash docker/dev.sh python some_script.py</code>, the following happens:</p>
+<ol>
+<li><strong>Container launches</strong> with GPU access (<code>--gpus all</code>) and your repository mounted at <code>/workspace</code></li>
+<li><strong>Virtual environment</strong> is created (first run) or activated in <code>.venv/</code></li>
+<li><strong>Dependencies</strong> from <code>requirements.txt</code> are installed (cached by hash--reinstalls only when requirements change)</li>
+<li><strong>Your command executes</strong> inside this isolated environment</li>
+<li><strong>Container exits</strong> when the command completes (or stays open for interactive shells)</li>
+</ol>
+<p>The script preserves your host user ID, so files created inside the container are owned by you, not root.</p>
+<p><strong>First Run.</strong> On first invocation, <code>dev.sh</code> builds the Docker image <code>robotics-rl:latest</code> from <code>docker/Dockerfile</code>. This takes several minutes but only happens once. Subsequent runs start in seconds.</p>
+<h3 id="02-what-we-are-simulating">0.2 What We Are Simulating</h3>
+<p>We are training neural network policies to control a <strong>simulated robot</strong> in a <strong>physics engine</strong>. Let us be precise about what this means.</p>
+<p><strong>The Physics Engine: MuJoCo.</strong> MuJoCo (Multi-Joint dynamics with Contact) is a physics simulator designed for robotics and biomechanics research. It computes:
+- Rigid body dynamics (how objects move under forces)
+- Contact forces (what happens when the robot touches objects)
+- Joint constraints (how the robot's links connect)</p>
+<p>MuJoCo runs the physics at 500Hz internally; the environment exposes control at 25Hz (every 20 simulation steps). When you call <code>env.step(action)</code>, MuJoCo simulates 20 timesteps of physics, then returns the resulting state.</p>
+<p><strong>Why Simulation?</strong> Reinforcement learning requires millions of trials. A real robot would:
+- Break from repeated collisions
+- Take months to collect enough data
+- Pose safety hazards during random exploration</p>
+<p>In simulation, we collect a million timesteps in minutes. Policies trained in simulation can later transfer to real hardware (sim-to-real transfer), though that is beyond this curriculum's scope.</p>
+<p><strong>The Simulated Robot: Fetch.</strong> The <a href="https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/">Fetch robot</a> is a real mobile manipulator manufactured by Fetch Robotics (now part of Zebra Technologies), designed for warehouse automation and research. The MuJoCo model in <a href="https://robotics.farama.org/envs/fetch/reach/">Gymnasium-Robotics</a> replicates its kinematics.</p>
+<div align="center">
+
+| Real Fetch Robot | Simulated FetchReach |
+|:----------------:|:--------------------:|
+| ![Fetch Robot](https://cdn.sanity.io/images/7p2whiua/production/f3dbbb6c9d9cf3ca435e531a7dba9750170f6ee3-2048x1536.jpg?w=400) | ![FetchReach](https://robotics.farama.org/_static/videos/fetch/reach.gif) |
+| *Source: [Robots Guide](https://robotsguide.com/robots/fetch/)* | *Source: [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/)* |
+
+</div>
+
+<p><strong>Real Robot Specifications</strong> (from <a href="https://www.wevolver.com/specs/fetch.mobile.manipulator">Wevolver</a> and <a href="https://robotsguide.com/robots/fetch/">Robots Guide</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Specification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Arm</strong></td>
+<td>7 degrees of freedom, 940mm reach, 6kg payload</td>
+</tr>
+<tr>
+<td><strong>Gripper</strong></td>
+<td>Parallel-jaw, 245N grip force, swappable</td>
+</tr>
+<tr>
+<td><strong>Joints</strong></td>
+<td>Harmonic drives + brushless motors, 14-bit encoders</td>
+</tr>
+<tr>
+<td><strong>Height</strong></td>
+<td>1.09m - 1.49m (telescoping spine)</td>
+</tr>
+<tr>
+<td><strong>Weight</strong></td>
+<td>113 kg</td>
+</tr>
+<tr>
+<td><strong>Compute</strong></td>
+<td>Intel i5, Ubuntu + ROS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What We Simulate</strong> (the subset relevant for our tasks):</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Simulation Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Arm</strong></td>
+<td>7 DOF, matches real kinematics</td>
+</tr>
+<tr>
+<td><strong>Gripper</strong></td>
+<td>Parallel-jaw, 2 fingers</td>
+</tr>
+<tr>
+<td><strong>Workspace</strong></td>
+<td>~1m reach from base</td>
+</tr>
+<tr>
+<td><strong>Control mode</strong></td>
+<td>Cartesian velocity (internal IK solver)</td>
+</tr>
+<tr>
+<td><strong>Physics rate</strong></td>
+<td>500Hz internal, 25Hz control interface</td>
+</tr>
+</tbody>
+</table>
+<p>The simulation includes a table with objects (for Push/PickAndPlace tasks) and a red sphere marking the goal position. The arm is mounted on a fixed base (we do not simulate the mobile platform).</p>
+<p><strong>Further Reading:</strong>
+- <a href="https://robotics.farama.org/envs/fetch/reach/">Gymnasium-Robotics Fetch documentation</a> -- official environment docs with action/observation specs
+- <a href="https://arxiv.org/abs/1802.09464">Original OpenAI Gym Robotics paper</a> -- Plappert et al., "Multi-Goal Reinforcement Learning" (introduces these environments)
+- <a href="https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/">Fetch Robotics product page</a> -- real robot specifications</p>
+<p><strong>What the Agent Controls.</strong> The agent does not control joint torques directly. Instead, it outputs 4D Cartesian velocity commands:
+- <code>(vx, vy, vz)</code>: Desired end-effector velocity in world frame
+- <code>gripper</code>: Open (&lt;0) or close (&gt;0) command</p>
+<p>An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques. This simplification means the agent does not need to learn inverse kinematics--it just says "move left" and the controller figures out which joints to actuate.</p>
+<h3 id="03-what-we-are-doing">0.3 What We Are Doing</h3>
+<p>Before we write any training code, we must understand <em>exactly</em> what the robot perceives and what commands it accepts.</p>
+<p>This is not academic pedantry. Consider what happens if you misunderstand the interface:</p>
+<table>
+<thead>
+<tr>
+<th>Misunderstanding</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wrong observation shape</td>
+<td>Network architecture mismatch, cryptic shape errors</td>
+</tr>
+<tr>
+<td>Wrong action semantics</td>
+<td>Policy learns to output nonsense commands</td>
+</tr>
+<tr>
+<td>Wrong reward interpretation</td>
+<td>Hyperparameters tuned for wrong scale</td>
+</tr>
+<tr>
+<td>Missing goal structure</td>
+<td>Cannot use HER, forced to use inefficient methods</td>
+</tr>
+</tbody>
+</table>
+<p>Every hour spent understanding the environment saves ten hours debugging training failures.</p>
+<h3 id="04-the-four-fetch-tasks">0.4 The Four Fetch Tasks</h3>
+<p>The Gymnasium-Robotics package provides four manipulation tasks of increasing difficulty:</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Goal</th>
+<th>Difficulty</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>FetchReach</strong></td>
+<td>Move end-effector to target position</td>
+<td>Easiest--no object interaction</td>
+</tr>
+<tr>
+<td><strong>FetchPush</strong></td>
+<td>Push object to target position</td>
+<td>Medium--requires contact</td>
+</tr>
+<tr>
+<td><strong>FetchPickAndPlace</strong></td>
+<td>Pick up object, place at target</td>
+<td>Hard--requires grasping</td>
+</tr>
+<tr>
+<td><strong>FetchSlide</strong></td>
+<td>Slide object to distant target</td>
+<td>Hardest--requires throwing motion</td>
+</tr>
+</tbody>
+</table>
+<p>Each task has two reward variants:
+- <strong>Dense</strong> (e.g., <code>FetchReachDense-v4</code>): Reward = negative distance to goal. Provides continuous feedback.
+- <strong>Sparse</strong> (e.g., <code>FetchReach-v4</code>): Reward = 0 if goal reached, −1 otherwise. Binary feedback only.</p>
+<h3 id="05-why-environment-anatomy-matters">0.5 Why Environment Anatomy Matters</h3>
+<p>The Fetch environments are not arbitrary. They implement a specific interface designed for <strong>goal-conditioned learning</strong>. Understanding this interface is essential because it enables a technique called <strong>Hindsight Experience Replay (HER)</strong> that we will use in Chapter 4.</p>
+<p>Here is the key insight, explained simply:</p>
+<p><strong>The Problem with Sparse Rewards.</strong>
+Imagine you tell the robot "reach position (0.5, 0.3, 0.2)" but it ends up at (0.6, 0.4, 0.3). With sparse rewards, this trajectory gets reward = -1 at every step (failure). The robot learns nothing useful--it just knows it failed.</p>
+<p><strong>The HER Solution.</strong>
+What if we could say: "You failed to reach (0.5, 0.3, 0.2), but you successfully demonstrated how to reach (0.6, 0.4, 0.3)!" We relabel the trajectory with the goal the robot <em>actually</em> achieved, recompute the rewards (now it's a success!), and learn from that.</p>
+<p><strong>Why the Interface Matters.</strong>
+For this relabeling trick to work, the environment must provide three things:</p>
+<ol>
+<li><strong>Separate goal information in observations.</strong>
+   The environment returns a dictionary with three keys:</li>
+<li><code>observation</code>: Robot state (joint positions, velocities)</li>
+<li><code>desired_goal</code>: Where we wanted to go (the target)</li>
+<li><code>achieved_goal</code>: Where we actually are (current position)</li>
+</ol>
+<p>Without this separation, we couldn't know what goal was "achieved" by a trajectory.</p>
+<ol>
+<li>
+<p><strong>A <code>compute_reward()</code> function that accepts any goal.</strong>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">unwrapped</span><span class="o">.</span><span class="n">compute_reward</span><span class="p">(</span><span class="n">achieved_goal</span><span class="p">,</span> <span class="n">any_goal</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+</code></pre></div>
+   This lets us ask "what would the reward have been if the goal were X?" without re-running the simulation. This is how we recompute rewards after relabeling.</p>
+</li>
+<li>
+<p><strong>A geometric success threshold.</strong>
+   Success means <code>distance(achieved_goal, desired_goal) &lt; 0.05</code> (5 centimeters). This concrete definition lets us determine success for any goal we choose to relabel with.</p>
+</li>
+</ol>
+<p><strong>Bottom Line.</strong>
+These three interface features--dictionary observations, recomputable rewards, geometric success--are not arbitrary design choices. They are the mathematical substrate that makes HER possible. If any feature were missing, HER would not work.</p>
+<p>If you treat the environment as a black box--feeding observations to a network and hoping it learns--you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can use HER correctly in Chapter 4 and debug intelligently when things go wrong.</p>
+<h3 id="06-what-this-chapter-produces">0.6 What This Chapter Produces</h3>
+<p>By the end of this chapter, you will have:</p>
+<ol>
+<li><strong>JSON schemas</strong> documenting observation and action spaces exactly</li>
+<li><strong>Verified reward consistency</strong> between <code>env.step()</code> and <code>compute_reward()</code></li>
+<li><strong>Random baseline metrics</strong> establishing the performance floor</li>
+<li><strong>Complete understanding</strong> of why Fetch environments enable HER</li>
+</ol>
+<p>These are not optional artifacts. They are the foundation on which all subsequent training rests.</p>
+<hr />
+<h2 id="part-i-the-problem">Part I: The Problem</h2>
+<h3 id="11-why-the-goal-conditioning-paradigm">1.1 WHY: The Goal-Conditioning Paradigm</h3>
+<p>Consider the problem of learning a robotic manipulation policy. A naive formulation might be:</p>
+<p><strong>Naive Problem.</strong> <em>Find a policy <span class="arithmatex">\(\pi: \mathcal{S} \to \mathcal{A}\)</span> that maximizes expected cumulative reward on a manipulation task.</em></p>
+<p>This formulation is inadequate for two reasons.</p>
+<p>First, it conflates the <em>policy</em> with the <em>task</em>. A policy trained to reach position <span class="arithmatex">\((0.5, 0.3, 0.2)\)</span> cannot generalize to position <span class="arithmatex">\((0.6, 0.4, 0.3)\)</span> without retraining. If we want a policy that can reach arbitrary positions, we need the policy to accept the target position as input.</p>
+<p>Second, the naive formulation provides no mechanism for learning from failure. If the task is "reach position <span class="arithmatex">\(g\)</span>" and the agent fails to reach <span class="arithmatex">\(g\)</span>, the episode provides no useful learning signal--the agent knows it failed, but not how to improve. This is particularly problematic with sparse rewards, where the agent receives no feedback until it succeeds.</p>
+<p>The goal-conditioned formulation resolves both issues:</p>
+<p><strong>Problem (Goal-Conditioned Policy Learning).</strong> <em>Let <span class="arithmatex">\((\mathcal{S}, \mathcal{A}, \mathcal{G}, P, R, \gamma)\)</span> be a goal-conditioned MDP. Find a policy <span class="arithmatex">\(\pi: \mathcal{S} \times \mathcal{G} \to \Delta(\mathcal{A})\)</span> that maximizes:</em></p>
+<div class="arithmatex">\[J(\pi) = \mathbb{E}_{g \sim p(g)} \mathbb{E}_{\tau \sim \pi(\cdot | \cdot, g)} \left[ \sum_{t=0}^{T} \gamma^t R(s_t, a_t, s_{t+1}, g) \right]\]</div>
+<p>The policy now takes both state and goal as input, enabling generalization across goals. Moreover, the explicit goal structure enables <em>relabeling</em>: a trajectory that fails to reach goal <span class="arithmatex">\(g\)</span> can be relabeled as a successful trajectory for whatever goal it actually reached, manufacturing learning signal from failure.</p>
+<p>This chapter examines how the Fetch environments implement this formulation.</p>
+<h3 id="12-the-specific-questions-of-this-chapter">1.2 The Specific Questions of This Chapter</h3>
+<p>We seek to answer four questions:</p>
+<p><strong>Q1 (Observation Structure).</strong> What is the precise structure of the observation returned by <code>env.step()</code>? What are the shapes, ranges, and semantics of each component?</p>
+<p><strong>Q2 (Action Semantics).</strong> What do actions mean? Are they joint torques, joint velocities, Cartesian velocities, or something else? What are their ranges and how are they clipped?</p>
+<p><strong>Q3 (Reward Computation).</strong> How is the reward computed? Is it dense (continuous feedback) or sparse (binary success/failure)? Can the reward be recomputed for arbitrary goals?</p>
+<p><strong>Q4 (Goal Achievement).</strong> How does the environment determine success? What is the <code>achieved_goal</code> and how does it relate to the <code>desired_goal</code>?</p>
+<p>These questions are not merely technical curiosities. The answers determine what algorithms are applicable, what hyperparameters are sensible, and what performance is achievable.</p>
+<hr />
+<h2 id="part-ii-the-mathematical-framework">Part II: The Mathematical Framework</h2>
+<h3 id="21-how-the-goal-conditioned-mdp-formalism">2.1 HOW: The Goal-Conditioned MDP Formalism</h3>
+<p>We begin with precise definitions.</p>
+<p><strong>Definition (Goal-Conditioned MDP).</strong> <em>A goal-conditioned Markov Decision Process is a tuple <span class="arithmatex">\(\mathcal{M} = (\mathcal{S}, \mathcal{A}, \mathcal{G}, P, R, \phi, \gamma)\)</span> where:</em>
+- <em><span class="arithmatex">\(\mathcal{S}\)</span> is the state space</em>
+- <em><span class="arithmatex">\(\mathcal{A}\)</span> is the action space</em>
+- <em><span class="arithmatex">\(\mathcal{G}\)</span> is the goal space</em>
+- <em><span class="arithmatex">\(P: \mathcal{S} \times \mathcal{A} \to \Delta(\mathcal{S})\)</span> is the transition kernel</em>
+- <em><span class="arithmatex">\(R: \mathcal{S} \times \mathcal{A} \times \mathcal{S} \times \mathcal{G} \to \mathbb{R}\)</span> is the reward function</em>
+- <em><span class="arithmatex">\(\phi: \mathcal{S} \to \mathcal{G}\)</span> is the goal-achievement mapping</em>
+- <em><span class="arithmatex">\(\gamma \in [0, 1)\)</span> is the discount factor</em></p>
+<p>The goal-achievement mapping <span class="arithmatex">\(\phi\)</span> is crucial: it extracts from each state the "achieved goal"--the outcome that state represents. For a reaching task, <span class="arithmatex">\(\phi(s)\)</span> might be the end-effector position; for a pushing task, it might be the object position.</p>
+<p><strong>Definition (Goal-Conditioned Observation).</strong> <em>A goal-conditioned observation is a tuple <span class="arithmatex">\(o = (\bar{s}, g_a, g_d)\)</span> where:</em>
+- <em><span class="arithmatex">\(\bar{s} \in \mathbb{R}^{d_s}\)</span> is the proprioceptive state (joint positions, velocities, etc.)</em>
+- <em><span class="arithmatex">\(g_a = \phi(s) \in \mathcal{G}\)</span> is the achieved goal</em>
+- <em><span class="arithmatex">\(g_d \in \mathcal{G}\)</span> is the desired goal</em></p>
+<p>The separation of achieved and desired goals is what enables relabeling. Given a trajectory with observations <span class="arithmatex">\((o_0, \ldots, o_T)\)</span>, we can substitute any <span class="arithmatex">\(g' \in \mathcal{G}\)</span> for the desired goal and recompute rewards as <span class="arithmatex">\(R(s_t, a_t, s_{t+1}, g')\)</span>.</p>
+<p><strong>Proposition (Reward Recomputation).</strong> <em>If the reward function <span class="arithmatex">\(R\)</span> depends on the goal only through the distance <span class="arithmatex">\(\|g_a - g_d\|\)</span>, then the reward for any achieved goal <span class="arithmatex">\(g_a\)</span> and any hypothetical desired goal <span class="arithmatex">\(g'\)</span> can be computed without re-simulating the trajectory:</em></p>
+<div class="arithmatex">\[R(s, a, s', g') = f(\|\phi(s') - g'\|)\]</div>
+<p><em>for some function <span class="arithmatex">\(f: \mathbb{R}_{\geq 0} \to \mathbb{R}\)</span>.</em></p>
+<p>This proposition is the mathematical foundation of Hindsight Experience Replay. It requires that the environment expose both <span class="arithmatex">\(\phi\)</span> (the goal-achievement mapping) and <span class="arithmatex">\(R\)</span> (the reward function) in a form that allows evaluation for arbitrary goals.</p>
+<h3 id="22-the-fetch-environment-as-goal-conditioned-mdp">2.2 The Fetch Environment as Goal-Conditioned MDP</h3>
+<p>The Gymnasium-Robotics Fetch environments implement the goal-conditioned MDP structure as follows:</p>
+<p><strong>State Space <span class="arithmatex">\(\mathcal{S}\)</span>.</strong> The underlying state includes joint positions, joint velocities, gripper state, and (for manipulation tasks) object positions and velocities. The proprioceptive portion exposed to the agent has dimension <span class="arithmatex">\(d_s = 10\)</span> for reaching tasks and <span class="arithmatex">\(d_s = 25\)</span> for manipulation tasks.</p>
+<p><strong>Action Space <span class="arithmatex">\(\mathcal{A}\)</span>.</strong> Actions are 4-dimensional: <span class="arithmatex">\(a = (v_x, v_y, v_z, g) \in [-1, 1]^4\)</span>. The first three components specify Cartesian velocity commands for the end-effector; the fourth controls the gripper (positive = close, negative = open).</p>
+<p><strong>Goal Space <span class="arithmatex">\(\mathcal{G}\)</span>.</strong> Goals are 3-dimensional Cartesian positions: <span class="arithmatex">\(g \in \mathbb{R}^3\)</span>. For reaching tasks, the goal is the target end-effector position; for manipulation tasks, it is the target object position.</p>
+<p><strong>Reward Function <span class="arithmatex">\(R\)</span>.</strong> Two variants exist:
+- <em>Dense:</em> <span class="arithmatex">\(R(s, a, s', g) = -\|\phi(s') - g\|_2\)</span>
+- <em>Sparse:</em> <span class="arithmatex">\(R(s, a, s', g) = \begin{cases} 0 &amp; \text{if } \|\phi(s') - g\|_2 &lt; \epsilon \\ -1 &amp; \text{otherwise} \end{cases}\)</span></p>
+<p>where <span class="arithmatex">\(\epsilon = 0.05\)</span> is the success threshold.</p>
+<p><strong>Goal-Achievement Mapping <span class="arithmatex">\(\phi\)</span>.</strong> For reaching: <span class="arithmatex">\(\phi(s) = \text{end-effector position}\)</span>. For manipulation: <span class="arithmatex">\(\phi(s) = \text{object position}\)</span>.</p>
+<h3 id="23-the-dictionary-observation-structure">2.3 The Dictionary Observation Structure</h3>
+<p>Fetch environments return observations as Python dictionaries with three keys:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>   <span class="c1"># shape (d_s,), proprioceptive state</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="s1">&#39;achieved_goal&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="c1"># shape (3,), φ(s)</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="s1">&#39;desired_goal&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>   <span class="c1"># shape (3,), g</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">}</span>
+</code></pre></div>
+<p><strong>Remark (Why Dictionaries?).</strong> <em>The dictionary structure serves two purposes. First, it makes the goal-conditioned structure explicit--the achieved and desired goals are not buried in a flat observation vector but clearly labeled. Second, it enables automatic handling by Stable Baselines 3's <code>MultiInputPolicy</code>, which processes each key through a separate encoder before concatenation.</em></p>
+<h3 id="24-the-compute_reward-function">2.4 The compute_reward Function</h3>
+<p>Fetch environments expose a <code>compute_reward</code> method that allows reward evaluation for arbitrary goals:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">unwrapped</span><span class="o">.</span><span class="n">compute_reward</span><span class="p">(</span><span class="n">achieved_goal</span><span class="p">,</span> <span class="n">desired_goal</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+</code></pre></div>
+<p>This method takes batches of achieved goals and desired goals and returns the corresponding rewards. It is the API through which HER implementations relabel trajectories.</p>
+<p><strong>Critical Invariant.</strong> <em>For any transition <span class="arithmatex">\((s, a, s', g)\)</span>, the following must hold:</em></p>
+<div class="arithmatex">\[\texttt{env.step(a)[1]} = \texttt{env.unwrapped.compute\_reward}(\phi(s'), g, \texttt{info})\]</div>
+<p><em>where the left side is the reward returned by <code>step()</code> and the right side is the reward computed by <code>compute_reward()</code>. Violation of this invariant would cause HER to learn from corrupted reward labels.</em></p>
+<p>This invariant is verified empirically in Section 3.3.</p>
+<hr />
+<h2 id="part-iii-the-implementation">Part III: The Implementation</h2>
+<h3 id="31-what-empirical-verification-of-the-mathematical-structure">3.1 WHAT: Empirical Verification of the Mathematical Structure</h3>
+<p>We now verify that the Fetch environments implement the goal-conditioned MDP structure as described. All verifications are implemented in <code>scripts/ch01_env_anatomy.py</code>.</p>
+<h4 id="311-enumerating-available-environments">3.1.1 Enumerating Available Environments</h4>
+<p>First, we enumerate the available Fetch environments:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch01_env_anatomy.py<span class="w"> </span>list-envs
+</code></pre></div>
+<p><strong>Expected Output.</strong> Environment IDs including:
+- <code>FetchReach-v4</code> (sparse reaching)
+- <code>FetchReachDense-v4</code> (dense reaching)
+- <code>FetchPush-v4</code> (sparse pushing)
+- <code>FetchPushDense-v4</code> (dense pushing)
+- <code>FetchPickAndPlace-v4</code> (sparse pick-and-place)
+- <code>FetchPickAndPlaceDense-v4</code> (dense pick-and-place)
+- <code>FetchSlide-v4</code> (sparse sliding)
+- <code>FetchSlideDense-v4</code> (dense sliding)</p>
+<p>The naming convention encodes task and reward type: environments without "Dense" use sparse rewards; those with "Dense" use distance-based rewards.</p>
+<h4 id="312-describing-observation-and-action-spaces">3.1.2 Describing Observation and Action Spaces</h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch01_env_anatomy.py<span class="w"> </span>describe<span class="w"> </span>--json-out<span class="w"> </span>results/ch01_env_describe.json
+</code></pre></div>
+<p>This command produces a JSON file documenting the precise structure of observations and actions.</p>
+<p><strong>Expected Structure (FetchReach-v4):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">&quot;action_space&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="nt">&quot;low&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">-1</span><span class="p">,</span><span class="w"> </span><span class="mi">-1</span><span class="p">,</span><span class="w"> </span><span class="mi">-1</span><span class="p">,</span><span class="w"> </span><span class="mi">-1</span><span class="p">],</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="nt">&quot;high&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">&quot;observation_space&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">    </span><span class="nt">&quot;observation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">10</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;low&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;high&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]},</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">    </span><span class="nt">&quot;achieved_goal&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">3</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;low&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;high&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]},</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">    </span><span class="nt">&quot;desired_goal&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">3</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;low&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;high&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]}</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="p">}</span>
+</code></pre></div>
+<p><strong>Interpretation.</strong> The observation dictionary has three components as predicted by the theory. The action space is 4-dimensional and bounded by <span class="arithmatex">\([-1, 1]\)</span>. The goal spaces are 3-dimensional Cartesian coordinates.</p>
+<h3 id="32-action-semantics">3.2 Action Semantics</h3>
+<p>The 4-dimensional action vector is interpreted as follows:</p>
+<table>
+<thead>
+<tr>
+<th>Index</th>
+<th>Semantic</th>
+<th>Range</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><span class="arithmatex">\(v_x\)</span></td>
+<td><span class="arithmatex">\([-1, 1]\)</span></td>
+<td>End-effector velocity in <span class="arithmatex">\(x\)</span></td>
+</tr>
+<tr>
+<td>1</td>
+<td><span class="arithmatex">\(v_y\)</span></td>
+<td><span class="arithmatex">\([-1, 1]\)</span></td>
+<td>End-effector velocity in <span class="arithmatex">\(y\)</span></td>
+</tr>
+<tr>
+<td>2</td>
+<td><span class="arithmatex">\(v_z\)</span></td>
+<td><span class="arithmatex">\([-1, 1]\)</span></td>
+<td>End-effector velocity in <span class="arithmatex">\(z\)</span></td>
+</tr>
+<tr>
+<td>3</td>
+<td>gripper</td>
+<td><span class="arithmatex">\([-1, 1]\)</span></td>
+<td>Gripper command (<span class="arithmatex">\(&gt;0\)</span> = close, <span class="arithmatex">\(&lt;0\)</span> = open)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Remark (Cartesian vs. Joint Control).</strong> <em>The Fetch environments use Cartesian velocity control, not joint torque control. This is a significant simplification: the agent does not need to learn inverse kinematics. The Cartesian commands are converted to joint commands by an internal controller that is part of the environment dynamics.</em></p>
+<p><strong>Remark (Action Scaling).</strong> <em>Actions are scaled by a factor before being applied. The exact scaling depends on the environment configuration. The agent outputs values in <span class="arithmatex">\([-1, 1]\)</span>; the environment scales these to physical units.</em></p>
+<h3 id="33-reward-consistency-verification">3.3 Reward Consistency Verification</h3>
+<p>We verify the critical invariant that <code>env.step()</code> rewards match <code>compute_reward()</code> rewards:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch01_env_anatomy.py<span class="w"> </span>reward-check<span class="w"> </span>--n-steps<span class="w"> </span><span class="m">500</span>
+</code></pre></div>
+<p><strong>Expected Output.</strong> A message confirming that all 500 reward comparisons matched within numerical tolerance.</p>
+<p><strong>Failure Mode.</strong> If rewards do not match, HER will learn from incorrect reward labels. This would be a critical bug in either the environment or our understanding of its API.</p>
+<p><strong>Remark (Why This Check Matters).</strong> <em>The reward consistency check is not paranoid caution. Different versions of Gymnasium-Robotics have had bugs affecting reward computation. API changes have altered the signature of <code>compute_reward</code>. Running this check ensures that your specific installation behaves correctly.</em></p>
+<h3 id="34-random-baseline-metrics">3.4 Random Baseline Metrics</h3>
+<p>Before training any agent, we establish baseline performance with a random policy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch01_env_anatomy.py<span class="w"> </span>random-episodes<span class="w"> </span>--n-episodes<span class="w"> </span><span class="m">10</span><span class="w"> </span>--json-out<span class="w"> </span>results/ch01_random_metrics.json
+</code></pre></div>
+<p><strong>Expected Output (FetchReachDense-v4):</strong>
+- <code>success_rate</code>: ~0.0-0.1 (random flailing occasionally reaches the goal)
+- <code>mean_return</code>: ~−15 to −25 (negative because rewards are negative distances)
+- <code>mean_episode_length</code>: 50 (environments truncate at 50 steps)</p>
+<p><strong>Expected Output (FetchReach-v4, sparse):</strong>
+- <code>success_rate</code>: ~0.0-0.05 (very unlikely to reach by chance)
+- <code>mean_return</code>: ~−50 (constant −1 per step when not at goal)</p>
+<p>These baselines establish the performance floor. Any trained agent that does not significantly exceed random performance is not learning.</p>
+<hr />
+<h2 id="part-iv-theoretical-implications">Part IV: Theoretical Implications</h2>
+<h3 id="41-why-the-dictionary-structure-enables-her">4.1 Why the Dictionary Structure Enables HER</h3>
+<p>The dictionary observation structure is not arbitrary; it is the interface through which HER operates.</p>
+<p><strong>Theorem (HER Applicability).</strong> <em>Hindsight Experience Replay is applicable to an environment if and only if:</em>
+1. <em>The observation includes an explicit <code>achieved_goal</code> <span class="arithmatex">\(g_a = \phi(s)\)</span></em>
+2. <em>The reward function <span class="arithmatex">\(R(s, a, s', g)\)</span> can be evaluated for arbitrary goals <span class="arithmatex">\(g\)</span></em>
+3. <em>The reward depends on the goal only through <span class="arithmatex">\(\|g_a - g\|\)</span></em></p>
+<p>The Fetch environments satisfy all three conditions by construction.</p>
+<p><strong>Corollary.</strong> <em>Standard (non-goal-conditioned) environments cannot use HER without modification. An environment that returns flat observations with no goal separation does not expose the structure HER requires.</em></p>
+<h3 id="42-the-sparse-vs-dense-reward-trade-off">4.2 The Sparse vs. Dense Reward Trade-off</h3>
+<p>The choice between sparse and dense rewards involves a fundamental trade-off:</p>
+<p><strong>Dense Rewards:</strong> <span class="arithmatex">\(R = -\|g_a - g_d\|\)</span>
+- Pro: Provides gradient signal at every timestep
+- Pro: Standard policy gradient methods (PPO) can learn effectively
+- Con: May encourage undesirable behaviors (e.g., hovering near the goal without reaching it)
+- Con: Reward shaping may not align with true task objective</p>
+<p><strong>Sparse Rewards:</strong> <span class="arithmatex">\(R = \mathbf{1}[\|g_a - g_d\| &lt; \epsilon] - 1\)</span>
+- Pro: Clearly defined success criterion
+- Pro: No reward shaping artifacts
+- Con: No gradient signal until goal is reached
+- Con: Requires HER or similar techniques for sample-efficient learning</p>
+<p><strong>Remark (When to Use Each).</strong> <em>For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards.</em></p>
+<h3 id="43-the-observation-dimension-and-policy-architecture">4.3 The Observation Dimension and Policy Architecture</h3>
+<p>The observation dimensions have implications for policy architecture:</p>
+<table>
+<thead>
+<tr>
+<th>Environment</th>
+<th><code>observation</code> dim</th>
+<th><code>achieved_goal</code> dim</th>
+<th><code>desired_goal</code> dim</th>
+<th>Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FetchReach</td>
+<td>10</td>
+<td>3</td>
+<td>3</td>
+<td>16</td>
+</tr>
+<tr>
+<td>FetchPush</td>
+<td>25</td>
+<td>3</td>
+<td>3</td>
+<td>31</td>
+</tr>
+<tr>
+<td>FetchPickAndPlace</td>
+<td>25</td>
+<td>3</td>
+<td>3</td>
+<td>31</td>
+</tr>
+</tbody>
+</table>
+<p>Stable Baselines 3's <code>MultiInputPolicy</code> handles dictionary observations by:
+1. Processing each key through a separate MLP encoder
+2. Concatenating the encoded representations
+3. Passing the concatenation through shared layers</p>
+<p>This architecture allows the policy to learn separate representations for state and goal, which may improve generalization across goals.</p>
+<hr />
+<h2 id="part-v-deliverables">Part V: Deliverables</h2>
+<p>Upon completion of this chapter, the following must exist:</p>
+<p><strong>D1.</strong> The file <code>results/ch01_env_describe.json</code> containing the observation and action space schema.</p>
+<p><strong>D2.</strong> The reward consistency check (<code>bash docker/dev.sh python scripts/ch01_env_anatomy.py reward-check</code>) must pass.</p>
+<p><strong>D3.</strong> The file <code>results/ch01_random_metrics.json</code> containing random baseline metrics.</p>
+<p><strong>D4.</strong> The reader must be able to answer:
+- What is the dimension of the <code>observation</code> component for FetchReach? <em>(Answer: 10)</em>
+- What does action index 3 control? <em>(Answer: gripper open/close)</em>
+- What is the success threshold <span class="arithmatex">\(\epsilon\)</span>? <em>(Answer: 0.05)</em>
+- Why can HER relabel trajectories? <em>(Answer: because <code>compute_reward</code> can evaluate arbitrary goals)</em></p>
+<p>A reader who cannot produce these deliverables or answer these questions has not completed the chapter.</p>
+<hr />
+<h2 id="part-vi-connections">Part VI: Connections</h2>
+<h3 id="61-connection-to-chapter-0">6.1 Connection to Chapter 0</h3>
+<p>This chapter assumes that the experimental environment from Chapter 0 is functional. All commands are executed inside the container via <code>docker/dev.sh</code>.</p>
+<h3 id="62-connection-to-chapter-2">6.2 Connection to Chapter 2</h3>
+<p>Chapter 2 will train a PPO baseline on <code>FetchReachDense-v4</code>. The observation structure documented here determines the policy architecture. The random baseline metrics establish the performance floor against which the trained agent is compared.</p>
+<h3 id="63-connection-to-chapter-4">6.3 Connection to Chapter 4</h3>
+<p>Chapter 4 will introduce HER for sparse-reward tasks. The <code>compute_reward</code> function verified here is the API through which HER relabels goals. The theoretical analysis of HER applicability in Section 4.1 explains why Fetch environments are suitable for HER and what properties an environment must have.</p>
+<hr />
+<h2 id="appendix-a-observation-component-details">Appendix A: Observation Component Details</h2>
+<h3 id="a1-fetchreach-observation-10-dimensions">A.1 FetchReach Observation (10 dimensions)</h3>
+<table>
+<thead>
+<tr>
+<th>Index</th>
+<th>Semantic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-2</td>
+<td>Gripper position <span class="arithmatex">\((x, y, z)\)</span></td>
+</tr>
+<tr>
+<td>3-5</td>
+<td>Gripper velocity <span class="arithmatex">\((\dot{x}, \dot{y}, \dot{z})\)</span></td>
+</tr>
+<tr>
+<td>6-7</td>
+<td>Gripper finger positions</td>
+</tr>
+<tr>
+<td>8-9</td>
+<td>Gripper finger velocities</td>
+</tr>
+</tbody>
+</table>
+<h3 id="a2-fetchpushpickandplace-observation-25-dimensions">A.2 FetchPush/PickAndPlace Observation (25 dimensions)</h3>
+<table>
+<thead>
+<tr>
+<th>Index</th>
+<th>Semantic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-2</td>
+<td>Gripper position</td>
+</tr>
+<tr>
+<td>3-5</td>
+<td>Object position</td>
+</tr>
+<tr>
+<td>6-8</td>
+<td>Object relative position (object − gripper)</td>
+</tr>
+<tr>
+<td>9-11</td>
+<td>Gripper velocity</td>
+</tr>
+<tr>
+<td>12-14</td>
+<td>Object velocity</td>
+</tr>
+<tr>
+<td>15-17</td>
+<td>Object relative velocity</td>
+</tr>
+<tr>
+<td>18-21</td>
+<td>Object rotation (quaternion)</td>
+</tr>
+<tr>
+<td>22-24</td>
+<td>Object angular velocity</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="appendix-b-formal-verification-of-her-requirements">Appendix B: Formal Verification of HER Requirements</h2>
+<p><strong>Requirement 1: Explicit achieved goal.</strong>
+- Verified: Observations include <code>achieved_goal</code> key.
+- Test: <code>'achieved_goal' in env.observation_space.spaces</code></p>
+<p><strong>Requirement 2: Computable reward for arbitrary goals.</strong>
+- Verified: <code>env.unwrapped.compute_reward(ag, dg, info)</code> accepts arbitrary goal arrays.
+- Test: Call with random goals, verify no errors.</p>
+<p><strong>Requirement 3: Reward depends only on goal distance.</strong>
+- Verified: Dense reward is <span class="arithmatex">\(-\|g_a - g_d\|\)</span>; sparse is threshold on same.
+- Test: Verify <code>compute_reward(ag, dg, {})</code> equals <code>−np.linalg.norm(ag − dg)</code> for dense.</p>
+<p>All three requirements are verified by <code>scripts/ch01_env_anatomy.py reward-check</code>.</p>
+<hr />
+<p><strong>Next.</strong> With the environment anatomy understood, proceed to Chapter 2 to establish PPO baselines on dense Reach.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../ch00_containerized_dgx_proof_of_life/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Chapter 0: Proof of Life">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Chapter 0: Proof of Life
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../syllabus/" class="md-footer__link md-footer__link--next" aria-label="Next: Syllabus">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Syllabus
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.footer", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

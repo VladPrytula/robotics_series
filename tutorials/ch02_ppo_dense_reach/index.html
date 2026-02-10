@@ -1,0 +1,1695 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A Docker-first RL research platform for Fetch manipulation tasks">
+      
+      
+      
+        <link rel="canonical" href="https://vladprytula.github.io/robotics_series/tutorials/ch02_ppo_dense_reach/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Chapter 2: PPO on Dense Reach -- The Pipeline Truth Serum - Goal-Conditioned Robotic Manipulation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chapter-2-ppo-on-dense-reach-the-pipeline-truth-serum" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-header__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goal-Conditioned Robotic Manipulation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Chapter 2: PPO on Dense Reach -- The Pipeline Truth Serum
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../syllabus/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Syllabus
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goal-Conditioned Robotic Manipulation" class="md-nav__button md-logo" aria-label="Goal-Conditioned Robotic Manipulation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Goal-Conditioned Robotic Manipulation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/VladPrytula/robotics_series" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VladPrytula/robotics_series
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ch00_containerized_dgx_proof_of_life/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 0: Proof of Life
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ch01_fetch_env_anatomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chapter 1: Environment Anatomy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../syllabus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Syllabus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-chapter-is-really-about" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What This Chapter Is Really About
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-0-setting-the-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 0: Setting the Stage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 0: Setting the Stage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#01-the-problem-were-solving" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1 The Problem We're Solving
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#02-why-start-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2 Why Start Here?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#03-the-diagnostic-mindset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3 The Diagnostic Mindset
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-1-why-understanding-the-learning-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 1: WHY -- Understanding the Learning Problem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 1: WHY -- Understanding the Learning Problem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-what-are-we-actually-optimizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 What Are We Actually Optimizing?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-policy-gradient-theorem-intuition-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 The Policy Gradient Theorem (Intuition First)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-the-problem-policy-gradient-is-unstable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 The Problem: Policy Gradient Is Unstable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-ppos-solution-constrained-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 PPO's Solution: Constrained Updates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-a-concrete-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 A Concrete Example
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#16-why-dense-rewards-matter-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.6 Why Dense Rewards Matter Here
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-2-how-the-algorithm-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 2: HOW -- The Algorithm in Detail
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 2: HOW -- The Algorithm in Detail">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-the-actor-critic-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 The Actor-Critic Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-training-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 The Training Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-key-hyperparameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Key Hyperparameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-3-what-running-the-experiment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 3: WHAT -- Running the Experiment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 3: WHAT -- Running the Experiment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-the-one-command-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 The One-Command Version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-what-to-expect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 What to Expect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-reading-the-tensorboard-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Reading the TensorBoard Logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-verifying-your-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Verifying Your Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-4-understanding-what-you-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 4: Understanding What You Built
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 4: Understanding What You Built">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-what-the-policy-actually-learned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 What the Policy Actually Learned
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-the-clipping-in-action" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 The Clipping in Action
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-why-this-validates-your-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Why This Validates Your Pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-5-exercises" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 5: Exercises
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 5: Exercises">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exercise-21-reproduce-the-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 2.1: Reproduce the Baseline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-22-multi-seed-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 2.2: Multi-Seed Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-23-explain-the-clipping-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 2.3: Explain the Clipping (Written)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exercise-24-ablation-study" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exercise 2.4: Ablation Study
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-6-common-failures-and-solutions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part 6: Common Failures and Solutions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part 6: Common Failures and Solutions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#success-rate-stays-at-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Success rate stays at 0%"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#value-loss-explodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Value loss explodes"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-is-slow-500-fps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Training is slow (&lt;500 fps)"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conclusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="chapter-2-ppo-on-dense-reach-the-pipeline-truth-serum">Chapter 2: PPO on Dense Reach -- The Pipeline Truth Serum</h1>
+<h2 id="what-this-chapter-is-really-about">What This Chapter Is Really About</h2>
+<p>Before we dive into math, let's be honest about what we're doing here.</p>
+<p>You're about to train a neural network to control a robot arm. The arm will learn to reach arbitrary 3D positions--not because someone programmed the kinematics, but because it tried millions of times and gradually figured out what works.</p>
+<p><strong>The result:</strong> A neural network that figured out how to reach any point in 3D space.</p>
+<p><img alt="Robot reaching goals" src="../../videos/fetch_reach_demo_grid.gif" /></p>
+<p><em>No inverse kinematics. No trajectory planning. The robot learned this through 500,000 training steps--watch the distance counter drop to zero.</em></p>
+<p>That's remarkable. But here's the uncomfortable truth: <strong>most RL implementations don't work on the first try.</strong> The field has a reproducibility crisis (Henderson et al., 2018). Hyperparameters matter more than they should. Small bugs can silently cause complete failure.</p>
+<p>This chapter is about building confidence that your infrastructure is correct <em>before</em> you add complexity. We use <strong>Proximal Policy Optimization (PPO)</strong>--a widely-used RL algorithm that learns by repeatedly trying actions and adjusting based on outcomes--on a dense-reward task as a <strong>diagnostic</strong>. If this doesn't work, something is broken in your setup, not your algorithm.</p>
+<p>By the end, you will have:
+1. A trained policy achieving &gt;90% success rate (we got 100% in our test run)
+2. An understanding of <em>why</em> PPO works (not just <em>that</em> it works)
+3. Diagnostic skills to identify common training failures
+4. Confidence to move to harder problems</p>
+<hr />
+<h2 id="part-0-setting-the-stage">Part 0: Setting the Stage</h2>
+<h3 id="01-the-problem-were-solving">0.1 The Problem We're Solving</h3>
+<p>Imagine you want to teach a robot arm to touch a target. You could:</p>
+<p><strong>Option A: Program it explicitly.</strong> Compute inverse kinematics, plan a trajectory, execute. This works but requires knowing the robot's geometry precisely and doesn't generalize to new situations.</p>
+<p><strong>Option B: Let it learn.</strong> Show the robot where the target is, let it flail around, reward it when it gets close. Over time, it figures out how to reach any target.</p>
+<p>Option B is reinforcement learning. It's harder to get working, but once it works, the same algorithm can learn to push objects, pick things up, even walk--without you programming each behavior explicitly.</p>
+<h3 id="02-why-start-here">0.2 Why Start Here?</h3>
+<p>The Fetch robot in simulation has 7 joints and a gripper. The full task hierarchy looks like:</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Difficulty</th>
+<th>What Makes It Hard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Reach</strong></td>
+<td>Easiest</td>
+<td>Just move the end-effector to a point</td>
+</tr>
+<tr>
+<td>Push</td>
+<td>Medium</td>
+<td>Must contact and move an object</td>
+</tr>
+<tr>
+<td>Pick &amp; Place</td>
+<td>Hard</td>
+<td>Must grasp, lift, and place accurately</td>
+</tr>
+</tbody>
+</table>
+<p>We start with Reach because it isolates the core RL problem: learning a mapping from observations to actions. No object dynamics, no contact physics, no grasp planning. Just: "see goal, move there."</p>
+<p>And we use <strong>dense rewards</strong> (negative distance to goal) rather than sparse rewards (success/failure only). This gives the learning algorithm continuous feedback--every action either improves or worsens the situation.</p>
+<h3 id="03-the-diagnostic-mindset">0.3 The Diagnostic Mindset</h3>
+<p>Here's a scenario that happens more often than anyone admits:</p>
+<blockquote>
+<p>You implement an advanced algorithm on a difficult task. Train for 10 hours. Success rate: 0%. What went wrong?</p>
+</blockquote>
+<p>The honest answer: <strong>you have no idea.</strong> It could be:
+- Environment misconfiguration
+- Wrong network architecture
+- Bad hyperparameters
+- Bug in your algorithm implementation
+- The task simply needing more training time
+- A subtle numerical issue</p>
+<p>You're debugging in the dark with too many variables.</p>
+<p><strong>The solution:</strong> Establish a baseline where failure is informative. Start with the simplest algorithm (PPO) on the easiest task (Reach with dense rewards). If this doesn't work, the problem is in your infrastructure, not your algorithm choice.</p>
+<hr />
+<h2 id="part-1-why-understanding-the-learning-problem">Part 1: WHY -- Understanding the Learning Problem</h2>
+<h3 id="11-what-are-we-actually-optimizing">1.1 What Are We Actually Optimizing?</h3>
+<p>Let's build up the math from intuition, defining each symbol as we introduce it.</p>
+<p><strong>The Setup:</strong> At each timestep <span class="arithmatex">\(t\)</span>, our <strong>policy</strong> <span class="arithmatex">\(\pi\)</span> (a neural network with parameters <span class="arithmatex">\(\theta\)</span>) sees the current state <span class="arithmatex">\(s_t\)</span> and goal <span class="arithmatex">\(g\)</span>, and outputs an action <span class="arithmatex">\(a_t\)</span>. The environment responds with a new state <span class="arithmatex">\(s_{t+1}\)</span> and a <strong>reward</strong> <span class="arithmatex">\(R_t\)</span>--a single number indicating how good that transition was.</p>
+<p>Before stating the objective, we need three definitions:</p>
+<p><strong>Definition (Reward).</strong> The reward <span class="arithmatex">\(R_t \in \mathbb{R}\)</span> is the immediate feedback signal at timestep <span class="arithmatex">\(t\)</span>. In FetchReachDense, <span class="arithmatex">\(R_t = -\|p_t - g\|\)</span> where <span class="arithmatex">\(p_t\)</span> is the gripper position and <span class="arithmatex">\(g\)</span> is the goal. More negative means farther from the goal; zero means perfect.</p>
+<p><strong>Definition (Discount Factor).</strong> The discount factor <span class="arithmatex">\(\gamma \in [0, 1)\)</span> determines how much we value future rewards relative to immediate rewards. A reward <span class="arithmatex">\(R\)</span> received <span class="arithmatex">\(k\)</span> steps in the future contributes <span class="arithmatex">\(\gamma^k R\)</span> to our objective. With <span class="arithmatex">\(\gamma = 0.99\)</span>, a reward 100 steps away is worth <span class="arithmatex">\(0.99^{100} \approx 0.37\)</span> as much as an immediate reward. This captures two intuitions: (1) sooner is better than later, and (2) distant rewards are more uncertain.</p>
+<p><strong>Definition (Time Horizon).</strong> The horizon <span class="arithmatex">\(T\)</span> is the maximum number of timesteps in an episode. For FetchReach, <span class="arithmatex">\(T = 50\)</span> steps.</p>
+<p><strong>The Objective:</strong> Find policy parameters <span class="arithmatex">\(\theta\)</span> that maximize the <strong>expected discounted return</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t R_t \right]
+</code></pre></div>
+<p>Here <span class="arithmatex">\(J(\theta)\)</span> is the objective function we seek to maximize--it measures how good a policy with parameters <span class="arithmatex">\(\theta\)</span> is, averaged over many episodes. The sum <span class="arithmatex">\(\sum_{t=0}^{T} \gamma^t R_t\)</span> is called the <strong>return</strong>: the total reward accumulated over an episode, with future rewards discounted by <span class="arithmatex">\(\gamma\)</span>.</p>
+<p>The expectation is over trajectories--different runs give different outcomes because actions sample from the policy distribution and the environment may be stochastic.</p>
+<p><strong>The Challenge:</strong> How do you take a gradient of this? The expectation depends on <span class="arithmatex">\(\theta\)</span> in a complicated way--<span class="arithmatex">\(\theta\)</span> determines the policy, which determines the actions, which determines the states visited, which determines the rewards.</p>
+<h3 id="12-the-policy-gradient-theorem-intuition-first">1.2 The Policy Gradient Theorem (Intuition First)</h3>
+<p>Here's the key insight, stated informally:</p>
+<blockquote>
+<p><strong>To improve the policy, increase the probability of actions that led to better-than-expected outcomes, and decrease the probability of actions that led to worse-than-expected outcomes.</strong></p>
+</blockquote>
+<p>The "better-than-expected" part is crucial. An action that got reward +10 isn't necessarily good--if you typically get +15 from that state, it was actually a bad choice.</p>
+<p>This is captured by the <strong>advantage function</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>A(s, a) = Q(s, a) - V(s)
+</code></pre></div>
+<p>where:
+- <span class="arithmatex">\(Q(s, a)\)</span> = expected return if you take action <span class="arithmatex">\(a\)</span> in state <span class="arithmatex">\(s\)</span>, then follow your policy
+- <span class="arithmatex">\(V(s)\)</span> = expected return if you just follow your policy from state <span class="arithmatex">\(s\)</span></p>
+<p>So <span class="arithmatex">\(A(s, a) &gt; 0\)</span> means action <span class="arithmatex">\(a\)</span> was better than average; <span class="arithmatex">\(A(s, a) &lt; 0\)</span> means it was worse.</p>
+<p><strong>The Policy Gradient:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>\nabla_\theta J(\theta) = \mathbb{E}\left[ \sum_t \nabla_\theta \log \pi_\theta(a_t | s_t) \cdot A(s_t, a_t) \right]
+</code></pre></div>
+<p>Read this as: "Adjust <span class="arithmatex">\(\theta\)</span> to make good actions more likely and bad actions less likely, weighted by how good/bad they were."</p>
+<h3 id="13-the-problem-policy-gradient-is-unstable">1.3 The Problem: Policy Gradient Is Unstable</h3>
+<p>In theory, you can just follow this gradient and improve. In practice, <strong>vanilla policy gradient is notoriously unstable</strong>. Here's why:</p>
+<p><strong>Problem 1: Advantage estimates are noisy.</strong></p>
+<p>We don't know the true advantage--we estimate it from sampled trajectories. With a finite batch, these estimates have high variance. Sometimes they're way off, and we make bad updates.</p>
+<p><strong>Problem 2: Big updates break everything.</strong></p>
+<p>Suppose we estimate that some action is great (<span class="arithmatex">\(A &gt;&gt; 0\)</span>) and crank up its probability. But if our estimate was wrong, we've now committed to a bad action. Worse, the new policy visits different states, making our old advantage estimates invalid. The whole thing can spiral into catastrophic collapse.</p>
+<p>This isn't hypothetical--it happens all the time. Training curves that look promising suddenly crash to zero and never recover.</p>
+<h3 id="14-ppos-solution-constrained-updates">1.4 PPO's Solution: Constrained Updates</h3>
+<p>PPO's key idea: <strong>don't change the policy too much in one update.</strong></p>
+<p>But "too much" in what sense? Not in parameter space (a small parameter change can cause large behavior change). Instead, in <strong>probability space</strong>.</p>
+<p>Define the probability ratio:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>r_t(\theta) = \frac{\pi_\theta(a_t | s_t)}{\pi_{\theta_{\text{old}}}(a_t | s_t)}
+</code></pre></div>
+<p>This measures how the action probability changed:
+- <span class="arithmatex">\(r = 1\)</span>: same probability as before
+- <span class="arithmatex">\(r = 2\)</span>: action is now twice as likely
+- <span class="arithmatex">\(r = 0.5\)</span>: action is now half as likely</p>
+<p>PPO clips this ratio to stay in <span class="arithmatex">\([1-\epsilon, 1+\epsilon]\)</span> (typically <span class="arithmatex">\(\epsilon = 0.2\)</span>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( r_t A_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \cdot A_t \right) \right]
+</code></pre></div>
+<p><strong>What this does:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Advantage</th>
+<th>Gradient wants to...</th>
+<th>Clipping effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(A &gt; 0\)</span> (good action)</td>
+<td>Increase <span class="arithmatex">\(r\)</span> (make action more likely)</td>
+<td>Stops at <span class="arithmatex">\(r = 1.2\)</span></td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(A &lt; 0\)</span> (bad action)</td>
+<td>Decrease <span class="arithmatex">\(r\)</span> (make action less likely)</td>
+<td>Stops at <span class="arithmatex">\(r = 0.8\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>The policy can improve, but only within a "trust region" around its current behavior. This prevents the catastrophic updates that kill vanilla policy gradient.</p>
+<h3 id="15-a-concrete-example">1.5 A Concrete Example</h3>
+<p>Let's trace through one update to make this concrete.</p>
+<p><strong>Setup:</strong> The old policy assigns probability 0.3 to action <span class="arithmatex">\(a\)</span> in state <span class="arithmatex">\(s\)</span>. We estimate the advantage is <span class="arithmatex">\(A = +2\)</span> (this was a good action).</p>
+<p><strong>Naive approach:</strong> The gradient says "make this action more likely!" So we update and now <span class="arithmatex">\(\pi_\theta(a|s) = 0.6\)</span>.</p>
+<p><strong>Problem:</strong> The ratio <span class="arithmatex">\(r = 0.6/0.3 = 2.0\)</span>. We doubled the probability in one update. If our advantage estimate was wrong, we've made a big mistake.</p>
+<p><strong>PPO's approach:</strong> The clipped objective computes:
+- Unclipped: <span class="arithmatex">\(r \cdot A = 2.0 \times 2 = 4.0\)</span>
+- Clipped: <span class="arithmatex">\(\text{clip}(2.0, 0.8, 1.2) \times 2 = 1.2 \times 2 = 2.4\)</span>
+- Objective: <span class="arithmatex">\(\min(4.0, 2.4) = 2.4\)</span></p>
+<p>The gradient only flows through the clipped version. We still increase the action probability, but the update is bounded. We can't go from 0.3 to 0.6 in one step--we'd need multiple updates, each constrained.</p>
+<h3 id="16-why-dense-rewards-matter-here">1.6 Why Dense Rewards Matter Here</h3>
+<p>FetchReachDense-v4 gives reward <span class="arithmatex">\(R = -\|achieved - goal\|_2\)</span> at every step. This is the negative distance to the goal.</p>
+<p><strong>Why this helps:</strong>
+- Every action provides signal: "you got 2cm closer" or "you drifted 1cm away"
+- The learning algorithm always has gradient information
+- Exploration isn't a bottleneck--even random actions provide useful data</p>
+<p>Compare to sparse rewards (<span class="arithmatex">\(R = 0\)</span> if success, <span class="arithmatex">\(-1\)</span> otherwise):
+- You only learn when you succeed
+- Random policy almost never succeeds
+- Most of your data is uninformative</p>
+<p>Dense rewards decouple the exploration problem from the learning problem. If PPO fails on dense Reach, the issue is definitely in your implementation, not in insufficient exploration.</p>
+<hr />
+<h2 id="part-2-how-the-algorithm-in-detail">Part 2: HOW -- The Algorithm in Detail</h2>
+<h3 id="21-the-actor-critic-architecture">2.1 The Actor-Critic Architecture</h3>
+<p>PPO maintains two neural networks:</p>
+<p><strong>Actor</strong> <span class="arithmatex">\(\pi_\theta(a|s, g)\)</span>: Given the state and goal, output a probability distribution over actions. For continuous actions, this is typically a Gaussian with learned mean and standard deviation.</p>
+<p><strong>Critic</strong> <span class="arithmatex">\(V_\phi(s, g)\)</span>: Given the state and goal, estimate the expected return. This helps compute advantages.</p>
+<p><strong>Why two networks, not one?</strong> A natural question: why not have a single network output both actions and value estimates? Three reasons:</p>
+<ol>
+<li>
+<p><strong>Different objectives.</strong> The actor maximizes expected return (wants to find good actions). The critic minimizes prediction error (wants accurate value estimates). These gradients can conflict--improving one may hurt the other.</p>
+</li>
+<li>
+<p><strong>Different output types.</strong> The actor outputs a probability distribution (mean and variance for continuous actions). The critic outputs a single scalar. Forcing these through the same final layers creates unnecessary coupling.</p>
+</li>
+<li>
+<p><strong>Stability.</strong> The critic's value estimates are used to compute advantages, which then train the actor. If actor updates destabilize the critic, the advantages become noisy, which destabilizes the actor further--a vicious cycle.</p>
+</li>
+</ol>
+<p><strong>A geometric perspective:</strong> There may be deeper structure here. Consider what we're learning: a mapping from states to "optimal behavior," encompassing both <em>what to do</em> (policy) and <em>how good is this state</em> (value). Naively, this is a single map:</p>
+<div class="arithmatex">\[F: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \times \mathbb{R}\]</div>
+<p>Actor-critic separates this into two maps:</p>
+<div class="arithmatex">\[\pi: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \quad \text{and} \quad V: \mathcal{S} \times \mathcal{G} \to \mathbb{R}\]</div>
+<p>This <em>suggests</em> a factorization--perhaps recognizing product structure in the target space, or projecting through a lower-dimensional "behaviorally-relevant" manifold. The shared backbone makes this more concrete: we learn <span class="arithmatex">\(\phi: \mathcal{S} \times \mathcal{G} \to \mathcal{Z}\)</span> (a representation), then compose with separate heads. This is genuinely factoring through an intermediate space.</p>
+<p>However, the analogy is imperfect. Unlike clean mathematical factorizations, <span class="arithmatex">\(V\)</span> depends on <span class="arithmatex">\(\pi\)</span> (it's <span class="arithmatex">\(V^\pi\)</span>), so the components are coupled. The precise geometric interpretation--if one exists--remains to be clarified. What's clear is that the separation has practical benefits; whether it reflects deep structure or is merely a useful engineering heuristic is an open question.</p>
+<p>In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"). This captures shared features while keeping the objectives separate. Stable Baselines 3 uses this approach by default.</p>
+<h3 id="22-the-training-loop">2.2 The Training Loop</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>repeat:
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    1. Collect N steps using current policy
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    2. Compute advantages using critic
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    3. Update actor using clipped objective (multiple epochs)
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    4. Update critic using MSE loss on returns
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    5. Discard data, go to 1
+</code></pre></div>
+<p><strong>Step 1: Collect Data</strong></p>
+<p>Run the policy for <code>n_steps</code> in each of <code>n_envs</code> parallel environments. This gives us <code>n_steps * n_envs</code> transitions to learn from.</p>
+<p><strong>Step 2: Compute Advantages</strong></p>
+<p>We use Generalized Advantage Estimation (GAE), which balances bias and variance:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>\hat{A}_t = \sum_{k=0}^{\infty} (\gamma \lambda)^k \delta_{t+k}
+</code></pre></div>
+<p>where <span class="arithmatex">\(\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)\)</span> is the TD residual.</p>
+<p>The parameter <span class="arithmatex">\(\lambda\)</span> interpolates between:
+- <span class="arithmatex">\(\lambda = 0\)</span>: One-step TD (high bias, low variance)
+- <span class="arithmatex">\(\lambda = 1\)</span>: Monte Carlo (low bias, high variance)
+- <span class="arithmatex">\(\lambda = 0.95\)</span>: Typical default</p>
+<p><strong>Steps 3-4: Update Networks</strong></p>
+<p>Unlike supervised learning, we do multiple passes over the same data:
+- <code>n_epochs = 10</code> is typical for PPO
+- Each pass uses minibatches of size <code>batch_size</code></p>
+<p>This reuses our expensive-to-collect trajectory data while the clipping prevents us from overfitting to it.</p>
+<p><strong>Step 5: Discard and Repeat</strong></p>
+<p>PPO is <strong>on-policy</strong>: we can only use data from the current policy. After updating, our data is "stale" and must be discarded.</p>
+<p>This is inefficient compared to off-policy methods (which reuse old data), but simpler and more stable.</p>
+<h3 id="23-key-hyperparameters">2.3 Key Hyperparameters</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Our Setting</th>
+<th>What It Controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>n_steps</code></td>
+<td>1024</td>
+<td>Trajectory length before update</td>
+</tr>
+<tr>
+<td><code>n_envs</code></td>
+<td>8</td>
+<td>Parallel environments (throughput)</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>256</td>
+<td>Minibatch size for gradient updates</td>
+</tr>
+<tr>
+<td><code>n_epochs</code></td>
+<td>10</td>
+<td>Passes over data per update</td>
+</tr>
+<tr>
+<td><code>learning_rate</code></td>
+<td>3e-4</td>
+<td>Gradient step size</td>
+</tr>
+<tr>
+<td><code>clip_range</code></td>
+<td>0.2</td>
+<td>PPO clipping parameter (<span class="arithmatex">\(\epsilon\)</span>)</td>
+</tr>
+<tr>
+<td><code>gae_lambda</code></td>
+<td>0.95</td>
+<td>Advantage estimation bias-variance</td>
+</tr>
+<tr>
+<td><code>ent_coef</code></td>
+<td>0.0</td>
+<td>Entropy bonus (exploration)</td>
+</tr>
+</tbody>
+</table>
+<p>For FetchReachDense-v4, Stable Baselines 3 defaults work well. Don't tune hyperparameters until you've verified the baseline works.</p>
+<hr />
+<h2 id="part-3-what-running-the-experiment">Part 3: WHAT -- Running the Experiment</h2>
+<h3 id="31-the-one-command-version">3.1 The One-Command Version</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch02_ppo_dense_reach.py<span class="w"> </span>all<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span>
+</code></pre></div>
+<p>This runs training, evaluation, and generates a report. Takes ~6-10 minutes on a GPU.</p>
+<p>For a quick sanity check (~1 minute):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch02_ppo_dense_reach.py<span class="w"> </span>train<span class="w"> </span>--total-steps<span class="w"> </span><span class="m">50000</span>
+</code></pre></div>
+<h3 id="32-what-to-expect">3.2 What to Expect</h3>
+<p>Training progress (watch for these milestones):</p>
+<table>
+<thead>
+<tr>
+<th>Timesteps</th>
+<th>Success Rate</th>
+<th>What's Happening</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-50k</td>
+<td>5-10%</td>
+<td>Random exploration</td>
+</tr>
+<tr>
+<td>50k-100k</td>
+<td>30-50%</td>
+<td>Policy starting to learn</td>
+</tr>
+<tr>
+<td>100k-200k</td>
+<td>70-90%</td>
+<td>Rapid improvement</td>
+</tr>
+<tr>
+<td>200k-500k</td>
+<td>95-100%</td>
+<td>Fine-tuning, convergence</td>
+</tr>
+</tbody>
+</table>
+<p>Our test run achieved:
+- <strong>100% success rate</strong> after 500k steps
+- <strong>4.6mm average goal distance</strong> (environment considers &lt;50mm as success)
+- <strong>~1300 steps/second</strong> throughput on NVIDIA GB10</p>
+<h3 id="33-reading-the-tensorboard-logs">3.3 Reading the TensorBoard Logs</h3>
+<p>Launch TensorBoard:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>tensorboard<span class="w"> </span>--logdir<span class="w"> </span>runs<span class="w"> </span>--bind_all
+</code></pre></div>
+<p><strong>Healthy training looks like:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Expected Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rollout/ep_rew_mean</code></td>
+<td>Steadily increasing (less negative)</td>
+</tr>
+<tr>
+<td><code>rollout/success_rate</code></td>
+<td>0 -&gt; 1 over training</td>
+</tr>
+<tr>
+<td><code>train/value_loss</code></td>
+<td>High initially, decreases, stabilizes</td>
+</tr>
+<tr>
+<td><code>train/approx_kl</code></td>
+<td>Small (&lt; 0.03), occasional spikes OK</td>
+</tr>
+<tr>
+<td><code>train/clip_fraction</code></td>
+<td>0.1-0.3 (some updates clipped, not all)</td>
+</tr>
+<tr>
+<td><code>train/entropy_loss</code></td>
+<td>Slowly decreasing (policy becoming more deterministic)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Warning signs:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely Problem</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ep_rew_mean</code> flatlines at start</td>
+<td>Environment misconfigured</td>
+<td>Check obs/action shapes</td>
+</tr>
+<tr>
+<td><code>value_loss</code> explodes</td>
+<td>Reward scale wrong</td>
+<td>Check reward range</td>
+</tr>
+<tr>
+<td><code>approx_kl</code> consistently &gt; 0.05</td>
+<td>Learning rate too high</td>
+<td>Reduce to 1e-4</td>
+</tr>
+<tr>
+<td><code>clip_fraction</code> near 1.0</td>
+<td>Updates too aggressive</td>
+<td>Reduce LR or clip_range</td>
+</tr>
+<tr>
+<td><code>entropy_loss</code> immediately 0</td>
+<td>Policy collapsed</td>
+<td>Increase ent_coef</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34-verifying-your-results">3.4 Verifying Your Results</h3>
+<p>After training completes, check the evaluation report:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>cat<span class="w"> </span>results/ch02_ppo_fetchreachdense-v4_seed0_eval.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>json.tool<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-20
+</code></pre></div>
+<p>Key fields:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="nt">&quot;success_rate&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="nt">&quot;return_mean&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-0.40</span><span class="p">,</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="nt">&quot;final_distance_mean&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0046</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Passing criteria:</strong>
+- Success rate &gt; 90%
+- Mean return &gt; -10
+- Final distance &lt; 0.02m</p>
+<hr />
+<h2 id="part-4-understanding-what-you-built">Part 4: Understanding What You Built</h2>
+<h3 id="41-what-the-policy-actually-learned">4.1 What the Policy Actually Learned</h3>
+<p>The trained policy maps observations to actions:</p>
+<p><strong>Input</strong> (25 dimensions total):
+- End-effector position (3)
+- End-effector velocity (3)
+- Gripper state (4)
+- Desired goal (3)
+- Achieved goal (3)
+- Various other features (9)</p>
+<p><strong>Output</strong> (4 dimensions):
+- dx, dy, dz: Cartesian velocity commands
+- gripper: open/close command</p>
+<p>The network learned that to reach a goal, it should output velocities that point toward the goal. This seems obvious, but the network discovered it purely from trial and error.</p>
+<h3 id="42-the-clipping-in-action">4.2 The Clipping in Action</h3>
+<p>During training, you can observe the clipping mechanism working:</p>
+<ul>
+<li><code>clip_fraction = 0.15</code> means 15% of updates were clipped</li>
+<li>This is healthy--some updates are constrained, preventing instability</li>
+<li><code>clip_fraction = 0</code> would mean the policy isn't learning aggressively enough</li>
+<li><code>clip_fraction = 1.0</code> would mean all updates are being constrained (too aggressive)</li>
+</ul>
+<h3 id="43-why-this-validates-your-pipeline">4.3 Why This Validates Your Pipeline</h3>
+<p>If PPO succeeds on dense Reach, you know:</p>
+<ol>
+<li><strong>Environment is configured correctly</strong> - Observations and actions have the right shapes and semantics</li>
+<li><strong>Network architecture works</strong> - MultiInputPolicy correctly processes dict observations</li>
+<li><strong>GPU acceleration works</strong> - Training completes in reasonable time</li>
+<li><strong>Evaluation protocol is sound</strong> - You can load checkpoints and run deterministic rollouts</li>
+<li><strong>Metrics are computed correctly</strong> - Success rate matches what you observe</li>
+</ol>
+<p>Now you can add complexity (SAC, HER, harder tasks) with confidence that failures are algorithmic, not infrastructural.</p>
+<hr />
+<h2 id="part-5-exercises">Part 5: Exercises</h2>
+<h3 id="exercise-21-reproduce-the-baseline">Exercise 2.1: Reproduce the Baseline</h3>
+<p>Run training with seed 0 and verify you achieve &gt; 90% success rate. Record:
+- Final success rate
+- Final mean return
+- Training time
+- Steps per second</p>
+<h3 id="exercise-22-multi-seed-validation">Exercise 2.2: Multi-Seed Validation</h3>
+<p>Run with seeds 0-4 and compute mean and standard deviation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>python<span class="w"> </span>scripts/ch02_ppo_dense_reach.py<span class="w"> </span>multi-seed<span class="w"> </span>--seeds<span class="w"> </span><span class="m">5</span>
+</code></pre></div>
+<p>A robust result should have std &lt; 5%.</p>
+<h3 id="exercise-23-explain-the-clipping-written">Exercise 2.3: Explain the Clipping (Written)</h3>
+<p>Answer these questions in your own words:</p>
+<ol>
+<li>What problem does vanilla policy gradient have that PPO fixes?</li>
+<li>Why does PPO clip in probability ratio space rather than parameter space?</li>
+<li>If <span class="arithmatex">\(\epsilon = 0\)</span> (no change allowed), what would happen?</li>
+<li>If <span class="arithmatex">\(\epsilon = 1\)</span> (large changes allowed), what would happen?</li>
+</ol>
+<h3 id="exercise-24-ablation-study">Exercise 2.4: Ablation Study</h3>
+<p>Train with <code>clip_range</code> values of 0.1, 0.2, and 0.4. For each:
+- Does final performance change?
+- Does training stability change?
+- How does <code>clip_fraction</code> in TensorBoard differ?</p>
+<hr />
+<h2 id="part-6-common-failures-and-solutions">Part 6: Common Failures and Solutions</h2>
+<h3 id="success-rate-stays-at-0">"Success rate stays at 0%"</h3>
+<p><strong>Check 1: Environment shape</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">gymnasium</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gym</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">env</span> <span class="o">=</span> <span class="n">gym</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="s2">&quot;FetchReachDense-v4&quot;</span><span class="p">)</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">obs</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Obs shape:&quot;</span><span class="p">,</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">obs</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Action shape:&quot;</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+</code></pre></div></p>
+<p>Expected: obs has keys with shapes (10,), (3,), (3,); action shape (4,).</p>
+<p><strong>Check 2: Reward range</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="n">action</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="n">obs</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reward: </span><span class="si">{</span><span class="n">reward</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div></p>
+<p>Expected: rewards in roughly [-1, 0] range.</p>
+<h3 id="value-loss-explodes">"Value loss explodes"</h3>
+<p>Usually means reward scale is wrong. FetchReachDense returns rewards in [-1, 0]. If you're seeing rewards in [-1000, 0] or similar, something is misconfigured.</p>
+<h3 id="training-is-slow-500-fps">"Training is slow (&lt;500 fps)"</h3>
+<p>Check that GPU is being used:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>nvidia-smi<span class="w">  </span><span class="c1"># Should show python process using GPU memory</span>
+</code></pre></div></p>
+<p>Check that you're running in Docker with <code>--gpus all</code>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>bash<span class="w"> </span>docker/dev.sh<span class="w"> </span>nvidia-smi
+</code></pre></div></p>
+<hr />
+<h2 id="conclusion">Conclusion</h2>
+<p>This chapter established something more important than a trained policy: <strong>confidence in your infrastructure</strong>.</p>
+<p>The "truth serum" principle says: before tackling hard problems, verify that easy problems work. PPO on dense Reach is that easy problem. With 100% success rate achieved, we know our environment, training loop, evaluation protocol, and GPU setup are correct.</p>
+<p><strong>Key takeaways:</strong></p>
+<ol>
+<li><strong>PPO prevents catastrophic updates</strong> through clipped probability ratios</li>
+<li><strong>Dense rewards provide continuous signal</strong>, decoupling exploration from learning</li>
+<li><strong>Diagnostics reveal problems early</strong>--watch TensorBoard, not just final metrics</li>
+<li><strong>Infrastructure bugs are silent killers</strong>--validate before adding complexity</li>
+</ol>
+<p><strong>What's Next:</strong></p>
+<p>Chapter 3 introduces SAC (Soft Actor-Critic) on the same dense Reach task. SAC is off-policy, meaning it reuses old data through a replay buffer. This is more sample-efficient but adds complexity (target networks, entropy tuning). By running SAC on dense Reach, we validate the off-policy machinery before adding HER for sparse rewards in Chapter 4.</p>
+<hr />
+<h2 id="references">References</h2>
+<ol>
+<li>
+<p>Schulman, J., Wolski, F., Dhariwal, P., Radford, A., &amp; Klimov, O. (2017). Proximal Policy Optimization Algorithms. arXiv:1707.06347.</p>
+</li>
+<li>
+<p>Schulman, J., Moritz, P., Levine, S., Jordan, M., &amp; Abbeel, P. (2015). High-Dimensional Continuous Control Using Generalized Advantage Estimation. arXiv:1506.02438.</p>
+</li>
+<li>
+<p>Henderson, P., Islam, R., Bachman, P., Pineau, J., Precup, D., &amp; Meger, D. (2018). Deep Reinforcement Learning that Matters. AAAI.</p>
+</li>
+<li>
+<p>Stable Baselines3 Documentation: https://stable-baselines3.readthedocs.io/</p>
+</li>
+<li>
+<p>Spinning Up in Deep RL: https://spinningup.openai.com/</p>
+</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.footer", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
