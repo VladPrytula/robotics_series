@@ -42,10 +42,10 @@ This is an active project. The table below shows what is implemented versus plan
 | Training CLI (`train.py`) | ✓ Complete | PPO/SAC/TD3, HER, vectorized envs |
 | Evaluation CLI (`eval.py`) | ✓ Complete | Multi-seed, metrics, JSON output |
 | **Curriculum** | | |
-| Week 0: DGX setup, proof-of-life | ✓ Complete | `ch00_proof_of_life.py`, tutorial |
-| Week 1: Environment anatomy | ✓ Complete | `ch01_env_anatomy.py`, tutorial |
-| Week 2: PPO on dense Reach | ✓ Complete | `ch02_ppo_dense_reach.py`, tutorial, 100% success |
-| Week 3: SAC on dense Reach | ✓ Complete | `ch03_sac_dense_reach.py`, tutorial, 100% success, replay diagnostics |
+| [Week 0: DGX setup, proof-of-life](tutorials/ch00_containerized_dgx_proof_of_life.md) | ✓ Complete | [`ch00_proof_of_life.py`](scripts/ch00_proof_of_life.py) |
+| [Week 1: Environment anatomy](tutorials/ch01_fetch_env_anatomy.md) | ✓ Complete | [`ch01_env_anatomy.py`](scripts/ch01_env_anatomy.py) |
+| [Week 2: PPO on dense Reach](tutorials/ch02_ppo_dense_reach.md) | ✓ Complete | [`ch02_ppo_dense_reach.py`](scripts/ch02_ppo_dense_reach.py), 100% success |
+| [Week 3: SAC on dense Reach](tutorials/ch03_sac_dense_reach.md) | ✓ Complete | [`ch03_sac_dense_reach.py`](scripts/ch03_sac_dense_reach.py), 100% success |
 | Week 4: Sparse + HER | ○ Planned | |
 | Week 5: PickAndPlace | ○ Planned | |
 | Week 6: Action-interface engineering | ○ Planned | |
