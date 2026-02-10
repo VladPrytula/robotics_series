@@ -160,6 +160,93 @@ Subsequent chapters--on PPO baselines, SAC, HER, robustness, and beyond--follow 
 
 **The scripts are the source of truth.** Tutorials reference scripts in the `scripts/` directory; they do not embed code to be copied and pasted. The scripts are versioned, tested, and maintained. The prose explains what the scripts do and why; the scripts are what you actually run.
 
+## Running Experiments
+
+### The Execution Pattern
+
+All commands run through Docker via `docker/dev.sh`. This wrapper handles GPU access, dependencies, and rendering configuration:
+
+```bash
+# Pattern: bash docker/dev.sh <command>
+bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all
+bash docker/dev.sh python train.py --algo sac --env FetchReach-v4 --total-steps 1000000
+```
+
+### Chapter Scripts
+
+Each chapter provides a self-contained orchestration script that runs the full pipeline:
+
+| Script | Description |
+|--------|-------------|
+| `scripts/ch00_proof_of_life.py` | GPU/MuJoCo/render validation |
+| `scripts/ch01_env_anatomy.py` | Environment inspection and baselines |
+| `scripts/ch02_ppo_dense_reach.py` | PPO training, eval, reporting |
+| `scripts/ch03_sac_dense_reach.py` | SAC training with diagnostics |
+
+Usage pattern:
+
+```bash
+# Full pipeline
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all --seed 0
+
+# Individual steps
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py train --total-steps 100000
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py eval
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py compare
+```
+
+### Understanding GPU Utilization
+
+You may observe low GPU utilization (~5-10%) during training. **This is expected.** RL training is CPU-bound:
+
+| Component | Hardware | Notes |
+|-----------|----------|-------|
+| MuJoCo physics simulation | CPU | Dominant cost (~60-70%) |
+| Neural network forward/backward | GPU | Small batch sizes = low utilization |
+| Replay buffer operations | CPU | Memory bandwidth limited |
+
+With `batch_size=256` and simple MLPs, GPU operations complete in microseconds. The GPU idles while waiting for CPU simulation. Typical throughput: ~600 fps on DGX-class hardware.
+
+### Monitoring Training
+
+TensorBoard provides real-time training visibility:
+
+```bash
+bash docker/dev.sh tensorboard --logdir runs --bind_all
+# Open http://localhost:6006 in browser
+```
+
+Key metrics to watch:
+
+| Metric | Meaning | Healthy Behavior |
+|--------|---------|------------------|
+| `rollout/success_rate` | Task success | Increases to >0.9 |
+| `rollout/ep_rew_mean` | Episode return | Less negative over time |
+| `train/value_loss` | Critic error | Decreases, then stabilizes |
+| `replay/q_min_mean` (SAC) | Q-value estimates | Stabilizes, doesn't explode |
+| `replay/ent_coef` (SAC) | Entropy temperature | Decreases from ~1 to ~0.1-0.5 |
+
+### Long-Running Jobs
+
+Use tmux to persist sessions across SSH disconnections:
+
+```bash
+tmux new -s rl                    # Create session
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all
+# Ctrl-b d                        # Detach (job keeps running)
+tmux attach -t rl                 # Reattach later
+```
+
+### Output Artifacts
+
+| Artifact | Location | Purpose |
+|----------|----------|---------|
+| Checkpoints | `checkpoints/*.zip` | Trained model weights |
+| Metadata | `checkpoints/*.meta.json` | Hyperparams, versions, timing |
+| Eval reports | `results/*.json` | Per-episode + aggregate metrics |
+| TensorBoard | `runs/` | Training curves and diagnostics |
+| Videos | `videos/` | Rendered policy rollouts |
+
 ## On the Voice of These Tutorials
 
 These tutorials strive for precision and clarity. Where the material is complex, we try to explain the complexity rather than hide it. Where shortcuts exist, we try to show the full path first so the reader understands what the shortcut elides.

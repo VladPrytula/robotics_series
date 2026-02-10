@@ -9,7 +9,7 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 | [Chapter 0](ch00_containerized_dgx_proof_of_life.md) | Proof of Life | Working Docker environment, `ppo_smoke.zip` |
 | [Chapter 1](ch01_fetch_env_anatomy.md) | Environment Anatomy | `reward-check` passes, baseline metrics |
 | [Chapter 2](ch02_ppo_dense_reach.md) | PPO Baseline | >90% success on dense Reach, pipeline validated |
-| Chapter 3 | SAC on Dense | *Coming soon* |
+| [Chapter 3](ch03_sac_dense_reach.md) | SAC + Replay Diagnostics | SAC matches PPO, Q-values stable |
 | Chapter 4 | HER for Sparse | *Coming soon* |
 
 ## The Learning Path
@@ -19,13 +19,54 @@ Chapter 0: Can I run code?
     |
 Chapter 1: What does the robot see/do?
     |
-Chapter 2: Can I train anything? (PPO baseline)
+Chapter 2: Can I train anything? (PPO baseline, on-policy)
     |
-Chapter 3: Can I train better? (SAC)
+Chapter 3: Can I train off-policy? (SAC, replay buffer)
     |
 Chapter 4: Can I handle sparse rewards? (HER)
     |
 Chapters 5-10: Advanced topics
+```
+
+## Running Commands
+
+All commands run through Docker via the `docker/dev.sh` wrapper:
+
+```bash
+# Pattern: bash docker/dev.sh <command>
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all
+```
+
+### Chapter Scripts
+
+Each chapter has a self-contained orchestration script:
+
+```bash
+# Full pipeline (train + eval + compare)
+bash docker/dev.sh python scripts/ch00_proof_of_life.py all
+bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all --seed 0
+
+# Partial execution
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py train --total-steps 100000
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py eval
+bash docker/dev.sh python scripts/ch03_sac_dense_reach.py compare
+```
+
+### Monitoring Training
+
+```bash
+# Start TensorBoard (http://localhost:6006)
+bash docker/dev.sh tensorboard --logdir runs --bind_all
+```
+
+### Long Jobs with tmux
+
+```bash
+tmux new -s rl                    # Start session
+# ... run training ...
+# Ctrl-b d                        # Detach
+tmux attach -t rl                 # Reattach later
 ```
 
 ## Chapter Summaries
@@ -80,6 +121,25 @@ Chapters 5-10: Advanced topics
 - Why does PPO clip probability ratios instead of parameter updates?
 - What does `clip_fraction = 0.15` mean in TensorBoard?
 - Why use dense rewards for pipeline validation?
+
+---
+
+### [Chapter 3: SAC on Dense Reach](ch03_sac_dense_reach.md)
+
+**Goal:** Validate off-policy learning before adding HER.
+
+**You will:**
+
+- Train SAC on FetchReachDense-v4 (same task as Chapter 2)
+- Understand maximum-entropy RL and auto-tuned temperature
+- Add replay buffer diagnostics (Q-values, entropy, goal distances)
+- Benchmark throughput scaling with `n_envs`
+
+**Done when:** SAC achieves >95% success and you can answer:
+
+- Why does SAC add an entropy bonus to the objective?
+- What does it mean if Q-values grow unbounded?
+- Why must we validate SAC separately before adding HER?
 
 ---
 
