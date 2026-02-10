@@ -1,10 +1,61 @@
 # Spark DGX Robotics RL Syllabus (Executable, 10 weeks)
 
-This is a step-by-step plan you can execute on **Spark DGX** to learn goal-conditioned manipulation RL and build a reproducible training/evaluation workflow around Gymnasium-Robotics Fetch tasks.
+> **From zero reward signal to 100% success -- in 28 minutes of training.**
 
-If you prefer chapter-style “textbook” notes, start with:
-- `tutorials/ch00_containerized_dgx_proof_of_life.md`
-- `tutorials/ch01_fetch_env_anatomy.md`
+![Robot reaching goals](videos/fetch_reach_demo_grid.gif)
+
+*No one programmed these movements. The robot discovered them through trial and error -- mostly error, at first.*
+
+---
+
+## What You Will Build
+
+By Week 10, you will have trained a robotic arm to **pick up objects and place them at arbitrary goal positions** -- using only sparse binary feedback ("did you succeed?"). Along the way, you will:
+
+| Week | Milestone | What You Learn |
+|------|-----------|----------------|
+| 0-1 | Environment works | Docker, MuJoCo, goal-conditioned observations |
+| 2-3 | PPO and SAC baselines | On-policy vs off-policy, replay buffers, entropy |
+| 4-5 | **HER unlocks sparse rewards** | Why failures teach success |
+| 6-7 | Policies as controllers | Action smoothness, robustness, noise injection |
+| 8-10 | Capstone | PickAndPlace with stress testing |
+
+**This is not a tutorial you read. It is a curriculum you execute.** Every week has commands to run and "done when" criteria to verify. You cannot fool yourself into thinking you understand something when the success rate is 12%.
+
+## Why This Curriculum Exists
+
+Most RL tutorials teach you to call library functions. This one teaches you to **derive algorithms from problem constraints**:
+
+- Continuous actions → actor-critic (not DQN)
+- Sparse rewards → off-policy with replay (not PPO)
+- Goal-conditioned sparse → HER (failed attempts become training data)
+- Large goal space → entropy bonus (SAC explores naturally)
+
+The method is **SAC + HER**. This is not a recipe chosen from a menu; it is a consequence of the problem structure.
+
+## Who This Is For
+
+You should already understand MDPs, policy gradients, and basic PyTorch. You should have access to a GPU (DGX preferred, but any CUDA-capable machine works). You should be comfortable with Docker and command-line workflows.
+
+**Time investment:** 10 weeks, 5-10 hours per week. The curriculum is dense. Rushing defeats the purpose.
+
+---
+
+## Quick Links
+
+**Tutorials** (theory + context):
+- [Chapter 0: Proof of Life](tutorials/ch00_containerized_dgx_proof_of_life.md)
+- [Chapter 1: Environment Anatomy](tutorials/ch01_fetch_env_anatomy.md)
+- [Chapter 2: PPO on Dense Reach](tutorials/ch02_ppo_dense_reach.md)
+- [Chapter 3: SAC on Dense Reach](tutorials/ch03_sac_dense_reach.md)
+
+**Scripts** (executable code):
+- [`scripts/ch00_proof_of_life.py`](scripts/ch00_proof_of_life.py) -- verify your setup
+- [`scripts/ch01_env_anatomy.py`](scripts/ch01_env_anatomy.py) -- inspect environments
+- [`scripts/ch02_ppo_dense_reach.py`](scripts/ch02_ppo_dense_reach.py) -- PPO baseline
+- [`scripts/ch03_sac_dense_reach.py`](scripts/ch03_sac_dense_reach.py) -- SAC with diagnostics
+
+---
 
 ## Core references (keep open)
 - Sutton & Barto (concepts)
