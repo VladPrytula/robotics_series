@@ -1,43 +1,52 @@
-name: Deploy Documentation
+name: Deploy MkDocs
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'docs/**'
-      - 'tutorials/**'
-      - 'syllabus.md'
-      - 'mkdocs.yml'
-      - 'requirements-docs.txt'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git-revision-date plugin if used
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements-docs.txt
-
-      - name: Resolve symlinks (copy actual files)
         run: |
-          for f in docs/tutorials/*.md docs/syllabus.md; do
-            if [ -L "$f" ]; then
-              target=$(readlink -f "$f")
-              rm "$f"
-              cp "$target" "$f"
-            fi
-          done
+          pip install -r requirements-docs.txt
 
-      - name: Build and deploy
-        run: mkdocs gh-deploy --force
+      - name: Build MkDocs site
+        run: |
+          mkdocs build --strict
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
