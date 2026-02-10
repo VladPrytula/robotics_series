@@ -1,4 +1,4 @@
-gymnasium
+gymnasium[classic-control]
 gymnasium-robotics
 mujoco
 stable-baselines3

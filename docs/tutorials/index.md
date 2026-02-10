@@ -4,13 +4,18 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 
 ## Quick Navigation
 
-| Chapter | Topic | Key Deliverable |
-|---------|-------|-----------------|
-| [Chapter 0](ch00_containerized_dgx_proof_of_life.md) | Proof of Life | Working Docker environment, `ppo_smoke.zip` |
-| [Chapter 1](ch01_fetch_env_anatomy.md) | Environment Anatomy | `reward-check` passes, baseline metrics |
-| [Chapter 2](ch02_ppo_dense_reach.md) | PPO Baseline | >90% success on dense Reach, pipeline validated |
-| [Chapter 3](ch03_sac_dense_reach.md) | SAC + Replay Diagnostics | SAC matches PPO, Q-values stable |
-| Chapter 4 | HER for Sparse | *Coming soon* |
+| Chapter | Topic | Key Deliverable | Run It | Build It |
+|---------|-------|-----------------|--------|----------|
+| [Chapter 0](ch00_containerized_dgx_proof_of_life.md) | Proof of Life | Working Docker environment, `ppo_smoke.zip` | `ch00_proof_of_life.py` | -- |
+| [Chapter 1](ch01_fetch_env_anatomy.md) | Environment Anatomy | `reward-check` passes, baseline metrics | `ch01_fetch_env_anatomy.py` | -- |
+| [Chapter 2](ch02_ppo_dense_reach.md) | PPO Baseline | >90% success on dense Reach, pipeline validated | `ch02_ppo_dense_reach.py` | `labs/ppo_from_scratch.py` |
+| [Chapter 3](ch03_sac_dense_reach.md) | SAC + Replay Diagnostics | SAC matches PPO, Q-values stable | `ch03_sac_dense_reach.py` | `labs/sac_from_scratch.py` |
+| [Chapter 4](ch04_her_sparse_reach_push.md) | HER for Sparse | HER vs no-HER separation on Reach/Push | `ch04_her_sparse_reach_push.py` | `labs/her_relabeler.py` |
+
+**Legend:**
+
+- **Run It:** Production pipeline using Stable Baselines 3. Reproducible, optimized, tracked in TensorBoard.
+- **Build It:** From-scratch implementations showing how equations map to code. Educational, not for production.
 
 ## The Learning Path
 
@@ -46,6 +51,7 @@ Each chapter has a self-contained orchestration script:
 bash docker/dev.sh python scripts/ch00_proof_of_life.py all
 bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all --seed 0
+bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py reach-all --seeds 0,1,2
 
 # Partial execution
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py train --total-steps 100000
@@ -140,6 +146,34 @@ tmux attach -t rl                 # Reattach later
 - Why does SAC add an entropy bonus to the objective?
 - What does it mean if Q-values grow unbounded?
 - Why must we validate SAC separately before adding HER?
+
+---
+
+### [Chapter 4: HER on Sparse Reach/Push](ch04_her_sparse_reach_push.md)
+
+**Goal:** Demonstrate that HER is the difference-maker on sparse goals.
+
+**You will:**
+
+- Train SAC without HER on sparse environments (establish baseline difficulty)
+- Train SAC + HER on the same tasks (see improvement)
+- Run multi-seed experiments for statistical validity
+- Discover why Reach is too easy and Push is the real test
+
+**Actual Results (FetchReach-v4):**
+
+| Method | Success Rate | Notes |
+|--------|--------------|-------|
+| SAC (no-HER) | 96.0% +/- 8.0% | Reach is easy enough for random exploration |
+| SAC + HER | 100.0% +/- 0.0% | Perfect, but weak separation |
+
+**Key insight:** FetchReach-v4 is too simple to demonstrate HER's value. The real test is FetchPush-v4, where object manipulation makes random success nearly impossible.
+
+**Done when:** Clear separation on Push (>50 percentage points) and you can answer:
+
+- Why does relabeling turn failures into successes?
+- Why can only off-policy algorithms use HER?
+- Why does Reach show weak separation but Push shows strong separation?
 
 ---
 

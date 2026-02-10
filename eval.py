@@ -62,7 +62,13 @@ def _gather_versions() -> dict[str, str]:
     return versions
 
 
-def _load_model(algo: str, ckpt: str, *, device: str):
+def _load_model(algo: str, ckpt: str, *, device: str, env=None):
+    """Load SB3 model checkpoint.
+
+    Note: Models trained with HerReplayBuffer require an environment to be passed
+    for proper deserialization. If env is None and initial load fails with HER error,
+    we attempt to create the environment from metadata or checkpoint naming.
+    """
     from stable_baselines3 import PPO, SAC, TD3
 
     candidates: list[tuple[str, object]] = [("ppo", PPO), ("sac", SAC), ("td3", TD3)]
@@ -72,9 +78,19 @@ def _load_model(algo: str, ckpt: str, *, device: str):
     errors: list[str] = []
     for name, cls in candidates:
         try:
-            model = cls.load(ckpt, device=device)
+            model = cls.load(ckpt, device=device, env=env)
             return name, model
         except Exception as exc:
+            err_str = str(exc)
+            # HerReplayBuffer requires environment for loading
+            if "HerReplayBuffer" in err_str and env is not None:
+                # Already tried with env, so this is a different error
+                errors.append(f"{name}: {exc}")
+                continue
+            elif "HerReplayBuffer" in err_str and env is None:
+                # Need to load with environment - caller should retry
+                errors.append(f"{name}: {exc} (HER checkpoint requires env)")
+                continue
             errors.append(f"{name}: {exc}")
             continue
     raise SystemExit("Could not load checkpoint with PPO/SAC/TD3.\n" + "\n".join(errors))
@@ -132,7 +148,16 @@ def main() -> int:
     render_mode = "rgb_array" if args.video else None
     env = gym.make(args.env_id, render_mode=render_mode)
     try:
-        algo_name, model = _load_model(args.algo, str(ckpt_path), device=device)
+        # First attempt: load without env (works for non-HER checkpoints)
+        # Second attempt: load with env (required for HER checkpoints)
+        try:
+            algo_name, model = _load_model(args.algo, str(ckpt_path), device=device, env=None)
+        except SystemExit as e:
+            if "HerReplayBuffer" in str(e):
+                # HER checkpoint detected - retry with environment
+                algo_name, model = _load_model(args.algo, str(ckpt_path), device=device, env=env)
+            else:
+                raise
 
         episode_returns: list[float] = []
         episode_lengths: list[int] = []

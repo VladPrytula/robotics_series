@@ -250,7 +250,181 @@ L(\theta) = \mathbb{E}_{s \sim \mathcal{B}, a \sim \pi_\theta}\left[ \alpha \log
 
 ---
 
-## Part 3: WHAT -- Running the Experiment
+## Part 2.5: BUILD IT -- From Equations to Code
+
+This section shows how SAC's math maps to code. We use pedagogical implementations from `scripts/labs/sac_from_scratch.py`—these are for understanding, not production.
+
+### 2.5.1 Twin Q-Network Loss
+
+The critic update from Section 2.2:
+
+$$L(\phi_i) = \mathbb{E}\left[ \left( Q_{\phi_i}(s, a) - y \right)^2 \right] \quad \text{where} \quad y = r + \gamma \left[ \min_j Q_{\bar{\phi}_j}(s', a') - \alpha \log \pi(a' | s') \right]$$
+
+In code:
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:twin_q_loss"
+```
+
+**Key mapping:**
+
+| Math | Code | Meaning |
+|------|------|---------|
+| $Q_{\phi_i}(s, a)$ | `q1, q2` | Twin Q-network outputs |
+| $\min_j Q_{\bar{\phi}_j}$ | `torch.min(target_q1, target_q2)` | Pessimistic target (reduces overestimation) |
+| $\alpha \log \pi$ | `alpha * next_log_probs` | Entropy bonus in target |
+
+### 2.5.2 Actor Loss with Entropy
+
+The policy update from Section 2.2:
+
+$$L(\theta) = \mathbb{E}\left[ \alpha \log \pi_\theta(a | s) - \min_i Q_{\phi_i}(s, a) \right]$$
+
+In code:
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:actor_loss"
+```
+
+**Key insight:** The actor wants high Q-values (good actions) *and* high entropy (exploration). The $\alpha$ parameter balances these goals.
+
+### 2.5.3 Automatic Temperature Tuning
+
+SAC can auto-tune $\alpha$ to maintain a target entropy level:
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:temperature_loss"
+```
+
+**Why this matters:** Manual $\alpha$ tuning is finicky. Auto-tuning adjusts exploration pressure throughout training—high early (more exploration), low late (more exploitation).
+
+### 2.5.4 Verify the Lab
+
+Run the from-scratch implementation's sanity checks:
+
+```bash
+bash docker/dev.sh python scripts/labs/sac_from_scratch.py --verify
+```
+
+Expected output:
+- Q-networks produce finite values
+- Policy outputs bounded actions in [-1, 1]
+- Alpha auto-tunes (trends downward)
+
+This lab is **not** how we train policies—that's what SB3 is for. The lab shows *what* SB3 is doing internally.
+
+### 2.5.5 Exercises: Modify and Observe
+
+**Exercise 2.5.1: Twin Q-Network Ablation**
+
+In `compute_q_loss()`, the target uses `torch.min(target_q1, target_q2)`. Try using just one Q-network:
+
+```python
+# Change: target_q = torch.min(target_q1, target_q2)
+# To:     target_q = target_q1  # Use only Q1
+```
+
+*Question:* What happens to `q1_mean` over training? Does it grow unbounded? This demonstrates why twin Q-networks matter.
+
+**Exercise 2.5.2: Entropy Coefficient Effect**
+
+In `verify_sac_update()`, observe how alpha changes:
+
+```bash
+bash docker/dev.sh python scripts/labs/sac_from_scratch.py --verify
+```
+
+*Question:* Alpha starts at 1.0 and trends toward ~0.99. What does this tell you about the target entropy? Try changing `target_entropy = -float(act_dim)` to a smaller value and observe.
+
+**Exercise 2.5.3: Fixed vs Auto Alpha**
+
+Modify `sac_update()` to use a fixed alpha instead of auto-tuning:
+
+```python
+# Replace: alpha = log_alpha.exp().item()
+# With:    alpha = 0.2  # Fixed temperature
+```
+
+*Question:* With fixed alpha=0.2, how does training differ? When might you prefer fixed over auto-tuned temperature?
+
+**Exercise 2.5.4: Soft Target Updates**
+
+The `tau` parameter controls how quickly target networks track the main networks. In `sac_update()`:
+
+```python
+# Try: tau = 0.001 (slower), tau = 0.01 (faster), tau = 1.0 (hard update)
+```
+
+*Question:* What happens with `tau=1.0` (hard update every step)? Why does slow tracking help stability?
+
+### 2.5.6 Demo: SAC Solves Pendulum
+
+The from-scratch implementation can actually solve a continuous control task. Run:
+
+```bash
+# Quick demo (~30 seconds): shows learning but doesn't solve
+bash docker/dev.sh python scripts/labs/sac_from_scratch.py --demo
+
+# Full demo (~8 minutes on CPU): actually solves Pendulum
+bash docker/dev.sh python scripts/labs/sac_from_scratch.py --demo --steps 50000
+```
+
+**Actual results (50k steps on CPU):**
+
+| Step | Avg Return | Alpha | What's Happening |
+|------|------------|-------|------------------|
+| 5000 | -843 | 0.415 | Learning started, still random-ish |
+| 10000 | **-190** | 0.197 | **Solved!** (threshold: -200) |
+| 25000 | -141 | 0.048 | Refining swing-up behavior |
+| 50000 | -134 | 0.017 | Stable, nearly deterministic policy |
+
+**Key observations:**
+
+1. **Automatic temperature tuning works:** Alpha drops from 0.415 → 0.017, meaning the policy transitions from exploratory (high entropy) to exploitative (low entropy) automatically.
+
+2. **Solves by step 10k:** The -200 threshold is crossed early; additional training refines the policy.
+
+3. **This is the same algorithm SB3 uses:** The from-scratch implementation matches SB3's SAC. The difference is pedagogical clarity, not algorithmic.
+
+**Exercise 2.5.5: Record a GIF of the Trained Policy**
+
+After training, you can record a GIF showing the learned behavior:
+
+```bash
+bash docker/dev.sh python scripts/labs/sac_from_scratch.py --demo --steps 50000 --record
+```
+
+This trains SAC on Pendulum for 50k steps and saves a GIF to `videos/sac_pendulum_demo.gif`.
+
+**Note:** If running outside of `dev.sh` (e.g., in scripts or CI), use the full Docker command:
+
+```bash
+docker run --rm \
+  -e MUJOCO_GL=egl \
+  -e PYOPENGL_PLATFORM=egl \
+  -e PYTHONUNBUFFERED=1 \
+  -e HOME=/tmp \
+  -e XDG_CACHE_HOME=/tmp/.cache \
+  -e TORCH_HOME=/tmp/.cache/torch \
+  -e TORCHINDUCTOR_CACHE_DIR=/tmp/.cache/torch_inductor \
+  -e MPLCONFIGDIR=/tmp/.cache/matplotlib \
+  -e USER=user \
+  -e LOGNAME=user \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  --gpus all \
+  --ipc=host \
+  robotics-rl:latest \
+  bash -c 'source .venv/bin/activate && python scripts/labs/sac_from_scratch.py --demo --steps 50000 --record'
+```
+
+**Trained policy swinging up and balancing:**
+
+![SAC Pendulum Demo](../videos/sac_pendulum_demo.gif)
+
+---
+
+## Part 3: WHAT -- Running the Experiment (Run It)
 
 ### 3.1 The One-Command Version
 

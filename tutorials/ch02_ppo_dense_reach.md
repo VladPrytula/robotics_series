@@ -300,7 +300,158 @@ For FetchReachDense-v4, Stable Baselines 3 defaults work well. Don't tune hyperp
 
 ---
 
-## Part 3: WHAT -- Running the Experiment
+## Part 2.5: BUILD IT -- From Equations to Code
+
+This section shows how the math above maps to code. We use pedagogical implementations from `scripts/labs/ppo_from_scratch.py`—these are for understanding, not production.
+
+### 2.5.1 GAE Computation
+
+The advantage formula from Section 2.2:
+
+$$\hat{A}_t = \sum_{k=0}^{\infty} (\gamma \lambda)^k \delta_{t+k}$$
+
+In code, we compute this backwards through the trajectory:
+
+```python
+--8<-- "scripts/labs/ppo_from_scratch.py:gae_computation"
+```
+
+**Key mapping:**
+
+| Math | Code | Meaning |
+|------|------|---------|
+| $\delta_t$ | `delta` | TD residual: was this transition better than expected? |
+| $\gamma$ | `gamma` | Discount factor (0.99) |
+| $\lambda$ | `gae_lambda` | Bias-variance tradeoff (0.95) |
+| $\hat{A}_t$ | `advantages[t]` | How much better was this action vs. average? |
+
+### 2.5.2 The Clipped Loss
+
+The PPO objective from Section 1.4:
+
+$$L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( r_t A_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \cdot A_t \right) \right]$$
+
+In code:
+
+```python
+--8<-- "scripts/labs/ppo_from_scratch.py:ppo_loss"
+```
+
+**Key mapping:**
+
+| Math | Code | Meaning |
+|------|------|---------|
+| $r_t = \frac{\pi_\theta(a|s)}{\pi_{\theta_{old}}(a|s)}$ | `ratio` | How much did action probability change? |
+| $\epsilon$ | `clip_range` | Maximum allowed ratio change (0.2) |
+| $A_t$ | `advantages` | Advantage estimates from GAE |
+
+### 2.5.3 Verify the Lab
+
+Run the from-scratch implementation's sanity checks:
+
+```bash
+bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --verify
+```
+
+Expected output:
+- GAE computation produces finite advantages
+- PPO loss is computable with bounded KL
+- Value loss decreases over updates
+
+This lab is **not** how we train policies—that's what SB3 is for. The lab shows *what* SB3 is doing internally.
+
+### 2.5.4 Exercises: Modify and Observe
+
+These exercises help you develop intuition by changing the code and seeing what happens.
+
+**Exercise 2.5.1: GAE Lambda Ablation**
+
+Modify `gae_lambda` in the verification test and observe the effect:
+
+```bash
+# In scripts/labs/ppo_from_scratch.py, find verify_gae() and try:
+# gae_lambda = 0.0  (one-step TD, high bias)
+# gae_lambda = 1.0  (Monte Carlo, high variance)
+# gae_lambda = 0.95 (default balance)
+```
+
+*Question:* How do the advantage values change? Why does $\lambda=0$ produce smaller magnitude advantages?
+
+**Exercise 2.5.2: Clipping Effect**
+
+Modify `clip_range` in `verify_ppo_loss()`:
+
+```bash
+# Try clip_range = 0.0, 0.1, 0.2, 0.5, 1.0
+```
+
+*Question:* What happens to `clip_fraction` as you increase `clip_range`? At what point does clipping become ineffective?
+
+**Exercise 2.5.3: Train on CartPole**
+
+Run the full demo to see PPO learn a simple task from scratch:
+
+```bash
+bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --demo
+```
+
+**Actual results (CPU, ~30 seconds):**
+
+| Iteration | Steps | Avg Return | Value Loss | What's Happening |
+|-----------|-------|------------|------------|------------------|
+| 1 | 2k | 22 | 7.6 | Random behavior |
+| 5 | 10k | 45 | 25.9 | Starting to balance |
+| 10 | 20k | 64 | 57.6 | Improving steadily |
+| 15 | 31k | 129 | 32.0 | Getting close |
+| 18 | 37k | **254** | 14.2 | **[SOLVED]** |
+
+**Key observations:**
+
+1. **Solves in ~37k steps:** The 195+ threshold (solved) is crossed around iteration 18.
+2. **Value loss trajectory:** High initially (learning), decreases as predictions improve.
+3. **KL stays bounded:** Typically < 0.05, showing clipping is working.
+
+This is the same algorithm SB3 uses—the from-scratch version just makes every step explicit.
+
+**Exercise 2.5.4: Record a GIF of the Trained Policy**
+
+After training, you can record a GIF showing the learned behavior:
+
+```bash
+bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --demo --record
+```
+
+This trains the policy and saves a GIF to `videos/ppo_cartpole_demo.gif`.
+
+**Note:** If running outside of `dev.sh` (e.g., in scripts or CI), use the full Docker command:
+
+```bash
+docker run --rm \
+  -e MUJOCO_GL=egl \
+  -e PYOPENGL_PLATFORM=egl \
+  -e PYTHONUNBUFFERED=1 \
+  -e HOME=/tmp \
+  -e XDG_CACHE_HOME=/tmp/.cache \
+  -e TORCH_HOME=/tmp/.cache/torch \
+  -e TORCHINDUCTOR_CACHE_DIR=/tmp/.cache/torch_inductor \
+  -e MPLCONFIGDIR=/tmp/.cache/matplotlib \
+  -e USER=user \
+  -e LOGNAME=user \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  --gpus all \
+  --ipc=host \
+  robotics-rl:latest \
+  bash -c 'source .venv/bin/activate && python scripts/labs/ppo_from_scratch.py --demo --record'
+```
+
+**Trained policy balancing the pole:**
+
+![PPO CartPole Demo](../videos/ppo_cartpole_demo.gif)
+
+---
+
+## Part 3: WHAT -- Running the Experiment (Run It)
 
 ### 3.1 The One-Command Version
 

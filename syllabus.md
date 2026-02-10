@@ -48,12 +48,14 @@ You should already understand MDPs, policy gradients, and basic PyTorch. You sho
 - [Chapter 1: Environment Anatomy](tutorials/ch01_fetch_env_anatomy.md)
 - [Chapter 2: PPO on Dense Reach](tutorials/ch02_ppo_dense_reach.md)
 - [Chapter 3: SAC on Dense Reach](tutorials/ch03_sac_dense_reach.md)
+- [Chapter 4: HER on Sparse Reach/Push](tutorials/ch04_her_sparse_reach_push.md)
 
 **Scripts** (executable code):
 - [`scripts/ch00_proof_of_life.py`](scripts/ch00_proof_of_life.py) -- verify your setup
 - [`scripts/ch01_env_anatomy.py`](scripts/ch01_env_anatomy.py) -- inspect environments
 - [`scripts/ch02_ppo_dense_reach.py`](scripts/ch02_ppo_dense_reach.py) -- PPO baseline
 - [`scripts/ch03_sac_dense_reach.py`](scripts/ch03_sac_dense_reach.py) -- SAC with diagnostics
+- [`scripts/ch04_her_sparse_reach_push.py`](scripts/ch04_her_sparse_reach_push.py) -- HER experiments
 
 ---
 

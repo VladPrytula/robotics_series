@@ -37,8 +37,13 @@ markdown_extensions:
   # Code highlighting
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
   - pymdownx.superfences
   - pymdownx.inlinehilite
+  # Snippet includes from source files (for synced code excerpts)
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
   # Admonitions (notes, warnings, etc.)
   - admonition
   - pymdownx.details
@@ -58,6 +63,9 @@ nav:
     - Overview: tutorials/index.md
     - "Chapter 0: Proof of Life": tutorials/ch00_containerized_dgx_proof_of_life.md
     - "Chapter 1: Environment Anatomy": tutorials/ch01_fetch_env_anatomy.md
+    - "Chapter 2: PPO on Dense Reach": tutorials/ch02_ppo_dense_reach.md
+    - "Chapter 3: SAC on Dense Reach": tutorials/ch03_sac_dense_reach.md
+    - "Chapter 4: HER on Sparse Reach/Push": tutorials/ch04_her_sparse_reach_push.md
   - Syllabus: syllabus.md
   - Reference:
     - CLI: reference/cli.md

@@ -181,6 +181,7 @@ This encourages stochastic policies that explore naturally, without requiring ex
 robotics/
 ├── docker/              # Container definitions (Dockerfile, dev.sh, build.sh, run.sh)
 ├── scripts/             # Versioned experiment scripts (ch00_proof_of_life.py, ch01_env_anatomy.py)
+│   └── labs/            # From-scratch implementations for teaching (ppo_from_scratch.py, etc.)
 ├── tutorials/           # Textbook-style documentation (chNN_<topic>.md)
 ├── train.py             # Training CLI (PPO/SAC/TD3, HER, vectorized envs, TensorBoard)
 ├── eval.py              # Evaluation CLI (metrics: success rate, return, smoothness)
@@ -339,7 +340,7 @@ This repository uses the Fetch robotic arm tasks from Gymnasium-Robotics:
 
 **Quantification.** Claims require numbers. "The policy works" is inadmissible; "Success rate: 94.2% ± 2.1% (5 seeds, 100 episodes each)" is acceptable.
 
-**Self-Contained Scripts.** Tutorials call scripts in `scripts/`; they do not contain inline Python or Bash snippets. Every experiment is a versioned, runnable artifact.
+**Self-Contained Scripts.** Production experiments live in `scripts/chNN_*.py`—versioned, runnable artifacts. Tutorials may include short, annotated code excerpts (via snippet-includes from `scripts/labs/`) that show how equations map to code, but runnable pipelines remain in scripts.
 
 ---
 
