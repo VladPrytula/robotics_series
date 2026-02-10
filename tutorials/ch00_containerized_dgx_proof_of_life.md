@@ -329,7 +329,7 @@ All tests should pass on both platforms, and all artifacts should be generated c
 
 3. **Docker Desktop memory**: You may need to increase Docker Desktop's memory allocation (Settings -> Resources -> Memory) to 8GB+ for large batch sizes or long training runs.
 
-4. **No MPS support**: We intentionally avoid Metal Performance Shaders despite its availability. MPS has edge cases with certain PyTorch operations that can cause silent numerical issues. CPU is slower but more reliable.
+4. **No MPS (Apple GPU) support**: MPS (Metal Performance Shaders) cannot work in Docker containers because Docker runs Linux, not macOS. MPS is a macOS-only API that requires direct access to Apple's Metal framework. Inside a Linux container, `torch.backends.mps.is_available()` always returns False, regardless of the host being an M4 Mac.
 
 #### Docker Desktop Configuration for Mac
 
