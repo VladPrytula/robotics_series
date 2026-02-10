@@ -34,18 +34,6 @@ def _parse_seeds(raw: str) -> list[int]:
 
 
 def _resolve_device(device: str) -> str:
-    if device == "mps":
-        try:
-            import torch
-
-            if not torch.backends.mps.is_available():
-                print("WARNING: MPS requested but not available, falling back to CPU", file=__import__("sys").stderr)
-                return "cpu"
-            print("WARNING: MPS support is experimental. If you encounter issues, use --device cpu", file=__import__("sys").stderr)
-            return "mps"
-        except Exception:
-            print("WARNING: MPS requested but torch.backends.mps unavailable, falling back to CPU", file=__import__("sys").stderr)
-            return "cpu"
     if device != "auto":
         return device
     try:
@@ -105,7 +93,7 @@ def main() -> int:
     parser.add_argument("--ckpt", required=True, help="Path to SB3 .zip checkpoint.")
     parser.add_argument("--env", dest="env_id", required=True, help="Gym env id (e.g., FetchReachDense-v4).")
     parser.add_argument("--algo", choices=["auto", "ppo", "sac", "td3"], default="auto")
-    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     parser.add_argument("--n-episodes", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0, help="Base seed used when --seeds is not provided.")
     parser.add_argument("--seeds", default="", help="Comma list (e.g., 0,1,2) or range (e.g., 0-99).")

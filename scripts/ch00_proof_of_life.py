@@ -222,13 +222,7 @@ def cmd_ppo_smoke(args: argparse.Namespace) -> int:
     )
 
     device = args.device
-    if device == "mps":
-        if not torch.backends.mps.is_available():
-            print("WARNING: MPS requested but not available, falling back to CPU", file=sys.stderr)
-            device = "cpu"
-        else:
-            print("WARNING: MPS support is experimental. If you encounter issues, use --device cpu", file=sys.stderr)
-    elif device == "auto":
+    if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     out_path = Path(args.out).expanduser().resolve()
@@ -347,7 +341,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--env-id", default="auto", help="Gym env id (or 'auto').")
     p_train.add_argument("--preferred", nargs="*", default=preferred_default, help="Preferred env IDs (in order).")
     p_train.add_argument("--seed", type=int, default=0)
-    p_train.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    p_train.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     p_train.add_argument("--n-envs", type=int, default=8)
     p_train.add_argument("--n-steps", type=int, default=1024, help="SB3 PPO n_steps (rollout length per env).")
     p_train.add_argument("--batch-size", type=int, default=256)
@@ -361,7 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--seed", type=int, default=0)
     p_all.add_argument("--render-out", default="smoke_frame.png")
     p_all.add_argument("--skip-train", action="store_true")
-    p_all.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    p_all.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     p_all.add_argument("--n-envs", type=int, default=8)
     p_all.add_argument("--n-steps", type=int, default=1024)
     p_all.add_argument("--batch-size", type=int, default=256)

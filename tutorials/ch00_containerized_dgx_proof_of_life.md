@@ -310,14 +310,14 @@ bash docker/dev.sh python scripts/ch00_proof_of_life.py all
 
 **Expected results by platform:**
 
-| Aspect | Mac M4 (default) | Mac M4 (--device mps) | DGX / NVIDIA |
-|--------|------------------|----------------------|--------------|
-| Device reported | `cpu` | `mps` | `cuda` |
-| Rendering backend | `osmesa` | `osmesa` | `egl` |
-| Training throughput | ~60-100 fps | ~100-200 fps | ~600 fps |
-| `smoke_frame.png` | Yes | Yes | Yes |
-| `ppo_smoke.zip` | Yes | Yes | Yes |
-| All tests pass | Yes | Yes | Yes |
+| Aspect | Mac M4 | DGX / NVIDIA |
+|--------|--------|--------------|
+| Device reported | `cpu` | `cuda` |
+| Rendering backend | `osmesa` | `egl` |
+| Training throughput | ~60-100 fps | ~600 fps |
+| `smoke_frame.png` | Yes (Fetch robot visible) | Yes (Fetch robot visible) |
+| `ppo_smoke.zip` | Yes (loadable) | Yes (loadable) |
+| All tests pass | Yes | Yes |
 
 All tests should pass on both platforms, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX--the learned weights are platform-independent.
 
@@ -329,7 +329,7 @@ All tests should pass on both platforms, and all artifacts should be generated c
 
 3. **Docker Desktop memory**: You may need to increase Docker Desktop's memory allocation (Settings -> Resources -> Memory) to 8GB+ for large batch sizes or long training runs.
 
-4. **MPS is opt-in**: Metal Performance Shaders (Apple's GPU acceleration) is available but not enabled by default. Use `--device mps` to enable it. MPS may have edge cases with certain PyTorch operations, so CPU is the safer default. Example: `bash docker/dev.sh python scripts/ch00_proof_of_life.py all --device mps`
+4. **No MPS support**: We intentionally avoid Metal Performance Shaders despite its availability. MPS has edge cases with certain PyTorch operations that can cause silent numerical issues. CPU is slower but more reliable.
 
 #### Docker Desktop Configuration for Mac
 
