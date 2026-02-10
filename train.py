@@ -25,7 +25,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--algo", choices=["ppo", "sac", "td3"], required=True)
     parser.add_argument("--env", dest="env_id", required=True, help="Gym env id (e.g., FetchReachDense-v4).")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--total-steps", type=int, default=1_000_000)
     parser.add_argument(
@@ -59,6 +59,18 @@ def _default_out(env_id: str, algo: str, seed: int) -> Path:
 
 
 def _resolve_device(device: str) -> str:
+    if device == "mps":
+        try:
+            import torch
+
+            if not torch.backends.mps.is_available():
+                print("WARNING: MPS requested but not available, falling back to CPU", file=__import__("sys").stderr)
+                return "cpu"
+            print("WARNING: MPS support is experimental. If you encounter issues, use --device cpu", file=__import__("sys").stderr)
+            return "mps"
+        except Exception:
+            print("WARNING: MPS requested but torch.backends.mps unavailable, falling back to CPU", file=__import__("sys").stderr)
+            return "cpu"
     if device != "auto":
         return device
     try:

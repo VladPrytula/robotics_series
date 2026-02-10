@@ -54,15 +54,19 @@ def get_eval_output_path(seed: int) -> Path:
 
 
 def check_gpu() -> bool:
-    """Check if GPU is available."""
+    """Check if GPU (CUDA) or MPS is available."""
     try:
         import torch
-        available = torch.cuda.is_available()
-        if available:
+
+        if torch.cuda.is_available():
             print(f"[ch02] GPU: {torch.cuda.get_device_name(0)}")
+            return True
+        elif torch.backends.mps.is_available():
+            print("[ch02] MPS (Apple Silicon) available. Use --device mps to enable (experimental)")
+            return False  # MPS is opt-in, so return False for "no CUDA"
         else:
             print("[ch02] WARNING: No GPU detected, training will be slow")
-        return available
+            return False
     except ImportError:
         print("[ch02] WARNING: PyTorch not available, cannot check GPU")
         return False

@@ -72,13 +72,21 @@ def cmd_train(args: argparse.Namespace) -> int:
     seed = args.seed
     n_envs = args.n_envs
     total_steps = args.total_steps
-    device = "cuda" if args.device == "auto" else args.device
 
     try:
         import torch
 
-        if args.device == "auto":
+        if args.device == "mps":
+            if not torch.backends.mps.is_available():
+                print("[ch03] WARNING: MPS requested but not available, falling back to CPU", file=sys.stderr)
+                device = "cpu"
+            else:
+                print("[ch03] WARNING: MPS support is experimental. If you encounter issues, use --device cpu", file=sys.stderr)
+                device = "mps"
+        elif args.device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            device = args.device
     except Exception:
         device = "cpu"
 
@@ -429,7 +437,7 @@ def main() -> int:
     p_train.add_argument("--seed", type=int, default=0)
     p_train.add_argument("--n-envs", type=int, default=8)
     p_train.add_argument("--total-steps", type=int, default=1_000_000)
-    p_train.add_argument("--device", default="auto")
+    p_train.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     p_train.add_argument("--out", default=None, help="Checkpoint output path prefix")
     p_train.add_argument("--log-dir", default="runs")
     p_train.add_argument("--batch-size", type=int, default=256)
@@ -462,7 +470,7 @@ def main() -> int:
     p_all.add_argument("--seed", type=int, default=0)
     p_all.add_argument("--n-envs", type=int, default=8)
     p_all.add_argument("--total-steps", type=int, default=1_000_000)
-    p_all.add_argument("--device", default="auto")
+    p_all.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     p_all.add_argument("--log-dir", default="runs")
 
     args = parser.parse_args()

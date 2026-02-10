@@ -31,7 +31,7 @@ def main() -> int:
     parser.add_argument("--algo", choices=["ppo", "sac", "td3"], default="ppo")
     parser.add_argument("--env", dest="env_id", default="FetchReachDense-v4")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--total-steps", type=int, default=50_000)
     parser.add_argument("--n-eval-episodes", type=int, default=50)
