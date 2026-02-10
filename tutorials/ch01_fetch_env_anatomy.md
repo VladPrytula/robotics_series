@@ -70,7 +70,7 @@ In simulation, we collect a million timesteps in minutes. Policies trained in si
 
 | Real Fetch Robot | Simulated FetchReach |
 |:----------------:|:--------------------:|
-| ![Fetch Robot](https://cdn.sanity.io/images/7p2whiua/production/f3dbbb6c9d9cf3ca435e531a7dba9750170f6ee3-2048x1536.jpg?w=400) | ![FetchReach](https://robotics.farama.org/_images/reach.gif) |
+| ![Fetch Robot](https://cdn.sanity.io/images/7p2whiua/production/f3dbbb6c9d9cf3ca435e531a7dba9750170f6ee3-2048x1536.jpg?w=400) | ![FetchReach](https://robotics.farama.org/_static/videos/fetch/reach.gif) |
 | *Source: [Robots Guide](https://robotsguide.com/robots/fetch/)* | *Source: [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/)* |
 
 </div>
