@@ -296,16 +296,30 @@ bash docker/dev.sh python scripts/ch00_proof_of_life.py all
 
 The platform detection uses `uname -s` (Darwin for Mac) and `uname -m` (arm64 for Apple Silicon).
 
-#### Expected Output Differences
+#### Verification
 
-When running on Mac, you will see:
+Run the same commands on each platform:
 
-- Device reported as `cpu` instead of `cuda`
-- Rendering backend as `osmesa` instead of `egl`
-- Slower training throughput (~100 fps instead of ~600 fps)
-- Slightly different timing for operations
+```bash
+# Build image (platform auto-detected)
+bash docker/build.sh
 
-All tests should pass, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX--the learned weights are platform-independent.
+# Run proof of life
+bash docker/dev.sh python scripts/ch00_proof_of_life.py all
+```
+
+**Expected results by platform:**
+
+| Aspect | Mac M4 | DGX / NVIDIA |
+|--------|--------|--------------|
+| Device reported | `cpu` | `cuda` |
+| Rendering backend | `osmesa` | `egl` |
+| Training throughput | ~60-100 fps | ~600 fps |
+| `smoke_frame.png` | Yes (Fetch robot visible) | Yes (Fetch robot visible) |
+| `ppo_smoke.zip` | Yes (loadable) | Yes (loadable) |
+| All tests pass | Yes | Yes |
+
+All tests should pass on both platforms, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX--the learned weights are platform-independent.
 
 #### Known Limitations
 
