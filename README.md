@@ -45,7 +45,7 @@ This is an active project. The table below shows what is implemented versus plan
 | Week 0: DGX setup, proof-of-life | ✓ Complete | `ch00_proof_of_life.py`, tutorial |
 | Week 1: Environment anatomy | ✓ Complete | `ch01_env_anatomy.py`, tutorial |
 | Week 2: PPO on dense Reach | ✓ Complete | `ch02_ppo_dense_reach.py`, tutorial, 100% success |
-| Week 3: SAC on dense Reach | ○ Planned | |
+| Week 3: SAC on dense Reach | ✓ Complete | `ch03_sac_dense_reach.py`, tutorial, 100% success, replay diagnostics |
 | Week 4: Sparse + HER | ○ Planned | |
 | Week 5: PickAndPlace | ○ Planned | |
 | Week 6: Action-interface engineering | ○ Planned | |
@@ -54,7 +54,7 @@ This is an active project. The table below shows what is implemented versus plan
 | Week 9: Sweeps and ablations | ○ Planned | |
 | Week 10: Capstone | ○ Planned | |
 
-**Current focus:** Weeks 0-2 are complete. Week 2 establishes PPO as a "pipeline truth serum"--validating infrastructure before adding complexity. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
+**Current focus:** Weeks 0-3 are complete. Week 3 validates the off-policy stack (SAC with replay buffer diagnostics) before adding HER for sparse rewards. Both PPO and SAC achieve 100% success on FetchReachDense-v4, establishing solid baselines for comparison. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
 
 ---
 
