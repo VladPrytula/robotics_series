@@ -74,15 +74,25 @@ You're debugging in the dark with too many variables.
 
 ### 1.1 What Are We Actually Optimizing?
 
-Let's build up the math from intuition.
+Let's build up the math from intuition, defining each symbol as we introduce it.
 
-**The Setup:** At each timestep, our policy $\pi$ (a neural network) sees the current state $s$ and goal $g$, and outputs an action $a$. The environment responds with a new state and a reward.
+**The Setup:** At each timestep $t$, our **policy** $\pi$ (a neural network with parameters $\theta$) sees the current state $s_t$ and goal $g$, and outputs an action $a_t$. The environment responds with a new state $s_{t+1}$ and a **reward** $R_t$--a single number indicating how good that transition was.
 
-**The Objective:** Find policy parameters $\theta$ that maximize total reward:
+Before stating the objective, we need three definitions:
+
+**Definition (Reward).** The reward $R_t \in \mathbb{R}$ is the immediate feedback signal at timestep $t$. In FetchReachDense, $R_t = -\|p_t - g\|$ where $p_t$ is the gripper position and $g$ is the goal. More negative means farther from the goal; zero means perfect.
+
+**Definition (Discount Factor).** The discount factor $\gamma \in [0, 1)$ determines how much we value future rewards relative to immediate rewards. A reward $R$ received $k$ steps in the future contributes $\gamma^k R$ to our objective. With $\gamma = 0.99$, a reward 100 steps away is worth $0.99^{100} \approx 0.37$ as much as an immediate reward. This captures two intuitions: (1) sooner is better than later, and (2) distant rewards are more uncertain.
+
+**Definition (Time Horizon).** The horizon $T$ is the maximum number of timesteps in an episode. For FetchReach, $T = 50$ steps.
+
+**The Objective:** Find policy parameters $\theta$ that maximize the **expected discounted return**:
 
 ```math
 J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t R_t \right]
 ```
+
+Here $J(\theta)$ is the objective function we seek to maximize--it measures how good a policy with parameters $\theta$ is, averaged over many episodes. The sum $\sum_{t=0}^{T} \gamma^t R_t$ is called the **return**: the total reward accumulated over an episode, with future rewards discounted by $\gamma$.
 
 The expectation is over trajectories--different runs give different outcomes because actions sample from the policy distribution and the environment may be stochastic.
 
