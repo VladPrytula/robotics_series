@@ -46,7 +46,7 @@ This is an active project. The table below shows what is implemented versus plan
 | [Week 1: Environment anatomy](tutorials/ch01_fetch_env_anatomy.md) | ✓ Complete | [`ch01_env_anatomy.py`](scripts/ch01_env_anatomy.py) |
 | [Week 2: PPO on dense Reach](tutorials/ch02_ppo_dense_reach.md) | ✓ Complete | [`ch02_ppo_dense_reach.py`](scripts/ch02_ppo_dense_reach.py), 100% success |
 | [Week 3: SAC on dense Reach](tutorials/ch03_sac_dense_reach.md) | ✓ Complete | [`ch03_sac_dense_reach.py`](scripts/ch03_sac_dense_reach.py), 100% success |
-| Week 4: Sparse + HER | ○ Planned | |
+| [Week 4: Sparse + HER](tutorials/ch04_her_sparse_reach_push.md) | ✓ Complete | [`ch04_her_sparse_reach_push.py`](scripts/ch04_her_sparse_reach_push.py), 99.4% success (HER+SAC on Push) |
 | Week 5: PickAndPlace | ○ Planned | |
 | Week 6: Action-interface engineering | ○ Planned | |
 | Week 7: Robustness | ○ Planned | |
@@ -54,7 +54,7 @@ This is an active project. The table below shows what is implemented versus plan
 | Week 9: Sweeps and ablations | ○ Planned | |
 | Week 10: Capstone | ○ Planned | |
 
-**Current focus:** Weeks 0-3 are complete. Week 3 validates the off-policy stack (SAC with replay buffer diagnostics) before adding HER for sparse rewards. Both PPO and SAC achieve 100% success on FetchReachDense-v4, establishing solid baselines for comparison. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
+**Current focus:** Weeks 0-4 are complete. Week 4 demonstrates HER's transformative effect on sparse-reward tasks: SAC+HER achieves 99.4% +/- 0.9% on FetchPush-v4 (5 seeds, 120-run sweep) versus ~5% for SAC without HER -- a +94 percentage point separation. The sweep identified gamma=0.95 and fixed ent_coef=0.05 as the dominant hyperparameters. The core CLIs (`train.py`, `eval.py`) support the full curriculum; weekly scripts and tutorials are being developed incrementally.
 
 ---
 

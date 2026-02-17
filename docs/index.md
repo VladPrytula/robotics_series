@@ -46,7 +46,10 @@ The algorithm choice follows from problem constraints:
 |------|-------|-----------|
 | 0 | [Proof of Life](tutorials/ch00_containerized_dgx_proof_of_life.md) | `ppo_smoke.zip` exists |
 | 1 | [Environment Anatomy](tutorials/ch01_fetch_env_anatomy.md) | Reward check passes |
-| 2-10 | Training, HER, Robustness | See [syllabus](syllabus.md) |
+| 2 | [PPO on Dense Reach](tutorials/ch02_ppo_dense_reach.md) | >90% success rate |
+| 3 | [SAC on Dense Reach](tutorials/ch03_sac_dense_reach.md) | SAC matches PPO, Q-values stable |
+| 4 | [HER on Sparse Reach/Push](tutorials/ch04_her_sparse_reach_push.md) | HER vs no-HER: +94 pp on Push |
+| 5-10 | PickAndPlace, Robustness, Capstone | See [syllabus](syllabus.md) |
 
 ## Math Rendering Test
 
