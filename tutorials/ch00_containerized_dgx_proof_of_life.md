@@ -4,7 +4,9 @@
 
 This chapter establishes the foundational experimental environment upon which all subsequent work depends. We address a problem that is logically prior to reinforcement learning itself: the problem of *reproducible computation*. Our deliverables are not trained policies but verified infrastructure--a container that runs, a renderer that produces images, a training loop that completes without error.
 
-The reader who dismisses this chapter as mere "setup" misunderstands its purpose. In empirical machine learning, the experimental environment is not scaffolding to be discarded; it is the laboratory in which results are produced. A result that cannot be reproduced because the environment cannot be reconstructed is not a result at all. This chapter ensures that our laboratory is sound.
+We borrow the term *proof of life* from hostage negotiations, where it means evidence that someone is still alive. Here, it means evidence that the computational environment is functional -- capable of producing valid, reproducible results.
+
+We find it tempting to skip "setup" chapters, but this one does more than configure tools -- it establishes the laboratory in which all subsequent results are produced. A result that cannot be reproduced because the environment cannot be reconstructed is not a result at all. This chapter ensures that our laboratory is sound.
 
 ---
 
@@ -38,7 +40,7 @@ Within the general reproducibility framework, this chapter addresses a specific 
 
 Each condition is necessary for the reinforcement learning experiments that follow. Without GPU access, training is prohibitively slow. Without MuJoCo, we cannot simulate the Fetch robot. Without rendering, we cannot generate evaluation videos. Without a working training loop, we cannot learn policies.
 
-The verification is not optional. A researcher who skips this chapter and proceeds directly to training will eventually encounter failures--rendering errors, CUDA misconfigurations, import failures--and will spend more time debugging than if they had verified the environment systematically from the start.
+We recommend completing all verification steps before proceeding. In our experience, skipping this chapter and proceeding directly to training eventually surfaces as rendering errors, CUDA misconfigurations, or import failures -- and debugging those in context takes longer than verifying the environment systematically from the start.
 
 ---
 
@@ -74,7 +76,7 @@ But GPU access inside a container is not automatic. The container runs in an iso
 3. Docker was not invoked with `--gpus all`
 4. The GPU is in use by another process with exclusive access
 
-Training will still *run* on CPU, but it will be 10-100× slower, making iterative experimentation impractical.
+Training will still *run* on CPU, but it will be 10-100x slower, making iterative experimentation impractical.
 
 **The test.** The script checks `torch.cuda.is_available()` inside the container. If CUDA is available, it reports the device name and count. If not, it prints a warning but does not halt the test sequence -- training can still proceed on CPU (this is the expected path on Mac). On a DGX system where CUDA *should* be available, treat a "CUDA not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
 
@@ -93,7 +95,7 @@ Furthermore, Gymnasium-Robotics must register its environments with Gymnasium's 
 
 Without functional Fetch environments, the entire curriculum is blocked.
 
-**The test.** Import `gymnasium` and `gymnasium_robotics`, then call `gym.make("FetchReachDense-v4")` and `env.reset()`. If the environment returns a valid observation dictionary with keys `observation`, `achieved_goal`, and `desired_goal`, the physics stack is functional.
+**The test.** Import `gymnasium` and `gymnasium_robotics`, then call `gym.make("FetchReachDense-v4")` (a variant where the reward is proportional to distance from the goal -- we formalize dense vs. sparse rewards in Chapter 1) and `env.reset()`. If the environment returns a valid observation dictionary with keys `observation`, `achieved_goal`, and `desired_goal`, the physics stack is functional.
 
 #### Test 3: Headless Rendering
 
@@ -115,7 +117,7 @@ Training can proceed without rendering, but evaluation will be limited to numeri
 
 **The test.** Create a Fetch environment with `render_mode="rgb_array"`, call `env.render()`, and save the resulting numpy array as a PNG image. If the image file exists and is non-empty, offscreen rendering works.
 
-**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image. The fallback works by re-executing the entire script process with different environment variables (via `os.execvpe`). This means that if EGL fails, you may see the script's startup output appear twice in logs--once for the EGL attempt and once for the OSMesa retry. This is expected behavior, not an error.
+**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image. The fallback works by calling `os.execvpe`, which *replaces* the current process entirely with a new invocation using different environment variables -- this is not a retry within the same process, but a full re-exec. As a result, on DGX systems where EGL fails, you may see the script's startup output appear twice in logs -- once for the EGL attempt and once for the OSMesa retry. This is expected behavior, not an error. On Mac, the `all` subcommand sets OSMesa directly (since EGL is never available), so the double-output pattern does not occur.
 
 #### Test 4: Training Loop Completion
 
@@ -133,21 +135,21 @@ Many bugs only manifest when components interact. A shape mismatch between the o
 
 Until this test passes, you cannot train policies.
 
-**The test.** Run PPO for 50,000 timesteps on `FetchReachDense-v4` with 8 parallel environments, then save a checkpoint. If the checkpoint file exists and is loadable by `PPO.load()`, the training loop is functional.
+**The test.** Run PPO (Proximal Policy Optimization, a policy gradient method we formalize in Chapter 2) for 50,000 timesteps on `FetchReachDense-v4` with 8 parallel environments, then save a checkpoint. If the checkpoint file exists and is loadable by `PPO.load()`, the training loop is functional.
 
-**Remark (Why PPO, Not SAC).** We use PPO for this smoke test because it is simpler and fails faster if something is wrong. SAC involves additional components (replay buffer, twin critics, entropy tuning) that could mask or compound errors. Once PPO works, we have confidence that the core training infrastructure is sound; SAC-specific issues can be debugged separately.
+**Remark (Why PPO, Not SAC).** We use PPO for this smoke test because it is simpler and fails faster if something is wrong. SAC (Soft Actor-Critic, an off-policy algorithm introduced in Chapter 3) involves additional components (replay buffer, twin critics, entropy tuning) that could mask or compound errors. Once PPO works, we have confidence that the core training infrastructure is sound; SAC-specific issues can be debugged separately.
 
 #### The Logical Structure
 
 The four tests form a dependency chain:
 
 ```
-GPU Access → MuJoCo Functionality → Headless Rendering → Training Loop
+GPU Access -> MuJoCo Functionality -> Headless Rendering -> Training Loop
 ```
 
-Each test assumes the previous tests pass. There is no point testing rendering if MuJoCo cannot initialize. There is no point testing training if the GPU is inaccessible (training would "work" but be too slow to iterate).
+Each test assumes the previous tests pass. It helps to diagnose in order -- rendering issues are harder to debug if MuJoCo itself cannot initialize, and training performance is hard to evaluate without GPU access.
 
-**Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The `all` subcommand respects this ordering and stops at the first failure. The one exception is `gpu-check`, which is advisory: it warns but does not block subsequent tests, because CPU-only operation is valid on Mac and other non-NVIDIA platforms.
+**Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The `all` subcommand respects this ordering and stops at the first failure. The one exception is `gpu-check`, which always exits with status 0 even when CUDA is unavailable, so it warns but does not block subsequent tests. This is intentional: CPU-only operation is valid on Mac and other non-NVIDIA platforms.
 
 These tests are implemented in `scripts/ch00_proof_of_life.py`. The script provides subcommands for running each test individually (`gpu-check`, `list-envs`, `render`, `ppo-smoke`) or all tests in sequence (`all`).
 
@@ -174,7 +176,7 @@ A subtle point deserves elaboration. We use a Python virtual environment *inside
 
 **Proposition.** *A virtual environment inside a container provides additional benefits: (1) it enables `pip install -e .` for editable installs of the project; (2) it allows project dependencies to shadow container dependencies when necessary; (3) it makes the dependency specification explicit in `requirements.txt` rather than implicit in the Dockerfile.*
 
-The virtual environment is created with `--system-site-packages`, which allows it to inherit packages from the container's system Python. This avoids reinstalling PyTorch (which is large and CUDA-specific) while still allowing project-specific packages to be installed separately.
+On DGX/NVIDIA, the virtual environment is created with `--system-site-packages`, which allows it to inherit packages from the container's system Python. This avoids reinstalling PyTorch (which is large and CUDA-specific) while still allowing project-specific packages to be installed separately. On Mac, the container uses a plain `python:3.11-slim` base that does not include PyTorch, so a standard venv is used and all dependencies (including PyTorch) are installed from `requirements.txt`.
 
 ---
 
@@ -199,7 +201,7 @@ If either test fails, consult your system administrator. This tutorial does not 
 The repository provides a wrapper script that automates container setup:
 
 ```bash
-cd /home/vladp/src/robotics
+cd /path/to/robotics  # your local clone
 bash docker/dev.sh
 ```
 
@@ -240,7 +242,7 @@ python scripts/ch00_proof_of_life.py render --out smoke_frame.png
 
 **Failure Mode.** If rendering fails with EGL errors, the script attempts fallback to OSMesa. If both fail, rendering is disabled. You can still train policies, but you cannot generate videos.
 
-**Remark (Rendering Backend Hierarchy).** *The script implements a fallback chain: EGL (hardware-accelerated) → OSMesa (software) → disabled. EGL requires NVIDIA drivers and EGL libraries; OSMesa requires the Mesa library. The `robotics-rl:latest` image includes both.*
+**Remark (Rendering Backend Hierarchy).** *The script implements a fallback chain: EGL (hardware-accelerated) -> OSMesa (software) -> disabled. EGL requires NVIDIA drivers and EGL libraries; OSMesa requires the Mesa library. The `robotics-rl:latest` image includes both.*
 
 #### Step 5: Verify Training Loop
 
@@ -250,7 +252,7 @@ python scripts/ch00_proof_of_life.py ppo-smoke --n-envs 8 --total-steps 50000 --
 
 **Expected Output.** Training progress messages followed by the creation of `ppo_smoke.zip`.
 
-**Remark (Default Hyperparameters).** *The smoke test uses PPO's default rollout length (`n_steps=1024`) and mini-batch size (`batch_size=256`). These are configurable via `--n-steps` and `--batch-size` but the defaults are fine for verification. Chapter 2 discusses how these parameters affect learning.*
+**Remark (Hyperparameters).** *The smoke test uses `n_steps=1024` (half of SB3's default of 2048, to keep the test short) and `batch_size=256`. These are configurable via `--n-steps` and `--batch-size` but the defaults are fine for verification. Chapter 2 discusses how these parameters affect learning.*
 
 **Failure Mode.** CUDA errors indicate GPU misconfiguration. Shape mismatch errors indicate problems with observation space handling. Import errors indicate missing dependencies.
 
@@ -300,19 +302,12 @@ bash docker/dev.sh python scripts/ch00_proof_of_life.py all
 
 The platform detection uses `uname -s` (Darwin for Mac) and `uname -m` (arm64 for Apple Silicon).
 
-#### Verification
+#### Expected Results by Platform
 
-Run the same commands on each platform:
+All tests should pass on both platforms, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX -- the learned weights are platform-independent.
 
-```bash
-# Build image (platform auto-detected)
-bash docker/build.sh
-
-# Run proof of life
-bash docker/dev.sh python scripts/ch00_proof_of_life.py all
-```
-
-**Expected results by platform:**
+<details>
+<summary>Expected results comparison table</summary>
 
 | Aspect | Mac M4 | DGX / NVIDIA |
 |--------|--------|--------------|
@@ -323,7 +318,7 @@ bash docker/dev.sh python scripts/ch00_proof_of_life.py all
 | `ppo_smoke.zip` | Yes (loadable) | Yes (loadable) |
 | All tests pass | Yes | Yes |
 
-All tests should pass on both platforms, and all artifacts should be generated correctly. The policies learned on Mac are interchangeable with those trained on DGX--the learned weights are platform-independent.
+</details>
 
 #### Known Limitations
 
@@ -363,9 +358,7 @@ The existence and properties of these artifacts constitute empirical verificatio
 
 ### 4.2 On the Meaning of "Proof of Life"
 
-The term "proof of life" is borrowed from hostage negotiations, where it refers to evidence that a hostage is still alive. In our context, it refers to evidence that the computational environment is functional.
-
-This is not mere metaphor. A misconfigured environment is, from the perspective of reproducible science, *dead*: it cannot produce results that can be trusted or reproduced. The tests in this chapter establish that our environment is *alive*--capable of producing valid, reproducible results.
+As noted in the Abstract, a misconfigured environment is, from the perspective of reproducible science, *dead*: it cannot produce results that can be trusted or reproduced. The tests in this chapter establish that our environment is *alive* -- capable of producing valid, reproducible results.
 
 ### 4.3 What This Chapter Does Not Verify
 

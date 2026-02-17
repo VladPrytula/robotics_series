@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -295,7 +296,12 @@ def cmd_all(args: argparse.Namespace) -> int:
         "--preferred",
         *args.preferred,
     ]
-    rc = run_step(render_args, {"MUJOCO_GL": "egl", "PYOPENGL_PLATFORM": "egl"})
+    # Mac/OSMesa: EGL is never available, so skip the guaranteed-failure attempt.
+    if platform.system() == "Darwin":
+        render_gl = {"MUJOCO_GL": "osmesa", "PYOPENGL_PLATFORM": "osmesa"}
+    else:
+        render_gl = {"MUJOCO_GL": "egl", "PYOPENGL_PLATFORM": "egl"}
+    rc = run_step(render_args, render_gl)
     if rc != 0:
         return rc
 
