@@ -6,10 +6,11 @@ Week 10 goals:
 2. Train SAC on FetchReachDense with privileged state (baseline from Ch3)
 3. Train SAC on FetchReachDense with pixel observations (CNN encoder)
 4. Measure the sample-efficiency gap quantitatively
-5. Prove that pixel-based agents can solve the task (just slower)
+5. Train SAC with DrQ augmentation (Kostrikov et al. 2020) to close the gap
+6. Three-way comparison: state vs pixel vs pixel+DrQ
 
 Usage:
-    # Full pipeline: state baseline + pixel training + comparison
+    # Full pipeline: state + pixel + pixel+DrQ training + comparison
     python scripts/ch10_visual_reach.py all --seed 0
 
     # Train state-based SAC (baseline)
@@ -18,11 +19,15 @@ Usage:
     # Train pixel-based SAC
     python scripts/ch10_visual_reach.py train-pixel --seed 0
 
+    # Train pixel-based SAC with DrQ augmentation
+    python scripts/ch10_visual_reach.py train-pixel-drq --seed 0
+
     # Evaluate a checkpoint (use --pixel for pixel checkpoints)
     python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_state_FetchReachDense-v4_seed0.zip
     python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_pixel_FetchReachDense-v4_seed0.zip --pixel
+    python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_drq_FetchReachDense-v4_seed0.zip --pixel
 
-    # Compare state vs pixel results
+    # Compare results (2-way or 3-way depending on available evals)
     python scripts/ch10_visual_reach.py compare
 """
 
@@ -73,6 +78,10 @@ class Ch10Config:
     pixel_total_steps: int = 2_000_000
     pixel_buffer_size: int = 200_000
     image_size: int = 84
+
+    # DrQ (pixel + augmentation)
+    drq_pad: int = 4
+    drq_total_steps: int = 2_000_000
 
     # Shared SAC hyperparameters
     batch_size: int = 256
@@ -332,6 +341,113 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
     return 0
 
 
+def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
+    """Train SAC on FetchReachDense with pixel observations + DrQ augmentation.
+
+    Identical to cmd_train_pixel except the replay buffer applies random
+    shift augmentation (Kostrikov et al. 2020) to pixel observations at
+    sample time. This regularizes the Q-function against overfitting to
+    pixel-level details, closing part of the state-vs-pixel gap.
+
+    The only change from naive pixel SAC is the replay buffer class --
+    everything else (architecture, hyperparameters) stays the same. This
+    isolates the effect of augmentation.
+    """
+    import gymnasium as gym
+    import gymnasium_robotics  # noqa: F401
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
+
+    from scripts.labs.image_augmentation import DrQDictReplayBuffer, RandomShiftAug
+    from scripts.labs.pixel_wrapper import PixelObservationWrapper
+
+    device = _resolve_device(cfg.device)
+    set_random_seed(cfg.seed)
+
+    print(f"[ch10] Training PIXEL+DrQ SAC on {cfg.env}")
+    print(f"[ch10] seed={cfg.seed}, n_envs={cfg.pixel_n_envs}, "
+          f"total_steps={cfg.drq_total_steps}, device={device}")
+    print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
+          f"drq_pad={cfg.drq_pad}, buffer_size={cfg.pixel_buffer_size}")
+
+    def make_pixel_env():
+        env = gym.make(cfg.env, render_mode="rgb_array")
+        return PixelObservationWrapper(env, image_size=(cfg.image_size, cfg.image_size))
+
+    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed)
+
+    log_dir = _ensure_dir(cfg.log_dir)
+    run_id = f"sac_drq/{cfg.env}/seed{cfg.seed}"
+
+    try:
+        model = SAC(
+            "MultiInputPolicy",
+            env,
+            verbose=1,
+            device=device,
+            tensorboard_log=str(log_dir),
+            batch_size=cfg.batch_size,
+            buffer_size=cfg.pixel_buffer_size,
+            learning_starts=cfg.learning_starts,
+            learning_rate=cfg.learning_rate,
+            gamma=cfg.gamma,
+            tau=cfg.tau,
+            ent_coef="auto",
+            replay_buffer_class=DrQDictReplayBuffer,
+            replay_buffer_kwargs={
+                "aug_fn": RandomShiftAug(pad=cfg.drq_pad),
+                "image_key": "pixels",
+            },
+        )
+
+        t0 = time.perf_counter()
+        model.learn(total_timesteps=cfg.drq_total_steps, tb_log_name=run_id)
+        elapsed = time.perf_counter() - t0
+        fps = cfg.drq_total_steps / elapsed
+
+        ckpt = _ckpt_path(cfg, "drq")
+        model.save(str(ckpt))
+        print(f"[ch10] Saved: {ckpt}")
+        print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
+
+    finally:
+        env.close()
+
+    # Write metadata
+    meta = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "chapter": 10,
+        "mode": "drq",
+        "algo": "sac",
+        "env_id": cfg.env,
+        "seed": cfg.seed,
+        "device": device,
+        "n_envs": cfg.pixel_n_envs,
+        "total_steps": cfg.drq_total_steps,
+        "training_time_sec": elapsed,
+        "steps_per_sec": fps,
+        "checkpoint": str(ckpt),
+        "image_size": cfg.image_size,
+        "drq_pad": cfg.drq_pad,
+        "hyperparams": {
+            "batch_size": cfg.batch_size,
+            "buffer_size": cfg.pixel_buffer_size,
+            "learning_starts": cfg.learning_starts,
+            "learning_rate": cfg.learning_rate,
+            "gamma": cfg.gamma,
+            "tau": cfg.tau,
+            "ent_coef": "auto",
+            "drq_pad": cfg.drq_pad,
+        },
+        "versions": _gather_versions(),
+    }
+    _meta_path(ckpt).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"[ch10] Wrote metadata: {_meta_path(ckpt)}")
+
+    return 0
+
+
 def cmd_eval(cfg: Ch10Config, ckpt: str, pixel: bool = False, json_out: str | None = None) -> int:
     """Evaluate a checkpoint using eval.py subprocess.
 
@@ -493,11 +609,16 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
 
 
 def cmd_compare(cfg: Ch10Config) -> int:
-    """Compare state vs pixel evaluation results."""
+    """Compare state vs pixel vs pixel+DrQ evaluation results.
+
+    Prints a 3-column table when DrQ results are available, otherwise
+    falls back to 2-column (state vs pixel) comparison.
+    """
     import math
 
     state_path = _result_path(cfg, "state")
     pixel_path = _result_path(cfg, "pixel")
+    drq_path = _result_path(cfg, "drq")
 
     if not state_path.exists():
         print(f"[ch10] State results not found: {state_path}")
@@ -514,14 +635,23 @@ def cmd_compare(cfg: Ch10Config) -> int:
     with open(pixel_path) as f:
         pixel_data = json.load(f)
 
+    has_drq = drq_path.exists()
+    drq_data = None
+    if has_drq:
+        with open(drq_path) as f:
+            drq_data = json.load(f)
+
     s = state_data["aggregate"]
     p = pixel_data["aggregate"]
+    d = drq_data["aggregate"] if drq_data else None
 
     # Load metadata for training steps
     state_ckpt = _ckpt_path(cfg, "state")
     pixel_ckpt = _ckpt_path(cfg, "pixel")
+    drq_ckpt = _ckpt_path(cfg, "drq")
     state_steps = cfg.state_total_steps
     pixel_steps = cfg.pixel_total_steps
+    drq_steps = cfg.drq_total_steps
 
     if _meta_path(state_ckpt).exists():
         with open(_meta_path(state_ckpt)) as f:
@@ -533,56 +663,130 @@ def cmd_compare(cfg: Ch10Config) -> int:
             pixel_meta = json.load(f)
             pixel_steps = pixel_meta.get("total_steps", pixel_steps)
 
+    if has_drq and _meta_path(drq_ckpt).exists():
+        with open(_meta_path(drq_ckpt)) as f:
+            drq_meta = json.load(f)
+            drq_steps = drq_meta.get("total_steps", drq_steps)
+
     print()
-    print("=" * 72)
-    print("Chapter 10: State vs Pixel Observation Comparison")
+    print("=" * 92)
+    if has_drq:
+        print("Chapter 10: State vs Pixel vs Pixel+DrQ Comparison")
+    else:
+        print("Chapter 10: State vs Pixel Observation Comparison")
     print(f"Environment: {cfg.env}")
-    print("=" * 72)
+    print("=" * 92)
 
-    print(f"\n{'Metric':<25} | {'State':>20} | {'Pixel':>20}")
-    print("-" * 70)
-    print(f"{'Training steps':<25} | {state_steps:>20,} | {pixel_steps:>20,}")
-    print(f"{'Success rate':<25} | {s['success_rate']:>19.1%} | {p['success_rate']:>19.1%}")
-    print(f"{'Return (mean +/- std)':<25} | {s['return_mean']:>8.3f} +/- {s['return_std']:<8.3f} | {p['return_mean']:>8.3f} +/- {p['return_std']:<8.3f}")
-    print(f"{'Final distance (mean)':<25} | {s['final_distance_mean']:>20.4f} | {p['final_distance_mean']:>20.4f}")
-    print(f"{'Episode length (mean)':<25} | {s.get('ep_len_mean', 0):>20.1f} | {p.get('ep_len_mean', 0):>20.1f}")
-    print("-" * 70)
+    if has_drq and d is not None:
+        # 3-column table
+        print(f"\n{'Metric':<25} | {'State':>20} | {'Pixel':>20} | {'Pixel+DrQ':>20}")
+        print("-" * 92)
+        print(f"{'Training steps':<25} | {state_steps:>20,} | {pixel_steps:>20,} | {drq_steps:>20,}")
+        print(f"{'Success rate':<25} | {s['success_rate']:>19.1%} | {p['success_rate']:>19.1%} | {d['success_rate']:>19.1%}")
+        print(f"{'Return (mean)':<25} | {s['return_mean']:>20.3f} | {p['return_mean']:>20.3f} | {d['return_mean']:>20.3f}")
+        print(f"{'Return (std)':<25} | {s['return_std']:>20.3f} | {p['return_std']:>20.3f} | {d['return_std']:>20.3f}")
+        print(f"{'Final distance (mean)':<25} | {s['final_distance_mean']:>20.4f} | {p['final_distance_mean']:>20.4f} | {d['final_distance_mean']:>20.4f}")
+        print(f"{'Episode length (mean)':<25} | {s.get('ep_len_mean', 0):>20.1f} | {p.get('ep_len_mean', 0):>20.1f} | {d.get('ep_len_mean', 0):>20.1f}")
+        print("-" * 92)
 
-    # Sample efficiency ratio
-    if p['success_rate'] > 0 and s['success_rate'] > 0:
-        ratio = pixel_steps / state_steps
-        print(f"\nSample efficiency ratio: {ratio:.1f}x (pixel needs {ratio:.1f}x more steps)")
+        # Sample efficiency ratios
+        print()
+        if s['success_rate'] > 0:
+            if p['success_rate'] > 0:
+                pixel_ratio = pixel_steps / state_steps
+                print(f"Sample efficiency: pixel needs {pixel_ratio:.1f}x more steps than state")
+            else:
+                pixel_ratio = float("inf")
+                print("Sample efficiency: pixel did not succeed")
+
+            if d['success_rate'] > 0:
+                drq_ratio = drq_steps / state_steps
+                print(f"Sample efficiency: pixel+DrQ needs {drq_ratio:.1f}x more steps than state")
+            else:
+                drq_ratio = float("inf")
+                print("Sample efficiency: pixel+DrQ did not succeed")
+
+            # Gap closure
+            if p['success_rate'] > 0 and d['success_rate'] > 0:
+                state_sr = s['success_rate']
+                pixel_sr = p['success_rate']
+                drq_sr = d['success_rate']
+                gap = state_sr - pixel_sr
+                if gap > 0.01:
+                    closure = (drq_sr - pixel_sr) / gap
+                    print(f"\nDrQ closes {closure:.0%} of the state-vs-pixel success rate gap")
+                    print(f"  State: {state_sr:.1%} -> Pixel: {pixel_sr:.1%} -> DrQ: {drq_sr:.1%}")
+        else:
+            print("Sample efficiency: state agent did not succeed")
+
+        # Summary
+        print()
+        drq_sr = d['success_rate']
+        pixel_sr = p['success_rate']
+        state_sr = s['success_rate']
+        if state_sr > 0.8 and drq_sr > pixel_sr:
+            print("RESULT: DrQ augmentation improves pixel-based learning.")
+            print("This demonstrates Q-function regularization via data augmentation")
+            print("(Kostrikov et al. 2020).")
+        elif state_sr > 0.8 and drq_sr <= pixel_sr:
+            print("RESULT: DrQ did not improve over naive pixel SAC.")
+            print("This may indicate insufficient training or task-specific effects.")
+        else:
+            print("RESULT: Check training duration and hyperparameters.")
+
+        # Save 3-way comparison report
+        report = {
+            "env_id": cfg.env,
+            "seed": cfg.seed,
+            "state": {"total_steps": state_steps, **s},
+            "pixel": {"total_steps": pixel_steps, "image_size": cfg.image_size, **p},
+            "drq": {
+                "total_steps": drq_steps,
+                "image_size": cfg.image_size,
+                "drq_pad": cfg.drq_pad,
+                **d,
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     else:
-        ratio = float("inf")
-        print("\nSample efficiency ratio: N/A (one or both agents did not succeed)")
+        # 2-column table (no DrQ results)
+        print(f"\n{'Metric':<25} | {'State':>20} | {'Pixel':>20}")
+        print("-" * 70)
+        print(f"{'Training steps':<25} | {state_steps:>20,} | {pixel_steps:>20,}")
+        print(f"{'Success rate':<25} | {s['success_rate']:>19.1%} | {p['success_rate']:>19.1%}")
+        print(f"{'Return (mean +/- std)':<25} | {s['return_mean']:>8.3f} +/- {s['return_std']:<8.3f} | {p['return_mean']:>8.3f} +/- {p['return_std']:<8.3f}")
+        print(f"{'Final distance (mean)':<25} | {s['final_distance_mean']:>20.4f} | {p['final_distance_mean']:>20.4f}")
+        print(f"{'Episode length (mean)':<25} | {s.get('ep_len_mean', 0):>20.1f} | {p.get('ep_len_mean', 0):>20.1f}")
+        print("-" * 70)
 
-    # Summary
-    print()
-    if s["success_rate"] > 0.8 and p["success_rate"] > 0.5:
-        print("RESULT: Both agents solve the task. Pixel SAC requires ~{:.0f}x more samples.".format(ratio))
-        print("This demonstrates the cost of learning from raw pixels vs privileged state.")
-    elif s["success_rate"] > 0.8 and p["success_rate"] <= 0.5:
-        print("RESULT: State agent solves the task; pixel agent still learning.")
-        print("Pixel SAC may need more training steps or hyperparameter tuning.")
-    else:
-        print("RESULT: Neither agent fully converged. Check training duration and hyperparameters.")
+        if p['success_rate'] > 0 and s['success_rate'] > 0:
+            ratio = pixel_steps / state_steps
+            print(f"\nSample efficiency ratio: {ratio:.1f}x (pixel needs {ratio:.1f}x more steps)")
+        else:
+            ratio = float("inf")
+            print("\nSample efficiency ratio: N/A (one or both agents did not succeed)")
 
-    # Save comparison report
-    report = {
-        "env_id": cfg.env,
-        "seed": cfg.seed,
-        "state": {
-            "total_steps": state_steps,
-            **s,
-        },
-        "pixel": {
-            "total_steps": pixel_steps,
-            "image_size": cfg.image_size,
-            **p,
-        },
-        "sample_efficiency_ratio": ratio if math.isfinite(ratio) else None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+        print()
+        if s["success_rate"] > 0.8 and p["success_rate"] > 0.5:
+            print("RESULT: Both agents solve the task. Pixel SAC requires ~{:.0f}x more samples.".format(ratio))
+            print("This demonstrates the cost of learning from raw pixels vs privileged state.")
+        elif s["success_rate"] > 0.8 and p["success_rate"] <= 0.5:
+            print("RESULT: State agent solves the task; pixel agent still learning.")
+            print("Pixel SAC may need more training steps or hyperparameter tuning.")
+        else:
+            print("RESULT: Neither agent fully converged. Check training duration and hyperparameters.")
+
+        if not has_drq:
+            print("\n[ch10] Note: DrQ results not found. Run train-pixel-drq + eval for 3-way comparison.")
+
+        report = {
+            "env_id": cfg.env,
+            "seed": cfg.seed,
+            "state": {"total_steps": state_steps, **s},
+            "pixel": {"total_steps": pixel_steps, "image_size": cfg.image_size, **p},
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     comp_path = _comparison_path(cfg)
     comp_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -592,21 +796,21 @@ def cmd_compare(cfg: Ch10Config) -> int:
 
 
 def cmd_all(cfg: Ch10Config) -> int:
-    """Full pipeline: state baseline + pixel training + eval + comparison."""
+    """Full pipeline: state + pixel + pixel+DrQ training, eval, comparison."""
     print("=" * 72)
-    print("Chapter 10: Full Pipeline -- State vs Pixel SAC")
+    print("Chapter 10: Full Pipeline -- State vs Pixel vs Pixel+DrQ SAC")
     print(f"Environment: {cfg.env}, seed={cfg.seed}")
     print("=" * 72)
 
     # 1. Train state baseline
-    print("\n[1/5] Training state-based SAC...")
+    print("\n[1/7] Training state-based SAC...")
     ret = cmd_train_state(cfg)
     if ret != 0:
         print("[ch10] State training failed")
         return ret
 
     # 2. Evaluate state
-    print("\n[2/5] Evaluating state checkpoint...")
+    print("\n[2/7] Evaluating state checkpoint...")
     state_ckpt = str(_ckpt_path(cfg, "state"))
     ret = cmd_eval(cfg, state_ckpt, pixel=False)
     if ret != 0:
@@ -614,22 +818,37 @@ def cmd_all(cfg: Ch10Config) -> int:
         return ret
 
     # 3. Train pixel
-    print("\n[3/5] Training pixel-based SAC...")
+    print("\n[3/7] Training pixel-based SAC...")
     ret = cmd_train_pixel(cfg)
     if ret != 0:
         print("[ch10] Pixel training failed")
         return ret
 
     # 4. Evaluate pixel
-    print("\n[4/5] Evaluating pixel checkpoint...")
+    print("\n[4/7] Evaluating pixel checkpoint...")
     pixel_ckpt = str(_ckpt_path(cfg, "pixel"))
     ret = cmd_eval(cfg, pixel_ckpt, pixel=True)
     if ret != 0:
         print("[ch10] Pixel evaluation failed")
         return ret
 
-    # 5. Compare
-    print("\n[5/5] Comparing results...")
+    # 5. Train pixel + DrQ
+    print("\n[5/7] Training pixel+DrQ SAC...")
+    ret = cmd_train_pixel_drq(cfg)
+    if ret != 0:
+        print("[ch10] DrQ training failed")
+        return ret
+
+    # 6. Evaluate pixel + DrQ
+    print("\n[6/7] Evaluating pixel+DrQ checkpoint...")
+    drq_ckpt = str(_ckpt_path(cfg, "drq"))
+    ret = cmd_eval(cfg, drq_ckpt, pixel=True, json_out=str(_result_path(cfg, "drq")))
+    if ret != 0:
+        print("[ch10] DrQ evaluation failed")
+        return ret
+
+    # 7. Compare (3-way)
+    print("\n[7/7] Comparing results...")
     return cmd_compare(cfg)
 
 
@@ -681,7 +900,7 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full pipeline
+  # Full pipeline (state + pixel + pixel+DrQ + comparison)
   python scripts/ch10_visual_reach.py all --seed 0
 
   # State baseline only
@@ -690,11 +909,15 @@ Examples:
   # Pixel training only
   python scripts/ch10_visual_reach.py train-pixel --seed 0 --pixel-total-steps 2000000
 
+  # Pixel + DrQ augmentation
+  python scripts/ch10_visual_reach.py train-pixel-drq --seed 0 --drq-total-steps 2000000
+
   # Evaluate checkpoints
   python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_state_FetchReachDense-v4_seed0.zip
   python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_pixel_FetchReachDense-v4_seed0.zip --pixel
+  python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_drq_FetchReachDense-v4_seed0.zip --pixel
 
-  # Compare results
+  # Compare results (3-way if DrQ eval exists)
   python scripts/ch10_visual_reach.py compare
 """,
     )
@@ -728,6 +951,23 @@ Examples:
     p_pixel.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size,
                           help="Image size for pixel observations")
 
+    # train-pixel-drq
+    p_drq = sub.add_parser("train-pixel-drq",
+                            help="Train SAC with pixel observations + DrQ augmentation",
+                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_drq)
+    _add_train_args(p_drq)
+    p_drq.add_argument("--pixel-n-envs", type=int, default=DEFAULT_CONFIG.pixel_n_envs,
+                        help="Number of parallel envs for pixel training")
+    p_drq.add_argument("--drq-total-steps", type=int, default=DEFAULT_CONFIG.drq_total_steps,
+                        help="Total training steps for pixel+DrQ")
+    p_drq.add_argument("--pixel-buffer-size", type=int, default=DEFAULT_CONFIG.pixel_buffer_size,
+                        help="Replay buffer size for pixel (memory-conscious)")
+    p_drq.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size,
+                        help="Image size for pixel observations")
+    p_drq.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad,
+                        help="DrQ augmentation pad size (pixels)")
+
     # eval
     p_eval = sub.add_parser("eval", help="Evaluate a checkpoint",
                              formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -742,7 +982,7 @@ Examples:
                          help="Image size (must match training)")
 
     # compare
-    p_cmp = sub.add_parser("compare", help="Compare state vs pixel results",
+    p_cmp = sub.add_parser("compare", help="Compare state vs pixel vs pixel+DrQ results",
                             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     _add_common_args(p_cmp)
     p_cmp.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size,
@@ -751,9 +991,14 @@ Examples:
                         help="State training steps (for ratio calculation)")
     p_cmp.add_argument("--pixel-total-steps", type=int, default=DEFAULT_CONFIG.pixel_total_steps,
                         help="Pixel training steps (for ratio calculation)")
+    p_cmp.add_argument("--drq-total-steps", type=int, default=DEFAULT_CONFIG.drq_total_steps,
+                        help="DrQ training steps (for ratio calculation)")
+    p_cmp.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad,
+                        help="DrQ augmentation pad size (for reporting)")
 
     # all
-    p_all = sub.add_parser("all", help="Full pipeline: train-state, eval, train-pixel, eval, compare",
+    p_all = sub.add_parser("all",
+                            help="Full pipeline: train-state, train-pixel, train-pixel-drq, eval, compare",
                             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     _add_common_args(p_all)
     _add_train_args(p_all)
@@ -764,6 +1009,8 @@ Examples:
     p_all.add_argument("--pixel-total-steps", type=int, default=DEFAULT_CONFIG.pixel_total_steps)
     p_all.add_argument("--pixel-buffer-size", type=int, default=DEFAULT_CONFIG.pixel_buffer_size)
     p_all.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size)
+    p_all.add_argument("--drq-total-steps", type=int, default=DEFAULT_CONFIG.drq_total_steps)
+    p_all.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad)
     p_all.add_argument("--n-eval-episodes", type=int, default=DEFAULT_CONFIG.n_eval_episodes)
 
     args = parser.parse_args()
@@ -771,7 +1018,7 @@ Examples:
     # Set MUJOCO_GL
     if args.mujoco_gl is not None:
         os.environ["MUJOCO_GL"] = args.mujoco_gl
-    elif args.cmd in ("train-pixel", "all"):
+    elif args.cmd in ("train-pixel", "train-pixel-drq", "all"):
         # Pixel training needs rendering
         os.environ.setdefault("MUJOCO_GL", "egl")
     elif args.cmd == "eval" and getattr(args, "pixel", False):
@@ -785,6 +1032,8 @@ Examples:
         return cmd_train_state(cfg)
     elif args.cmd == "train-pixel":
         return cmd_train_pixel(cfg)
+    elif args.cmd == "train-pixel-drq":
+        return cmd_train_pixel_drq(cfg)
     elif args.cmd == "eval":
         return cmd_eval(cfg, args.ckpt, pixel=args.pixel, json_out=args.json_out)
     elif args.cmd == "compare":

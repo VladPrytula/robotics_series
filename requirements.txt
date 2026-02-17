@@ -4,3 +4,5 @@ mujoco>=3.0.0
 stable-baselines3>=2.4.0
 tensorboard>=2.18.0
 imageio>=2.36.0
+Pillow>=10.0.0
+matplotlib>=3.8.0

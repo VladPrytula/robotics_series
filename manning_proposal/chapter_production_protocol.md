@@ -16,6 +16,7 @@ Four specialized agents execute this protocol. Their prompts live in
 | **Lab Engineer** | `agents/lab_engineer.md` | Phase 2 (code) | Scaffold + root `CLAUDE.md` | Updated `scripts/labs/*.py` |
 | **Book Writer** | `agents/writer.md` | Phase 2 (prose) | Scaffold + persona | `Manning/chapters/chNN_<topic>.md` |
 | **Reviewer** | `agents/reviewer.md` | Phase 3 | Chapter + scaffold + persona + labs | `Manning/reviews/chNN_review.md` |
+| **Revisor** | `agents/revisor.md` | Phase 3.5 | Chapter + scaffold + review + revision scope | Updated chapter + scaffold + `Manning/revisions/chNN_revision_NNN.md` |
 
 ### Workflow
 
@@ -37,7 +38,13 @@ Step 3:  Spawn Reviewer agent
          Input:  chapter draft + scaffold + persona + lab code
          Output: Manning/reviews/chNN_review.md
               |
-         [User + Writer address review findings]
+         [User reviews findings]
+              |
+Step 3.5 (optional): Spawn Revisor agent for targeted fixes
+         Input:  chapter + scaffold + review + revision scope
+         Output: Updated chapter + scaffold + Manning/revisions/chNN_revision_NNN.md
+              |
+         [Re-review if changes were substantial]
               |
 Step 4:  Verification (manual or scripted)
          Run Experiment Card commands, check artifacts, final read-through
@@ -85,6 +92,20 @@ Not all chapters are alike. The protocol adapts based on chapter type:
 
 Identify your chapter type before starting. The protocol below marks
 type-specific steps with [Algorithm], [Setup], etc.
+
+### Visual Content by Chapter Type
+
+Each chapter type has a target figure count. These are minimums -- add more
+if they aid understanding, but every figure must earn its place.
+
+| Chapter type | Target figures | Typical figure types |
+|---|---|---|
+| **Setup** (Ch1) | 1-2 | Environment screenshot, smoke test output |
+| **Environment** (Ch2) | 4-6 | Env screenshots (all tasks), obs structure diagram, action space |
+| **Algorithm** (Ch3-5) | 3-5 | Learning curves, architecture diagram, before/after comparison |
+| **Capstone** (Ch6) | 3-5 | Difficulty progression, curriculum schedule, stress-test results |
+| **Engineering** (Ch7-8) | 3-4 | Degradation curves, noise injection effects, diagnostic plots |
+| **Pixels** (Ch10-12) | 3-5 | Raw vs augmented frames, CNN architecture, visual learning curves |
 
 ---
 
@@ -230,6 +251,28 @@ Pull from:
 - Tutorial's troubleshooting sections
 - Known bugs encountered during development
 - Common RL failure patterns (flat curves, diverging Q-values, entropy collapse)
+
+### Step 7: Plan Figures
+
+Every chapter needs a figure plan before prose begins. For each figure:
+
+| # | Description | Type | Source command | Chapter location |
+|---|------------|------|---------------|-----------------|
+| 1 | ... | screenshot / curve / diagram / comparison | `python scripts/...` or "matplotlib in lab" | After Section N.M |
+| 2 | ... | ... | ... | ... |
+
+**Per-figure checklist:**
+- [ ] Caption drafted (Figure N.M format with generation command)
+- [ ] Source command tested or confirmed possible
+- [ ] Alt-text written (for accessibility)
+- [ ] Uses Wong (2011) colorblind-friendly palette
+- [ ] Minimum 640x480, PNG format
+
+**[Algorithm chapters]:** Plan at least one learning curve, one architecture
+or data-flow diagram, and one before/after comparison.
+
+**[Setup/Environment chapters]:** Plan at least one annotated environment
+screenshot per task introduced.
 
 ---
 
@@ -438,6 +481,49 @@ The Reviewer agent checks these (and more -- see `agents/reviewer.md`):
 - [ ] Chapter completable via Build It + checkpoint track?
 - [ ] Reproduce It block present with exact commands and results?
 
+**Visual content:**
+- [ ] Every figure referenced by number in the text?
+- [ ] Every figure has a caption with generation command?
+- [ ] Alt-text present for all figures?
+- [ ] Figures legible at print size (text >= 9pt equivalent)?
+- [ ] Colorblind-friendly palette used consistently?
+- [ ] All figures are static PNGs (no embedded videos)?
+- [ ] Figure count meets chapter-type minimum (see Phase 0 table)?
+
+---
+
+## Phase 3.5: Revision (Targeted Post-Review Fixes)
+
+**When to use:** After Phase 3 produces a review, some chapters need targeted
+fixes that do not warrant re-running the full Writer agent. The Revisor agent
+makes surgical changes to reviewed chapters.
+
+**Spawn the Revisor agent** (`manning_proposal/agents/revisor.md`) with a
+specific revision scope:
+
+| Scope | When to use | Example |
+|-------|-------------|---------|
+| `figures` | Chapter has no figures or is below the chapter-type minimum | "Add figures to Ch02 per the scaffold's Figure Plan" |
+| `review-fixes` | Review flagged specific issues (FAIL or High severity) | "Fix the 3 FAIL items in the Ch03 review" |
+| `naming` | Script names, chapter numbers, or env IDs are inconsistent | "Fix ch02 script references in Ch03" |
+| `general` | User-specified targeted changes | "Add a sidebar about MPS support in Ch01" |
+
+**Key constraint:** The Revisor preserves all prose that passed review. It
+inserts, fixes, or corrects -- it does not rewrite. If a change requires
+restructuring the chapter, return to the Writer agent instead.
+
+**Outputs:**
+- Updated `Manning/chapters/chNN_<topic>.md` (in-place)
+- Updated `Manning/scaffolds/chNN_scaffold.md` (if scaffold needs additions
+  like a Figure Plan)
+- New `Manning/revisions/chNN_revision_NNN.md` (change log)
+
+**Re-review:** For `figures` and `naming` scopes, re-review is usually not
+needed (changes are additive and mechanical). For `review-fixes` and
+`general` scopes, consider re-running the Reviewer on modified sections.
+
+---
+
 ### Step 18: Verify Lab Code
 
 - [ ] All snippet-include regions referenced in the chapter exist in `scripts/labs/`
@@ -482,6 +568,9 @@ Read the chapter as a reader would, start to finish. Ask:
 - Compress Mac M4 section into a sidebar
 - Cut Appendix B (env variable reference) into an inline tip
 
+**Visual requirements:** 1-2 figures. Annotated FetchReach screenshot showing
+obs dict components. Optional: smoke test artifact screenshot.
+
 **Estimated length:** ~8,500 words (~20 pages)
 
 ### Chapter 2: Environment Anatomy (Environment)
@@ -495,6 +584,10 @@ Read the chapter as a reader would, start to finish. Ask:
 - Replace with a "Verify It" summary of expected inspection outputs
 - Introduce the concept registry entries for Ch2 (goal-conditioned MDP, dense/sparse reward, etc.)
 
+**Visual requirements:** 4-6 figures. Annotated screenshots of all three Fetch
+environments, obs dict structure diagram, dense vs sparse reward comparison,
+action space visualization.
+
 ### Chapter 3: PPO on Dense Reach (Algorithm)
 
 **Source tutorial:** `tutorials/ch02_ppo_dense_reach.md`
@@ -505,6 +598,10 @@ Read the chapter as a reader would, start to finish. Ask:
 - Bridge: PPO loss values on same batch, clip_fraction comparison
 - Reproduce It: 3-seed, 1M-step runs
 
+**Visual requirements:** 3-4 figures. Actor-critic architecture diagram,
+learning curve (success rate over steps), PPO clipping visualization,
+random vs trained comparison.
+
 ### Chapter 4: SAC on Dense Reach (Algorithm)
 
 **Source tutorial:** `tutorials/ch03_sac_dense_reach.md`
@@ -514,6 +611,10 @@ Read the chapter as a reader would, start to finish. Ask:
 - Build It components: replay buffer, twin Q-networks, squashed Gaussian policy, soft Bellman backup, actor loss, temperature loss, SAC update loop
 - Bridge: Q-targets, actor loss, entropy coefficient on same replay batch
 - Reproduce It: 3-seed, 2M-step runs
+
+**Visual requirements:** 3-4 figures. SAC architecture (twin Q + actor +
+temperature), entropy coefficient over training, learning curve comparison
+(PPO vs SAC), replay buffer diagnostics.
 
 ### Chapter 5: HER on Sparse Reach/Push (Algorithm)
 
@@ -526,6 +627,10 @@ Read the chapter as a reader would, start to finish. Ask:
 - Failure-first pedagogy: show SAC-without-HER flatline before introducing HER
 - Reproduce It: 3-seed runs for both HER and no-HER baselines on Reach and Push
 
+**Visual requirements:** 4-5 figures. Sparse reward flatline (no-HER baseline),
+HER learning curve comparison, goal relabeling diagram, Push environment
+annotated screenshot, HER ratio visualization.
+
 ### Chapter 6: PickAndPlace Capstone (Capstone)
 
 **Source tutorial:** `tutorials/ch05_pick_and_place.md`
@@ -536,6 +641,10 @@ Read the chapter as a reader would, start to finish. Ask:
 - Bridge: curriculum schedule produces expected goal distributions
 - Reproduce It: multi-seed runs with curriculum and stress evaluation
 - Dense-first debugging strategy as a structural element
+
+**Visual requirements:** 3-5 figures. PickAndPlace annotated screenshot,
+difficulty progression across all three tasks, curriculum schedule plot,
+stress-test degradation curve, success rate comparison table as figure.
 
 ---
 
@@ -554,6 +663,7 @@ Phase 1 -- Scaffolding (Scaffolder agent):
   [ ] Build It components listed
   [ ] Bridging proof identified
   [ ] What Can Go Wrong items listed
+  [ ] Figure plan created (>= 2 figures, each with source command)
   [ ] Scaffold approved by user
 
 Phase 2 -- Production (Lab Engineer + Book Writer agents):
@@ -568,11 +678,18 @@ Phase 2 -- Production (Lab Engineer + Book Writer agents):
   [ ] Summary + bridge to next chapter
   [ ] Reproduce It block
   [ ] Exercises (3-5)
+  [ ] All figures generated, captioned, and referenced
 
 Phase 3 -- Review (Reviewer agent):
   [ ] Reviewer agent produced Manning/reviews/chNN_review.md
   [ ] Verdict: READY / REVISE / RESTRUCTURE
   [ ] Review findings addressed
+
+Phase 3.5 -- Revision (Revisor agent, optional):
+  [ ] Revision scope identified (figures / review-fixes / naming / general)
+  [ ] Revisor agent produced targeted updates
+  [ ] Revision log written to Manning/revisions/chNN_revision_NNN.md
+  [ ] Re-review completed (if needed for substantial changes)
 
 Phase 4 -- Verification (manual / scripted):
   [ ] Lab code verified (--verify, --demo, --bridge all pass)

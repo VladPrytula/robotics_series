@@ -101,5 +101,30 @@ The book is backed by a runnable repository that standardizes:
 - `eval.py` for evaluation (fixed-seed protocols and JSON output).
 - Chapter scripts (`scripts/chNN_*.py`) that implement end-to-end experiments and produce consistent artifacts.
 - Lab modules (`scripts/labs/*.py`) that implement core algorithms from scratch and include `--verify` sanity checks; tutorials and book chapters excerpt these as the single source of truth for "Build It" code.
+- Environment visual guide (`manning_proposal/environments.md`) with annotated screenshots, observation tables, and reward diagrams for all Fetch tasks.
 
 These materials support self-study and also provide a consistent evaluation story for reviewers and instructors.
+
+## Visual Content Strategy
+
+All figures in the book are self-generated from MuJoCo renders and matplotlib
+plots -- no external assets, no licensing concerns, fully reproducible.
+
+| Figure type | Description | Generation |
+|---|---|---|
+| Environment screenshots | Annotated reset views of each Fetch task | `scripts/capture_proposal_figures.py env-setup` |
+| Learning curves | Training progress (success rate, return) over steps | TensorBoard exports from chapter scripts |
+| Architecture diagrams | Network structure, replay buffer flow | matplotlib/PIL in chapter scripts |
+| Comparison plots | Random vs trained, dense vs sparse, PPO vs SAC | `scripts/capture_proposal_figures.py compare` |
+| Reward diagrams | Dense vs sparse reward curves, obs dict structure | `scripts/capture_proposal_figures.py reward-diagram` |
+
+To generate all proposal figures:
+
+```bash
+bash docker/dev.sh python scripts/capture_proposal_figures.py all --out-dir figures
+```
+
+Figures use the colorblind-friendly Wong (2011) palette throughout. See
+`manning_proposal/environments.md` for the complete visual environment guide
+and `manning_proposal/manning_writer_persona.md` (Section 3.8) for figure
+conventions.

@@ -80,10 +80,18 @@ The build script catches mechanical issues. You check semantic ones:
 - [ ] No MathJax-specific extensions (pandoc uses LaTeX math, not MathJax)
 - [ ] Block math (`$$...$$`) is on its own line (pandoc requirement)
 
-**Images:**
+**Images and Figures:**
 - [ ] All image paths resolve (local or remote)
 - [ ] Alt text is present (not empty `![]()`)
 - [ ] No GIF-only images without fallback (GIFs are converted to PNG frame 0)
+- [ ] All figures are PNG format (not JPEG, SVG, or GIF)
+- [ ] Figure resolution is >= 640x480 pixels
+- [ ] Figure DPI is >= 150 (check with `identify -verbose` or Python PIL)
+- [ ] Every figure has a numbered caption (Figure N.M format)
+- [ ] Caption includes the generation command for reproducibility
+- [ ] Figure text is legible at print size (>= 9pt equivalent)
+- [ ] Figures use colorblind-friendly palette (Wong 2011)
+- [ ] Figure numbering is sequential and consistent within the chapter
 
 ### Step 3: Build
 
@@ -108,6 +116,9 @@ After building, verify the outputs:
 - [ ] Tables render correctly (no overflows or broken formatting)
 - [ ] Math renders correctly (not raw LaTeX in output)
 - [ ] Images appear (not broken image placeholders)
+- [ ] Figures are sharp and legible (not blurry from scaling)
+- [ ] Figure captions appear below each figure
+- [ ] Figure text is readable without zooming
 - [ ] Page count is reasonable (1 page per ~350 words is typical)
 
 **DOCX checks:**

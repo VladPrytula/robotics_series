@@ -76,6 +76,25 @@ Flag specific issues:
 | Listing 3.4 | Uses `alpha` but chapter calls it `entropy_coef` | Notation mismatch |
 | ... | ... | ... |
 
+### Visual Content
+
+Check figures against the scaffold's figure plan and persona Section 3.8:
+
+- [ ] **Figure count meets chapter-type minimum** (see protocol Phase 0 table)
+- [ ] **Every figure from the scaffold's figure plan is present**
+- [ ] **Every figure has a numbered caption** (Figure N.M format)
+- [ ] **Every caption includes the generation command**
+- [ ] **Every figure is referenced by number in the text** (not "see below")
+- [ ] **Colorblind-friendly palette used** (Wong 2011: Blue #0072B2, Orange #E69F00, Green #009E73, Vermillion #D55E00, Gray #999999)
+- [ ] **All figures are static PNGs** (no embedded videos or GIFs)
+
+Flag specific issues:
+
+| Figure | Issue | Severity |
+|--------|-------|----------|
+| Figure N.M | Missing caption generation command | Medium |
+| ... | ... | ... |
+
 ### 4. Structural Completeness
 
 Check that all required sections exist and are well-formed:
@@ -92,6 +111,7 @@ Check that all required sections exist and are well-formed:
 | Summary | Yes/No | ~N words | ... |
 | Reproduce It | Yes/No | ... | ... |
 | Exercises | Yes/No | N exercises | ... |
+| Figures | Yes/No | N figures | ... |
 
 ### 5. Content Gap Analysis
 

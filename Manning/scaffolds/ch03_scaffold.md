@@ -307,6 +307,16 @@ compute the same quantities. The existing lab supports this via `--compare-sb3`.
 
 ---
 
+## Figure Plan
+
+| # | Description | Type | Source command | Chapter location |
+|---|------------|------|---------------|-----------------|
+| 1 | FetchReachDense-v4 annotated screenshot: arm reaching toward target, labeled goal and gripper positions | screenshot | `python scripts/capture_proposal_figures.py env-setup --envs FetchReach-v4` | After opening bridge / Section 3.1 WHY, establishing the visual context |
+| 2 | PPO clipping diagram: ratio vs objective plot showing clipped region for A>0 and A<0 | diagram | matplotlib in Build It text (illustrative) | After Section 3.5 (PPO clipped loss), illustrating the clipping mechanism |
+| 3 | Learning curve (from-scratch demo): episode return over training steps on CartPole | curve | `python scripts/labs/ppo_from_scratch.py --demo` output | After Section 3.8 (Build It training loop), showing the from-scratch implementation learns |
+
+---
+
 ## Estimated Length
 
 | Section | Words |

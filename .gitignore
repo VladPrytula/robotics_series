@@ -22,6 +22,9 @@ runs/
 # Keep demo videos in docs
 !docs/videos/
 
+# Generated figures (reproducible from scripts/capture_proposal_figures.py)
+figures/
+
 # MkDocs build output
 site/
 

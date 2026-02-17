@@ -322,6 +322,18 @@ scratch") inspection to the production script (`scripts/ch01_env_anatomy.py`).
 
 ---
 
+## Figure Plan
+
+| # | Description | Type | Source command | Chapter location |
+|---|------------|------|---------------|-----------------|
+| 1 | FetchReach-v4 annotated screenshot: Fetch arm, target sphere (desired_goal), gripper (achieved_goal), labeled axes | screenshot | `python scripts/capture_proposal_figures.py env-setup --envs FetchReach-v4` | After Section 2.2 (The Fetch task family), before Build It |
+| 2 | FetchPush-v4 annotated screenshot: arm, object on table, target position, gripper | screenshot | `python scripts/capture_proposal_figures.py env-setup --envs FetchPush-v4` | After Section 2.2, alongside FetchReach screenshot |
+| 3 | FetchPickAndPlace-v4 annotated screenshot: arm grasping object, target in air | screenshot | `python scripts/capture_proposal_figures.py env-setup --envs FetchPickAndPlace-v4` | After Section 2.2, alongside other env screenshots |
+| 4 | Observation dictionary structure diagram: three-key dict with shapes, data flow to MultiInputPolicy encoders | diagram | `python scripts/capture_proposal_figures.py reward-diagram` | After Section 2.3 (observation dictionary), before goal space |
+| 5 | Dense vs sparse reward curves: distance on x-axis, reward on y-axis, threshold annotated | diagram | `python scripts/capture_proposal_figures.py reward-diagram` | After Section 2.5 (reward computation), illustrating the two reward functions |
+
+---
+
 ## Estimated Length
 
 | Section | Words |

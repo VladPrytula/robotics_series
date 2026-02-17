@@ -86,6 +86,12 @@ Book chapter output: Manning/chapters/chNN_<topic>.md
 > - ...
 > - ...
 
+## Figure Plan
+| # | Description | Type | Source command | Chapter location |
+|---|------------|------|---------------|-----------------|
+| 1 | ... | screenshot / curve / diagram / comparison | `python scripts/...` | After Section N.M |
+| 2 | ... | ... | ... | ... |
+
 ## Estimated Length
 | Section | Words |
 |---------|-------|
@@ -126,3 +132,5 @@ Before declaring the scaffold complete, verify:
 - [ ] The adaptation notes are specific (not "tighten the voice")
 - [ ] The concept registry additions match what the source tutorial defines
 - [ ] The estimated word counts are realistic (total 6,000-10,000)
+- [ ] The figure plan has >= 2 figures, each with a source command
+- [ ] Every figure in the plan has a description, type, and chapter location

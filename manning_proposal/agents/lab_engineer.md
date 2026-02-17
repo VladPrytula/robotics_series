@@ -140,6 +140,57 @@ def bridge():
 `model.logger.name_to_value`, or temporarily hook into `model.train()`
 with a custom callback. Do NOT modify SB3 source code.
 
+## Diagnostic Plots in `--demo` Mode
+
+When `--demo` mode runs a short training loop, save diagnostic plots that
+the chapter can reference as figures. These give the reader visual evidence
+that their from-scratch implementation is learning.
+
+**Pattern for saving demo plots:**
+
+```python
+def _save_demo_plot(metrics: dict, out_dir: Path, chapter: str) -> None:
+    """Save learning curve plots from --demo mode."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), dpi=150)
+
+    # Returns plot
+    axes[0].plot(metrics["steps"], metrics["returns"], color="#0072B2")
+    axes[0].set_xlabel("Steps")
+    axes[0].set_ylabel("Return")
+    axes[0].set_title("Episode Returns")
+    axes[0].grid(True, alpha=0.3)
+
+    # Success rate plot (if available)
+    if "success_rates" in metrics:
+        axes[1].plot(metrics["steps"], metrics["success_rates"], color="#009E73")
+        axes[1].set_xlabel("Steps")
+        axes[1].set_ylabel("Success Rate")
+        axes[1].set_title("Success Rate")
+        axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    out_path = out_dir / f"{chapter}_demo_returns.png"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  Demo plot saved: {out_path}")
+```
+
+**Expected outputs:**
+- `figures/chNN_demo_returns.png` -- episode returns over steps
+- `figures/chNN_demo_success.png` -- success rate over steps (if applicable)
+
+**Conventions:**
+- Use the Wong (2011) colorblind-friendly palette (Blue `#0072B2`,
+  Orange `#E69F00`, Green `#009E73`, Vermillion `#D55E00`, Gray `#999999`)
+- 150 DPI, PNG format, white background
+- Matplotlib Agg backend (no display required)
+- Print the save path so the reader sees where to find the plot
+
 ## What NOT to Do
 
 - Do not write chapter prose or modify any markdown files
