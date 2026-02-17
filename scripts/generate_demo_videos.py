@@ -74,20 +74,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_model(ckpt_path: str, device: str = "auto"):
-    """Load a trained SB3 model."""
+def load_model(ckpt_path: str, device: str = "auto", env=None):
+    """Load a trained SB3 model.
+
+    For HER checkpoints, pass env so SB3 can reconstruct the HerReplayBuffer.
+    """
     from stable_baselines3 import PPO, SAC, TD3
 
     ckpt = Path(ckpt_path)
     if not ckpt.exists():
         raise FileNotFoundError(f"Checkpoint not found: {ckpt}")
 
-    # Try each algorithm
+    # Try each algorithm, first without env, then with env (for HER checkpoints)
     for cls in [PPO, SAC, TD3]:
         try:
             return cls.load(str(ckpt), device=device)
         except Exception:
-            continue
+            pass
+        if env is not None:
+            try:
+                return cls.load(str(ckpt), device=device, env=env)
+            except Exception:
+                pass
 
     raise RuntimeError(f"Could not load checkpoint with PPO/SAC/TD3: {ckpt}")
 
@@ -309,9 +317,6 @@ def save_gif(frames: list, path: Path, fps: int = 15, optimize: bool = True):
 def main() -> int:
     args = parse_args()
 
-    print(f"Loading checkpoint: {args.ckpt}")
-    model = load_model(args.ckpt)
-
     print(f"Creating environment: {args.env}")
     import gymnasium as gym
     import gymnasium_robotics  # noqa: F401
@@ -323,6 +328,9 @@ def main() -> int:
         width=args.width,
         height=args.height,
     )
+
+    print(f"Loading checkpoint: {args.ckpt}")
+    model = load_model(args.ckpt, env=env)
 
     # Try to make target more visible
     try:
