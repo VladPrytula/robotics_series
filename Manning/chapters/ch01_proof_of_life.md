@@ -519,6 +519,25 @@ Together with the Build It checks from section 1.5, you also know:
 
 This is what "alive" means: the environment can produce valid results. It does not yet mean the environment produces *good* results -- that is what the rest of the book is for.
 
+> **SIDEBAR: Regenerating figures and videos**
+>
+> Every figure in this book is generated from code -- no hand-drawn diagrams, no screenshots from external tools. This means you can regenerate any figure yourself. The figures you see (annotated environment screenshots, reward diagrams, learning curves) are produced by:
+>
+> ```bash
+> bash docker/dev.sh python scripts/capture_proposal_figures.py all
+> ```
+>
+> This creates annotated PNGs in the `figures/` directory. Individual subcommands are available: `env-setup` for environment screenshots, `reward-diagram` for reward function plots, `ppo-clipping` for the PPO clipping diagram, and `ppo-demo-curve` for learning curves.
+>
+> For evaluation videos showing trained policies in action, use:
+>
+> ```bash
+> bash docker/dev.sh python scripts/generate_demo_videos.py \
+>   --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip
+> ```
+>
+> This produces MP4 and GIF files in `videos/`. We use these to verify that trained policies behave as expected -- not just that the numbers look right, but that the robot actually moves to the target. Later chapters provide specific video commands alongside their Experiment Cards.
+
 
 ## 1.7 What can go wrong
 

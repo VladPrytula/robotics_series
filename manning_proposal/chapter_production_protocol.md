@@ -524,6 +524,79 @@ needed (changes are additive and mechanical). For `review-fixes` and
 
 ---
 
+## Figure and Video Generation
+
+All figures in the book are self-generated from code -- no external licensing
+issues, and readers can regenerate them.
+
+### Generating Figures
+
+The primary figure generation script is `scripts/capture_proposal_figures.py`.
+It runs inside Docker and produces annotated PNGs in `figures/`.
+
+```bash
+# Generate all figures (env screenshots + diagrams + PPO figures)
+bash docker/dev.sh python scripts/capture_proposal_figures.py all
+
+# Generate specific figure types
+bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup
+bash docker/dev.sh python scripts/capture_proposal_figures.py reward-diagram
+bash docker/dev.sh python scripts/capture_proposal_figures.py ppo-clipping
+bash docker/dev.sh python scripts/capture_proposal_figures.py ppo-demo-curve
+
+# Side-by-side comparison (requires trained checkpoint)
+bash docker/dev.sh python scripts/capture_proposal_figures.py compare \
+  --env FetchReachDense-v4 --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip
+```
+
+**Figure output directory:** `figures/` (at repo root). This directory is
+referenced by relative paths in chapter markdown (e.g., `figures/fetch_reach_setup.png`).
+
+**Figures currently generated:**
+
+| File | Source subcommand | Used in |
+|------|------------------|---------|
+| `fetch_reach_setup.png` | `env-setup` | Ch01, Ch02, Ch03 |
+| `fetch_push_setup.png` | `env-setup` | Ch02 |
+| `fetch_pick_and_place_setup.png` | `env-setup` | Ch02 |
+| `obs_dict_structure.png` | `reward-diagram` | Ch02 |
+| `dense_vs_sparse_reward.png` | `reward-diagram` | Ch02 |
+| `ppo_clipping_diagram.png` | `ppo-clipping` | Ch03 |
+| `ppo_demo_learning_curve.png` | `ppo-demo-curve` | Ch03 |
+
+### Generating Videos
+
+Evaluation videos (MP4/GIF) are produced by `scripts/generate_demo_videos.py`
+using trained checkpoints:
+
+```bash
+# Generate demo video from a trained checkpoint
+bash docker/dev.sh python scripts/generate_demo_videos.py \
+  --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip
+
+# Quick test (fewer episodes)
+bash docker/dev.sh python scripts/generate_demo_videos.py \
+  --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip --n-episodes 3
+```
+
+Videos are saved to `videos/` by default.
+
+### Build Pipeline Integration
+
+The build script (`scripts/build_book.py`) resolves local image paths
+relative to the repo root via pandoc's `--resource-path`. Figures in
+`figures/` are automatically found during PDF/DOCX generation.
+
+To verify all images resolve before building:
+
+```bash
+python scripts/build_book.py --validate-only --verbose
+```
+
+The validator reports any missing local images as warnings.
+
+---
+
 ### Step 18: Verify Lab Code
 
 - [ ] All snippet-include regions referenced in the chapter exist in `scripts/labs/`

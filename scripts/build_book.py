@@ -67,6 +67,7 @@ BOOK_PARTS: list[tuple[str, list[int]]] = [
 
 # Regex patterns
 _REMOTE_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\((https?://[^)\s]+)\)")
+_LOCAL_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\((?!https?://)([^)\s]+)\)")
 _NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 _CODE_BLOCK_RE = re.compile(r"^```.*?\n(.*?)^```", re.MULTILINE | re.DOTALL)
@@ -225,6 +226,24 @@ def validate_chapter(chapter: Chapter) -> list[ValidationIssue]:
             message=f"{len(remote_imgs)} remote image(s) will be downloaded during build",
         ))
 
+    # 4b. Local images -- check they exist relative to repo root
+    local_imgs = _LOCAL_IMAGE_RE.findall(text)
+    for alt, img_path in local_imgs:
+        resolved = REPO_ROOT / img_path
+        if not resolved.exists():
+            issues.append(ValidationIssue(
+                chapter=chapter.number, severity="warning",
+                category="images",
+                message=f"Local image not found: {img_path} (expected at {resolved})",
+            ))
+    if local_imgs:
+        found = sum(1 for _, p in local_imgs if (REPO_ROOT / p).exists())
+        issues.append(ValidationIssue(
+            chapter=chapter.number, severity="info",
+            category="images",
+            message=f"{len(local_imgs)} local image(s) ({found} found, {len(local_imgs) - found} missing)",
+        ))
+
     # 5. Banned phrases (context-dependent, so warning not error)
     for phrase in BANNED_PHRASES:
         for i, line in enumerate(lines, 1):
@@ -346,7 +365,7 @@ def render_file(
         pandoc,
         str(source_md),
         "-f", "gfm+tex_math_dollars",
-        "--resource-path", str(resource_path),
+        "--resource-path", f"{resource_path}:{REPO_ROOT}",
         "--toc",
         "--toc-depth=3",
         "--standalone",
