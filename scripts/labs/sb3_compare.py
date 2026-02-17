@@ -324,3 +324,75 @@ def compare_her_relabeling_to_sb3(
         if passed
         else "Mismatch suggests reward recomputation inconsistency or HER relabeling not applied during sampling.",
     )
+
+
+def compare_nature_cnn_to_sb3(
+    *,
+    seed: int = 0,
+    batch_size: int = 8,
+    features_dim: int = 512,
+    atol: float = 1e-5,
+) -> ComparisonResult:
+    """Compare our NatureCNN output against SB3's NatureCnn.
+
+    Creates both implementations, copies weights from SB3 to ours,
+    feeds identical random input, and checks output difference.
+    """
+    try:
+        from gymnasium import spaces
+        from stable_baselines3.common.torch_layers import NatureCNN as SB3NatureCNN
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError(
+            "SB3 comparison requires gymnasium + stable-baselines3. "
+            "Run inside Docker: `bash docker/dev.sh python scripts/labs/visual_encoder.py --compare-sb3`."
+        ) from exc
+
+    from scripts.labs.visual_encoder import NatureCNN
+
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    # Create SB3 NatureCNN (needs a Box observation space)
+    obs_space = spaces.Box(low=0, high=255, shape=(3, 84, 84), dtype=np.uint8)
+    sb3_cnn = SB3NatureCNN(obs_space, features_dim=features_dim)
+    sb3_cnn.eval()
+
+    # Create our NatureCNN
+    ours = NatureCNN(in_channels=3, features_dim=features_dim)
+    ours.eval()
+
+    # Copy weights from SB3 to ours
+    # SB3 layout: self.cnn = Sequential(Conv, ReLU, Conv, ReLU, Conv, ReLU, Flatten)
+    #             self.linear = Sequential(Linear, ReLU)
+    # Ours:       self.conv = Sequential(Conv, ReLU, Conv, ReLU, Conv, ReLU, Flatten)
+    #             self.fc   = Sequential(Linear, ReLU)
+    with torch.no_grad():
+        # Conv layers (indices 0, 2, 4 in both Sequentials)
+        for idx in [0, 2, 4]:
+            ours.conv[idx].weight.copy_(sb3_cnn.cnn[idx].weight)
+            ours.conv[idx].bias.copy_(sb3_cnn.cnn[idx].bias)
+        # FC layer (index 0 in both Sequentials)
+        ours.fc[0].weight.copy_(sb3_cnn.linear[0].weight)
+        ours.fc[0].bias.copy_(sb3_cnn.linear[0].bias)
+
+    # Feed identical input (normalized float32, as SB3 does internally)
+    dummy_input = torch.rand(batch_size, 3, 84, 84)
+
+    with torch.no_grad():
+        sb3_out = sb3_cnn(dummy_input)
+        our_out = ours(dummy_input)
+
+    max_abs_diff = float((sb3_out - our_out).abs().max().item())
+    passed = max_abs_diff <= atol
+
+    return ComparisonResult(
+        name="nature_cnn_vs_sb3",
+        passed=passed,
+        metrics={
+            "max_abs_output_diff": max_abs_diff,
+            "atol": float(atol),
+            "sb3_output_mean": float(sb3_out.mean().item()),
+            "our_output_mean": float(our_out.mean().item()),
+        },
+        notes=None if passed else "Mismatch suggests a weight copy error or architectural difference.",
+    )
