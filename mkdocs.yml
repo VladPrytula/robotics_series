@@ -78,6 +78,7 @@ nav:
     - "Chapter 2: PPO on Dense Reach": tutorials/ch02_ppo_dense_reach.md
     - "Chapter 3: SAC on Dense Reach": tutorials/ch03_sac_dense_reach.md
     - "Chapter 4: HER on Sparse Reach/Push": tutorials/ch04_her_sparse_reach_push.md
+    - "Chapter 5: PickAndPlace": tutorials/ch05_pick_and_place.md
   - Syllabus: syllabus.md
   - Reference:
     - CLI: reference/cli.md

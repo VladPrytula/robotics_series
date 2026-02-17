@@ -22,6 +22,12 @@ By the end, you will have:
 3. Diagnostic skills to identify common training failures
 4. Confidence to move to harder problems
 
+If you want to run first and read later, jump to Part 3:
+
+```bash
+bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
+```
+
 ---
 
 ## Part 0: Setting the Stage
@@ -76,23 +82,29 @@ You're debugging in the dark with too many variables.
 
 Let's build up the math from intuition, defining each symbol as we introduce it.
 
-**The Setup:** At each timestep $t$, our **policy** $\pi$ (a neural network with parameters $\theta$) sees the current state $s_t$ and goal $g$, and outputs an action $a_t$. The environment responds with a new state $s_{t+1}$ and a **reward** $R_t$--a single number indicating how good that transition was.
+**The Setup:** At each timestep $t$, our **policy** $\pi$ (a neural network with parameters $\theta$) sees the current state $s_t$ and the goal $g$. It is convenient to bundle these into a single goal-conditioned input:
+
+```math
+x_t := (s_t, g)
+```
+
+The policy outputs an action $a_t \sim \pi_\theta(\cdot \mid x_t)$. The environment responds with a new state $s_{t+1}$ and a **reward** $r_t$--a single number indicating how good that transition was.
 
 Before stating the objective, we need three definitions:
 
-**Definition (Reward).** The reward $R_t \in \mathbb{R}$ is the immediate feedback signal at timestep $t$. In FetchReachDense, $R_t = -\|p_t - g\|$ where $p_t$ is the gripper position and $g$ is the goal. More negative means farther from the goal; zero means perfect.
+**Definition (Reward).** The reward $r_t \in \mathbb{R}$ is the immediate feedback signal at timestep $t$. In FetchReachDense, $r_t = -\|p_t - g\|_2$ where $p_t$ is the gripper position and $g$ is the goal. More negative means farther from the goal; zero means perfect.
 
-**Definition (Discount Factor).** The discount factor $\gamma \in [0, 1)$ determines how much we value future rewards relative to immediate rewards. A reward $R$ received $k$ steps in the future contributes $\gamma^k R$ to our objective. With $\gamma = 0.99$, a reward 100 steps away is worth $0.99^{100} \approx 0.37$ as much as an immediate reward. This captures two intuitions: (1) sooner is better than later, and (2) distant rewards are more uncertain.
+**Definition (Discount Factor).** The discount factor $\gamma \in [0, 1)$ determines how much we value future rewards relative to immediate rewards. A reward of magnitude $r$ received $k$ steps in the future contributes $\gamma^k r$ to our objective. With $\gamma = 0.99$, a reward 100 steps away is worth $0.99^{100} \approx 0.37$ as much as an immediate reward. This captures two intuitions: (1) sooner is better than later, and (2) distant rewards are more uncertain.
 
-**Definition (Time Horizon).** The horizon $T$ is the maximum number of timesteps in an episode. For FetchReach, $T = 50$ steps.
+**Definition (Time Horizon).** The horizon $T$ is the maximum number of timesteps in an episode. For FetchReach, $T = 50$ steps (we index $t = 0, \ldots, T-1$).
 
 **The Objective:** Find policy parameters $\theta$ that maximize the **expected discounted return**:
 
 ```math
-J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t R_t \right]
+J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T-1} \gamma^t r_t \right]
 ```
 
-Here $J(\theta)$ is the objective function we seek to maximize--it measures how good a policy with parameters $\theta$ is, averaged over many episodes. The sum $\sum_{t=0}^{T} \gamma^t R_t$ is called the **return**: the total reward accumulated over an episode, with future rewards discounted by $\gamma$.
+Here $J(\theta)$ is the objective function we seek to maximize--it measures how good a policy with parameters $\theta$ is, averaged over many episodes. The sum $\sum_{t=0}^{T-1} \gamma^t r_t$ is called the **return**: the total reward accumulated over an episode, with future rewards discounted by $\gamma$.
 
 The expectation is over trajectories--different runs give different outcomes because actions sample from the policy distribution and the environment may be stochastic.
 
@@ -109,19 +121,19 @@ The "better-than-expected" part is crucial. An action that got reward +10 isn't 
 This is captured by the **advantage function**:
 
 ```math
-A(s, a) = Q(s, a) - V(s)
+A(x, a) = Q(x, a) - V(x)
 ```
 
 where:
-- $Q(s, a)$ = expected return if you take action $a$ in state $s$, then follow your policy
-- $V(s)$ = expected return if you just follow your policy from state $s$
+- $Q(x, a)$ = expected return if you take action $a$ in goal-conditioned state $x$, then follow your policy
+- $V(x)$ = expected return if you just follow your policy from goal-conditioned state $x$
 
-So $A(s, a) > 0$ means action $a$ was better than average; $A(s, a) < 0$ means it was worse.
+So $A(x, a) > 0$ means action $a$ was better than average; $A(x, a) < 0$ means it was worse.
 
 **The Policy Gradient:**
 
 ```math
-\nabla_\theta J(\theta) = \mathbb{E}\left[ \sum_t \nabla_\theta \log \pi_\theta(a_t | s_t) \cdot A(s_t, a_t) \right]
+\nabla_\theta J(\theta) = \mathbb{E}\left[ \sum_t \nabla_\theta \log \pi_\theta(a_t \mid x_t) \cdot A(x_t, a_t) \right]
 ```
 
 Read this as: "Adjust $\theta$ to make good actions more likely and bad actions less likely, weighted by how good/bad they were."
@@ -146,29 +158,31 @@ PPO's key idea: **don't change the policy too much in one update.**
 
 But "too much" in what sense? Not in parameter space (a small parameter change can cause large behavior change). Instead, in **probability space**.
 
-Define the probability ratio:
+Define the likelihood ratio:
 
 ```math
-r_t(\theta) = \frac{\pi_\theta(a_t | s_t)}{\pi_{\theta_{\text{old}}}(a_t | s_t)}
+\rho_t(\theta) = \frac{\pi_\theta(a_t \mid x_t)}{\pi_{\theta_{\text{old}}}(a_t \mid x_t)}
 ```
 
-This measures how the action probability changed:
-- $r = 1$: same probability as before
-- $r = 2$: action is now twice as likely
-- $r = 0.5$: action is now half as likely
+This measures how the action likelihood changed:
+- $\rho = 1$: same likelihood as before
+- $\rho = 2$: action is now twice as likely
+- $\rho = 0.5$: action is now half as likely
+
+**Note (continuous actions).** For Fetch, actions are continuous, so $\pi_\theta(a \mid x)$ is a probability density. The ratio is still well-defined as a likelihood ratio, and implementations compute it via log-probabilities: $\rho_t = \exp(\log \pi_\theta(a_t \mid x_t) - \log \pi_{\text{old}}(a_t \mid x_t))$.
 
 PPO clips this ratio to stay in $[1-\epsilon, 1+\epsilon]$ (typically $\epsilon = 0.2$):
 
 ```math
-L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( r_t A_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \cdot A_t \right) \right]
+L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( \rho_t A_t, \text{clip}(\rho_t, 1-\epsilon, 1+\epsilon) \cdot A_t \right) \right]
 ```
 
 **What this does:**
 
 | Advantage | Gradient wants to... | Clipping effect |
 |-----------|---------------------|-----------------|
-| $A > 0$ (good action) | Increase $r$ (make action more likely) | Stops at $r = 1.2$ |
-| $A < 0$ (bad action) | Decrease $r$ (make action less likely) | Stops at $r = 0.8$ |
+| $A > 0$ (good action) | Increase $\rho$ (make action more likely) | Stops at $\rho = 1.2$ |
+| $A < 0$ (bad action) | Decrease $\rho$ (make action less likely) | Stops at $\rho = 0.8$ |
 
 The policy can improve, but only within a "trust region" around its current behavior. This prevents the catastrophic updates that kill vanilla policy gradient.
 
@@ -176,14 +190,14 @@ The policy can improve, but only within a "trust region" around its current beha
 
 Let's trace through one update to make this concrete.
 
-**Setup:** The old policy assigns probability 0.3 to action $a$ in state $s$. We estimate the advantage is $A = +2$ (this was a good action).
+**Setup (discrete intuition):** Imagine a discrete action space. The old policy assigns probability 0.3 to action $a$ in goal-conditioned state $x$. We estimate the advantage is $A = +2$ (this was a good action).
 
-**Naive approach:** The gradient says "make this action more likely!" So we update and now $\pi_\theta(a|s) = 0.6$.
+**Naive approach:** The gradient says "make this action more likely!" So we update and now $\pi_\theta(a \mid x) = 0.6$.
 
-**Problem:** The ratio $r = 0.6/0.3 = 2.0$. We doubled the probability in one update. If our advantage estimate was wrong, we've made a big mistake.
+**Problem:** The ratio $\rho = 0.6/0.3 = 2.0$. We doubled the probability in one update. If our advantage estimate was wrong, we've made a big mistake.
 
 **PPO's approach:** The clipped objective computes:
-- Unclipped: $r \cdot A = 2.0 \times 2 = 4.0$
+- Unclipped: $\rho \cdot A = 2.0 \times 2 = 4.0$
 - Clipped: $\text{clip}(2.0, 0.8, 1.2) \times 2 = 1.2 \times 2 = 2.4$
 - Objective: $\min(4.0, 2.4) = 2.4$
 
@@ -213,9 +227,9 @@ Dense rewards decouple the exploration problem from the learning problem. If PPO
 
 PPO maintains two neural networks:
 
-**Actor** $\pi_\theta(a|s, g)$: Given the state and goal, output a probability distribution over actions. For continuous actions, this is typically a Gaussian with learned mean and standard deviation.
+**Actor** $\pi_\theta(a \mid x)$: Given the goal-conditioned input $x = (s, g)$, output a probability distribution over actions. For continuous actions, this is typically a Gaussian with learned mean and standard deviation.
 
-**Critic** $V_\phi(s, g)$: Given the state and goal, estimate the expected return. This helps compute advantages.
+**Critic** $V_\phi(x)$: Given the same input, estimate the expected return. This helps compute advantages.
 
 **Why two networks, not one?** A natural question: why not have a single network output both actions and value estimates? Three reasons:
 
@@ -225,7 +239,12 @@ PPO maintains two neural networks:
 
 3. **Stability.** The critic's value estimates are used to compute advantages, which then train the actor. If actor updates destabilize the critic, the advantages become noisy, which destabilizes the actor further--a vicious cycle.
 
-**A geometric perspective:** There may be deeper structure here. Consider what we're learning: a mapping from states to "optimal behavior," encompassing both *what to do* (policy) and *how good is this state* (value). Naively, this is a single map:
+<details>
+<summary>Optional aside: a geometric perspective (out of scope)</summary>
+
+> "A geometric interpretation involves representation learning and function factorization. For our purposes, the property we need is simple: sharing early layers but splitting actor/critic heads improves stability by reducing destructive interference between objectives."
+
+Consider what we're learning: a mapping from goal-conditioned inputs to "optimal behavior," encompassing both *what to do* (policy) and *how good is this state* (value). Naively, this is a single map:
 
 $$F: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \times \mathbb{R}$$
 
@@ -236,6 +255,7 @@ $$\pi: \mathcal{S} \times \mathcal{G} \to \mathcal{P}(\mathcal{A}) \quad \text{a
 This *suggests* a factorization--perhaps recognizing product structure in the target space, or projecting through a lower-dimensional "behaviorally-relevant" manifold. The shared backbone makes this more concrete: we learn $\phi: \mathcal{S} \times \mathcal{G} \to \mathcal{Z}$ (a representation), then compose with separate heads. This is genuinely factoring through an intermediate space.
 
 However, the analogy is imperfect. Unlike clean mathematical factorizations, $V$ depends on $\pi$ (it's $V^\pi$), so the components are coupled. The precise geometric interpretation--if one exists--remains to be clarified. What's clear is that the separation has practical benefits; whether it reflects deep structure or is merely a useful engineering heuristic is an open question.
+</details>
 
 In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"). This captures shared features while keeping the objectives separate. Stable Baselines 3 uses this approach by default.
 
@@ -259,15 +279,33 @@ Run the policy for `n_steps` in each of `n_envs` parallel environments. This giv
 We use Generalized Advantage Estimation (GAE), which balances bias and variance:
 
 ```math
-\hat{A}_t = \sum_{k=0}^{\infty} (\gamma \lambda)^k \delta_{t+k}
+\hat{A}_t = \sum_{l=0}^{T-t-1} (\gamma \lambda)^l \delta_{t+l}
 ```
 
-where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the TD residual.
+where the TD residual (with termination masking) is:
+
+```math
+\delta_t = r_t + \gamma (1 - d_t) V_{\text{rollout}}(x_{t+1}) - V_{\text{rollout}}(x_t)
+```
+
+Here $d_t \in \{0, 1\}$ indicates whether the episode terminated at timestep $t$ (if it did, we do not bootstrap from $x_{t+1}$). The value terms are computed when collecting the rollout and treated as constants while optimizing this batch.
 
 The parameter $\lambda$ interpolates between:
 - $\lambda = 0$: One-step TD (high bias, low variance)
 - $\lambda = 1$: Monte Carlo (low bias, high variance)
 - $\lambda = 0.95$: Typical default
+
+**Compact equation summary (goal-conditioned PPO)**
+
+```math
+x_t := (s_t, g)
+J(\theta) = \mathbb{E}\left[\sum_{t=0}^{T-1}\gamma^t r_t\right]
+\delta_t = r_t + \gamma(1-d_t)V_{\text{rollout}}(x_{t+1}) - V_{\text{rollout}}(x_t)
+\hat{A}_t = \sum_{l=0}^{T-t-1}(\gamma\lambda)^l\delta_{t+l}
+\hat{G}_t = \hat{A}_t + V_{\text{rollout}}(x_t)
+\rho_t(\theta) = \pi_\theta(a_t \mid x_t)\,/\,\pi_{\theta_{\text{old}}}(a_t \mid x_t)
+L^{\text{CLIP}}(\theta) = \mathbb{E}_t\left[\min\left(\rho_t\hat{A}_t,\text{clip}(\rho_t,1-\epsilon,1+\epsilon)\hat{A}_t\right)\right]
+```
 
 **Steps 3-4: Update Networks**
 
@@ -316,23 +354,23 @@ Before we can compute losses, we need the network they operate on. PPO uses an a
     Instantiate the network and verify shapes:
 
     ```python
-    model = ActorCritic(obs_dim=25, act_dim=4, hidden_dim=64)
-    obs = torch.randn(1, 25)
+    model = ActorCritic(obs_dim=16, act_dim=4, hidden_dim=64)
+    obs = torch.randn(1, 16)
     dist, value = model(obs)
     print(f"Action mean shape: {dist.mean.shape}")   # (1, 4)
     print(f"Value shape:       {value.shape}")        # (1,)
-    print(f"Parameters:        {sum(p.numel() for p in model.parameters()):,}")  # ~6,534
+    print(f"Parameters:        {sum(p.numel() for p in model.parameters()):,}")  # ~5,577
     ```
 
-    The network is small by design -- Fetch tasks use MLPs, not CNNs. Most of the 6.5k parameters are in the two backbone layers (64x64).
+    The network is small by design -- Fetch tasks use MLPs, not CNNs. Most of the ~5.6k parameters are in the two backbone layers (64x64).
 
 ### 2.5.2 GAE: Computing Advantages
 
 The advantage formula from Section 2.2:
 
-$$\hat{A}_t = \sum_{k=0}^{\infty} (\gamma \lambda)^k \delta_{t+k}$$
+$$\hat{A}_t = \sum_{l=0}^{T-t-1} (\gamma \lambda)^l \delta_{t+l}$$
 
-where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the TD residual. In code, we compute this backwards through the trajectory:
+where $\delta_t = r_t + \gamma(1-d_t) V_{\text{rollout}}(x_{t+1}) - V_{\text{rollout}}(x_t)$ is the TD residual with termination masking. In code, we compute this backwards through the trajectory:
 
 ```python
 --8<-- "scripts/labs/ppo_from_scratch.py:gae_computation"
@@ -346,6 +384,7 @@ where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the TD residual. In code,
 | $\gamma$ | `gamma` | Discount factor (0.99) |
 | $\lambda$ | `gae_lambda` | Bias-variance tradeoff (0.95) |
 | $\hat{A}_t$ | `advantages[t]` | How much better was this action vs. average? |
+| $d_t$ | `dones[t]` | Episode terminated at this step? |
 
 !!! lab "Checkpoint"
     Test with a simple trajectory where reward arrives only at the end:
@@ -368,7 +407,7 @@ where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the TD residual. In code,
 
 The PPO objective from Section 1.4:
 
-$$L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( r_t A_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \cdot A_t \right) \right]$$
+$$L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( \rho_t A_t, \text{clip}(\rho_t, 1-\epsilon, 1+\epsilon) \cdot A_t \right) \right]$$
 
 In code:
 
@@ -380,7 +419,7 @@ In code:
 
 | Math | Code | Meaning |
 |------|------|---------|
-| $r_t = \frac{\pi_\theta(a|s)}{\pi_{\theta_{old}}(a|s)}$ | `ratio` | How much did action probability change? |
+| $\rho_t = \frac{\pi_\theta(a \mid x)}{\pi_{\theta_{old}}(a \mid x)}$ | `ratio` | How much did action likelihood change? |
 | $\epsilon$ | `clip_range` | Maximum allowed ratio change (0.2) |
 | $A_t$ | `advantages` | Advantage estimates from GAE |
 
@@ -403,9 +442,9 @@ In code:
 
 ### 2.5.4 The Value Loss
 
-The critic learns to predict expected returns. We minimize the mean squared error between the critic's predictions $V_\theta(s)$ and the computed returns $\hat{R}_t = \hat{A}_t + V_{\text{old}}(s_t)$:
+The critic learns to predict expected returns. We minimize the mean squared error between the critic's predictions $V_\phi(x_t)$ and the computed return targets $\hat{G}_t = \hat{A}_t + V_{\text{rollout}}(x_t)$:
 
-$$L_{\text{value}} = \frac{1}{2} \mathbb{E}\left[ \left( V_\theta(s_t) - \hat{R}_t \right)^2 \right]$$
+$$L_{\text{value}} = \frac{1}{2} \mathbb{E}\left[ \left( V_\phi(x_t) - \hat{G}_t \right)^2 \right]$$
 
 ```python
 --8<-- "scripts/labs/ppo_from_scratch.py:value_loss"
@@ -424,9 +463,14 @@ $$L_{\text{value}} = \frac{1}{2} \mathbb{E}\left[ \left( V_\theta(s_t) - \hat{R}
 
 ### 2.5.5 Wiring It Together: The PPO Update
 
-The individual components above are combined into a single update step. PPO's total loss is:
+The individual components above are combined into a single update step. PPO combines:
+- a clipped policy objective (maximize)
+- a value prediction loss (minimize)
+- an entropy bonus (maximize, to encourage exploration)
 
-$$L = L_{\text{policy}} + c_1 \cdot L_{\text{value}} - c_2 \cdot \mathcal{H}[\pi]$$
+One common convention is to *minimize* the following total loss:
+
+$$\mathcal{L} = -L^{\text{CLIP}} + c_1 \cdot L_{\text{value}} - c_2 \cdot \mathcal{H}[\pi]$$
 
 where $c_1 = 0.5$ (value coefficient) and $c_2$ is the entropy coefficient (typically 0.0 for Fetch tasks, where exploration isn't the bottleneck).
 
@@ -490,7 +534,26 @@ Verifying PPO update...
 
 This lab is **not** how we train policies -- that's what SB3 is for. The lab shows *what* SB3 is doing internally, with every tensor operation visible.
 
-### 2.5.7 Exercises: Modify and Observe
+### 2.5.7 Verify vs SB3 (Optional)
+
+SB3 is the scaling engine we use in the Run It track. This optional check confirms that our from-scratch GAE implementation matches SB3's reference implementation (`RolloutBuffer.compute_returns_and_advantage`):
+
+```bash
+bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --compare-sb3
+```
+
+Expected output:
+
+```
+============================================================
+PPO From Scratch -- SB3 Comparison
+============================================================
+Max abs advantage diff: ~0
+Max abs returns diff:   ~0
+[PASS] Our GAE matches SB3 RolloutBuffer
+```
+
+### 2.5.8 Exercises: Modify and Observe
 
 These exercises help you develop intuition by changing the code and seeing what happens.
 
@@ -541,7 +604,7 @@ bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --demo
 2. **Value loss trajectory:** High initially (learning), decreases as predictions improve.
 3. **KL stays bounded:** Typically < 0.05, showing clipping is working.
 
-This is the same algorithm SB3 uses—the from-scratch version just makes every step explicit.
+This is the same algorithm SB3 uses--the from-scratch version just makes every step explicit.
 
 **Exercise 2.5.4: Record a GIF of the Trained Policy**
 
@@ -553,27 +616,7 @@ bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --demo --record
 
 This trains the policy and saves a GIF to `videos/ppo_cartpole_demo.gif`.
 
-**Note:** If running outside of `dev.sh` (e.g., in scripts or CI), use the full Docker command:
-
-```bash
-docker run --rm \
-  -e MUJOCO_GL=egl \
-  -e PYOPENGL_PLATFORM=egl \
-  -e PYTHONUNBUFFERED=1 \
-  -e HOME=/tmp \
-  -e XDG_CACHE_HOME=/tmp/.cache \
-  -e TORCH_HOME=/tmp/.cache/torch \
-  -e TORCHINDUCTOR_CACHE_DIR=/tmp/.cache/torch_inductor \
-  -e MPLCONFIGDIR=/tmp/.cache/matplotlib \
-  -e USER=user \
-  -e LOGNAME=user \
-  -v "$PWD:/workspace" \
-  -w /workspace \
-  --gpus all \
-  --ipc=host \
-  robotics-rl:latest \
-  bash -c 'source .venv/bin/activate && python scripts/labs/ppo_from_scratch.py --demo --record'
-```
+**Note:** `docker/dev.sh` uses `docker run -it` and will fail without a TTY. If you need non-interactive execution (CI), run `docker run --rm` with the same env vars and mounts as `docker/dev.sh` (use that script as the authoritative reference), but drop `-it`, then execute `python scripts/labs/ppo_from_scratch.py --demo --record` inside the container.
 
 **Trained policy balancing the pole:**
 
@@ -590,6 +633,15 @@ bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
 ```
 
 This runs training, evaluation, and generates a report. Takes ~6-10 minutes on a GPU.
+
+Artifacts (for `--seed 0`):
+
+| Artifact | Path |
+|----------|------|
+| Checkpoint | `checkpoints/ppo_FetchReachDense-v4_seed0.zip` |
+| Metadata | `checkpoints/ppo_FetchReachDense-v4_seed0.meta.json` |
+| Eval JSON | `results/ch02_ppo_fetchreachdense-v4_seed0_eval.json` |
+| TensorBoard logs | `runs/ppo/FetchReachDense-v4/seed0/` |
 
 For a quick sanity check (~1 minute):
 
@@ -630,7 +682,7 @@ bash docker/dev.sh tensorboard --logdir runs --bind_all
 | `train/value_loss` | High initially, decreases, stabilizes |
 | `train/approx_kl` | Small (< 0.03), occasional spikes OK |
 | `train/clip_fraction` | 0.1-0.3 (some updates clipped, not all) |
-| `train/entropy_loss` | Slowly decreasing (policy becoming more deterministic) |
+| `train/entropy_loss` | Slowly moves toward 0 (SB3 logs -entropy; entropy magnitude decreases) |
 
 **Warning signs:**
 
@@ -674,13 +726,12 @@ Key fields:
 
 The trained policy maps observations to actions:
 
-**Input** (25 dimensions total):
-- End-effector position (3)
-- End-effector velocity (3)
-- Gripper state (4)
-- Desired goal (3)
-- Achieved goal (3)
-- Various other features (9)
+**Input** (goal-conditioned dict observation):
+- `observation`: shape (10,)
+- `achieved_goal`: shape (3,)
+- `desired_goal`: shape (3,)
+
+Stable Baselines 3 uses `MultiInputPolicy` to flatten/concatenate these inputs and feed them to an MLP.
 
 **Output** (4 dimensions):
 - dx, dy, dz: Cartesian velocity commands
@@ -736,7 +787,7 @@ A robust result should have std < 5%.
 Answer these questions in your own words:
 
 1. What problem does vanilla policy gradient have that PPO fixes?
-2. Why does PPO clip in probability ratio space rather than parameter space?
+2. Why does PPO clip in likelihood ratio space rather than parameter space?
 3. If $\epsilon = 0$ (no change allowed), what would happen?
 4. If $\epsilon = 1$ (large changes allowed), what would happen?
 
@@ -790,6 +841,8 @@ Check that you're running in Docker with `--gpus all`:
 bash docker/dev.sh nvidia-smi
 ```
 
+**Note:** Even with a GPU, Fetch training is often CPU-bound on MuJoCo simulation. Low GPU utilization is normal; use steps/sec and learning curves as your primary signals.
+
 ---
 
 ## Conclusion
@@ -800,7 +853,7 @@ The "truth serum" principle says: before tackling hard problems, verify that eas
 
 **Key takeaways:**
 
-1. **PPO prevents catastrophic updates** through clipped probability ratios
+1. **PPO prevents catastrophic updates** through clipped likelihood ratios
 2. **Dense rewards provide continuous signal**, decoupling exploration from learning
 3. **Diagnostics reveal problems early**--watch TensorBoard, not just final metrics
 4. **Infrastructure bugs are silent killers**--validate before adding complexity

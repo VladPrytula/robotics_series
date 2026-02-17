@@ -284,7 +284,25 @@ Verifying HER processing...
 
 This lab is **not** how we train policies -- SB3's HER wrapper handles that. The lab shows *what* relabeling does to your data, with every operation visible.
 
-### 4.5.7 Exercises: Modify and Observe
+### 4.5.7 Verify vs SB3 (Optional)
+
+SB3 implements HER via `HerReplayBuffer`, which relabels goals and recomputes rewards during replay sampling. This optional check validates the key invariant: sampled rewards must equal `compute_reward(achieved_goal, desired_goal, info)` after relabeling.
+
+```bash
+bash docker/dev.sh python scripts/labs/her_relabeler.py --compare-sb3
+```
+
+Expected output:
+
+```
+============================================================
+HER Relabeler -- SB3 Comparison
+============================================================
+Max abs reward diff: 0.000e+00
+[PASS] SB3 HER relabeling is reward-consistent (compute_reward invariant)
+```
+
+### 4.5.8 Exercises: Modify and Observe
 
 **Exercise: Goal Sampling Strategy Comparison**
 

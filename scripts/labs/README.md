@@ -17,6 +17,7 @@ These modules show **how equations map to code**. They are:
 | `ppo_from_scratch.py` | PPO | GAE, clipped ratio, value loss |
 | `sac_from_scratch.py` | SAC | Twin critics, entropy bonus, temperature tuning |
 | `her_relabeler.py` | HER | Goal relabeling, reward recomputation |
+| `curriculum_wrapper.py` | Curriculum | Goal difficulty scheduling, air/table control |
 
 ## Region Markers
 
@@ -51,12 +52,15 @@ bash docker/dev.sh python scripts/labs/sac_from_scratch.py --verify
 
 # HER lab: verify relabeling increases non-negative reward fraction
 bash docker/dev.sh python scripts/labs/her_relabeler.py --verify
+
+# Curriculum lab: verify goal distributions at easy/hard difficulty
+bash docker/dev.sh python scripts/labs/curriculum_wrapper.py --verify
 ```
 
 ## Conventions
 
 1. **Explicit over implicit:** Name intermediate tensors (`advantages`, `ratio`, `clipped_ratio`)
 2. **Comments map to math:** Reference equation numbers from tutorials
-3. **No external dependencies beyond PyTorch/NumPy:** No SB3 imports
+3. **Core code stays minimal:** Algorithm implementations use only PyTorch/NumPy. Optional `--compare-sb3` modes may import SB3 for cross-checks.
 4. **Type hints:** Help readers understand shapes and types
 5. **~200-400 lines per file:** Long enough to be complete, short enough to read in one sitting

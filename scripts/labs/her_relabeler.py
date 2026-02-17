@@ -13,6 +13,9 @@ Usage:
     # Run verification (sanity checks, ~1 minute)
     python scripts/labs/her_relabeler.py --verify
 
+    # Compare core invariants against SB3 (requires stable-baselines3)
+    python scripts/labs/her_relabeler.py --compare-sb3
+
     # Demonstrate relabeling on synthetic data
     python scripts/labs/her_relabeler.py --demo
 
@@ -28,6 +31,34 @@ from enum import Enum
 from typing import NamedTuple
 
 import numpy as np
+
+
+# =============================================================================
+# Optional: Compare Against SB3
+# =============================================================================
+
+def run_sb3_comparison(seed: int = 0) -> None:
+    """Compare HER reward recomputation invariants against SB3 HerReplayBuffer."""
+    from scripts.labs.sb3_compare import compare_her_relabeling_to_sb3
+
+    print("=" * 60)
+    print("HER Relabeler -- SB3 Comparison")
+    print("=" * 60)
+
+    result = compare_her_relabeling_to_sb3(seed=seed)
+
+    print(f"Max abs reward diff: {result.metrics['max_abs_reward_diff']:.3e}")
+    print(f"Success fraction:    {result.metrics['success_fraction']:.3f}")
+    print(f"n_sampled_goal:      {int(result.metrics['n_sampled_goal'])}")
+
+    print()
+    if result.passed:
+        print("[PASS] SB3 HER relabeling is reward-consistent (compute_reward invariant)")
+    else:
+        print("[FAIL] SB3 HER relabeling comparison failed")
+        if result.notes:
+            print(f"Notes: {result.notes}")
+        raise SystemExit(1)
 
 
 # =============================================================================
@@ -432,10 +463,14 @@ def run_demo():
 def main():
     parser = argparse.ArgumentParser(description="HER Relabeler")
     parser.add_argument("--verify", action="store_true", help="Run verification checks")
+    parser.add_argument("--compare-sb3", action="store_true", help="Compare core invariants against SB3")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for --compare-sb3 (default: 0)")
     parser.add_argument("--demo", action="store_true", help="Run demonstration")
     args = parser.parse_args()
 
-    if args.verify:
+    if args.compare_sb3:
+        run_sb3_comparison(seed=args.seed)
+    elif args.verify:
         run_verification()
     elif args.demo:
         run_demo()

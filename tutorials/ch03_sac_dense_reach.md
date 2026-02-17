@@ -457,7 +457,25 @@ Verifying SAC update...
 
 This lab is **not** how we train policies -- that's what SB3 is for. The lab shows *what* SB3 is doing internally, with every tensor operation visible.
 
-### 2.5.9 Exercises: Modify and Observe
+### 2.5.9 Verify vs SB3 (Optional)
+
+SB3 is the scaling engine we use in the Run It track. This optional check confirms that our squashed Gaussian log-probability matches SB3's distribution implementation:
+
+```bash
+bash docker/dev.sh python scripts/labs/sac_from_scratch.py --compare-sb3
+```
+
+Expected output:
+
+```
+============================================================
+SAC From Scratch -- SB3 Comparison
+============================================================
+Max abs log_prob diff: ~0
+[PASS] Our squashed Gaussian log_prob matches SB3
+```
+
+### 2.5.10 Exercises: Modify and Observe
 
 **Exercise 2.5.1: Twin Q-Network Ablation**
 

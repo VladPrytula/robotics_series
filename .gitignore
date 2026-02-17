@@ -1,0 +1,37 @@
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Generated artifacts (large, reproducible)
+results/
+checkpoints/
+checkpoints_sanity/
+results_sanity/
+videos/*
+!videos/*_demo*.gif
+!videos/*_demo*.mp4
+!videos/*_exploration*.gif
+!videos/ch04_push_*_grid.gif
+runs/
+
+# Keep demo videos in docs
+!docs/videos/
+
+# MkDocs build output
+site/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

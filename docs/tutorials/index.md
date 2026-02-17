@@ -11,6 +11,7 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 | [Chapter 2](ch02_ppo_dense_reach.md) | PPO Baseline | >90% success on dense Reach, pipeline validated | `ch02_ppo_dense_reach.py` | `labs/ppo_from_scratch.py` |
 | [Chapter 3](ch03_sac_dense_reach.md) | SAC + Replay Diagnostics | SAC matches PPO, Q-values stable | `ch03_sac_dense_reach.py` | `labs/sac_from_scratch.py` |
 | [Chapter 4](ch04_her_sparse_reach_push.md) | HER for Sparse | HER vs no-HER separation on Reach/Push | `ch04_her_sparse_reach_push.py` | `labs/her_relabeler.py` |
+| [Chapter 5](ch05_pick_and_place.md) | PickAndPlace | Stratified eval, stress testing, curriculum | `ch05_pick_and_place.py` | `labs/curriculum_wrapper.py` |
 
 **Legend:**
 
@@ -30,7 +31,9 @@ Chapter 3: Can I train off-policy? (SAC, replay buffer)
     |
 Chapter 4: Can I handle sparse rewards? (HER)
     |
-Chapters 5-10: Advanced topics
+Chapter 5: Can I grasp and place? (PickAndPlace)
+    |
+Chapters 6-10: Advanced topics
 ```
 
 ## Running Commands
@@ -52,6 +55,7 @@ bash docker/dev.sh python scripts/ch00_proof_of_life.py all
 bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all --seed 0
 bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py reach-all --seeds 0,1,2
+bash docker/dev.sh python scripts/ch05_pick_and_place.py all --seeds 0,1,2
 
 # Partial execution
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py train --total-steps 100000
@@ -174,6 +178,26 @@ tmux attach -t rl                 # Reattach later
 - Why does relabeling turn failures into successes?
 - Why can only off-policy algorithms use HER?
 - Why does Reach show weak separation but Push shows strong separation?
+
+---
+
+### [Chapter 5: PickAndPlace](ch05_pick_and_place.md)
+
+**Goal:** Transfer SAC+HER from Push to the harder PickAndPlace task.
+
+**You will:**
+
+- Validate the pipeline with dense-first debugging (~5 min)
+- Train SAC+HER on sparse PickAndPlace (5M steps)
+- Evaluate with goal stratification (air vs table goals separately)
+- Stress test with noise injection (observation + action noise)
+- Build a curriculum learning wrapper (Build It lab)
+
+**Done when:** Stratified evaluation completes and you can answer:
+
+- Why is PickAndPlace harder than Push? *(multi-phase control: grasp, lift, place)*
+- What does the air gap tell you? *(table goals may be solvable by pushing; air goals require grasping)*
+- Why test with dense rewards first? *(catches pipeline bugs in 5 min instead of 5 hours)*
 
 ---
 

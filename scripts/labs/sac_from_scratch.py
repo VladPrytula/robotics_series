@@ -9,6 +9,9 @@ Usage:
     # Run verification (sanity checks, ~2 minutes)
     python scripts/labs/sac_from_scratch.py --verify
 
+    # Compare core invariants against SB3 (requires stable-baselines3)
+    python scripts/labs/sac_from_scratch.py --compare-sb3
+
     # Train on a simple environment (demonstration)
     python scripts/labs/sac_from_scratch.py --demo
 
@@ -28,6 +31,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
+
+
+# =============================================================================
+# Optional: Compare Against SB3
+# =============================================================================
+
+def run_sb3_comparison(seed: int = 0) -> None:
+    """Compare our squashed Gaussian log-prob against SB3 distribution."""
+    from scripts.labs.sb3_compare import compare_sac_squashed_gaussian_log_prob_to_sb3
+
+    print("=" * 60)
+    print("SAC From Scratch -- SB3 Comparison")
+    print("=" * 60)
+
+    result = compare_sac_squashed_gaussian_log_prob_to_sb3(seed=seed)
+
+    print(f"Max abs log_prob diff: {result.metrics['max_abs_log_prob_diff']:.3e}")
+    print(f"Tolerance (atol):      {result.metrics['atol']:.1e}")
+
+    print()
+    if result.passed:
+        print("[PASS] Our squashed Gaussian log_prob matches SB3")
+    else:
+        print("[FAIL] Our squashed Gaussian log_prob does not match SB3")
+        if result.notes:
+            print(f"Notes: {result.notes}")
+        raise SystemExit(1)
 
 
 # =============================================================================
@@ -714,19 +744,24 @@ def main():
         epilog="""
 Examples:
   --verify              Run sanity checks (~10 seconds)
+  --compare-sb3         Compare squashed Gaussian log_prob against SB3
   --demo                Quick demo, shows learning (~30 seconds, 5k steps)
   --demo --steps 50000  Full demo, actually solves Pendulum (~5 minutes)
   --demo --steps 50000 --record   Solve and save a GIF
         """
     )
     parser.add_argument("--verify", action="store_true", help="Run verification checks")
+    parser.add_argument("--compare-sb3", action="store_true", help="Compare core invariants against SB3")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for --compare-sb3 (default: 0)")
     parser.add_argument("--demo", action="store_true", help="Run demo training on Pendulum")
     parser.add_argument("--steps", type=int, default=5000,
                         help="Training steps for demo (default: 5000, use 50000+ to solve)")
     parser.add_argument("--record", action="store_true", help="Record a GIF after training")
     args = parser.parse_args()
 
-    if args.verify:
+    if args.compare_sb3:
+        run_sb3_comparison(seed=args.seed)
+    elif args.verify:
         run_verification()
     elif args.demo:
         policy = run_demo(total_steps=args.steps)

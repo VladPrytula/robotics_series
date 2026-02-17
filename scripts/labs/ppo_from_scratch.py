@@ -9,6 +9,9 @@ Usage:
     # Run verification (sanity checks, ~2 minutes)
     python scripts/labs/ppo_from_scratch.py --verify
 
+    # Compare core invariants against SB3 (requires stable-baselines3)
+    python scripts/labs/ppo_from_scratch.py --compare-sb3
+
     # Train on a simple environment (demonstration)
     python scripts/labs/ppo_from_scratch.py --demo
 
@@ -27,6 +30,34 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
+
+
+# =============================================================================
+# Optional: Compare Against SB3
+# =============================================================================
+
+def run_sb3_comparison(seed: int = 0) -> None:
+    """Compare our GAE against SB3 RolloutBuffer (quick invariant check)."""
+    from scripts.labs.sb3_compare import compare_ppo_gae_to_sb3
+
+    print("=" * 60)
+    print("PPO From Scratch -- SB3 Comparison")
+    print("=" * 60)
+
+    result = compare_ppo_gae_to_sb3(seed=seed)
+
+    print(f"Max abs advantage diff: {result.metrics['max_abs_adv_diff']:.3e}")
+    print(f"Max abs returns diff:   {result.metrics['max_abs_returns_diff']:.3e}")
+    print(f"Tolerance (atol):       {result.metrics['atol']:.1e}")
+
+    print()
+    if result.passed:
+        print("[PASS] Our GAE matches SB3 RolloutBuffer")
+    else:
+        print("[FAIL] Our GAE does not match SB3 RolloutBuffer")
+        if result.notes:
+            print(f"Notes: {result.notes}")
+        raise SystemExit(1)
 
 
 # =============================================================================
@@ -772,16 +803,21 @@ def main():
         epilog="""
 Examples:
   --verify           Run sanity checks
+  --compare-sb3      Compare GAE against SB3 RolloutBuffer
   --demo             Train on CartPole and solve it
   --demo --record    Train and save a GIF of the solved policy
         """
     )
     parser.add_argument("--verify", action="store_true", help="Run verification checks")
+    parser.add_argument("--compare-sb3", action="store_true", help="Compare core invariants against SB3")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for --compare-sb3 (default: 0)")
     parser.add_argument("--demo", action="store_true", help="Run demo training on CartPole")
     parser.add_argument("--record", action="store_true", help="Record a GIF after training")
     args = parser.parse_args()
 
-    if args.verify:
+    if args.compare_sb3:
+        run_sb3_comparison(seed=args.seed)
+    elif args.verify:
         run_verification()
     elif args.demo:
         model = run_demo()
