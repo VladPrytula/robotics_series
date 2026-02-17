@@ -561,19 +561,19 @@ The difference between good and bad hyperparameters is visible in the policies' 
 
 **Best config** (ent=0.05, gamma=0.95, nsg=4, ls=1000 -- 99.4% SR):
 
-![Best config: smooth, purposeful pushing](videos/ch04_push_best_config_grid.gif)
+![Best config: smooth, purposeful pushing](../videos/ch04_push_best_config_grid.gif)
 
 The agent approaches the object, makes contact, and pushes it directly toward the goal. Movement is smooth and purposeful with minimal wasted motion.
 
 **Worst config** (ent=0.2, gamma=0.98, nsg=4, ls=1000 -- 64.0% SR):
 
-![Worst config: erratic, inconsistent](videos/ch04_push_worst_config_grid.gif)
+![Worst config: erratic, inconsistent](../videos/ch04_push_worst_config_grid.gif)
 
 The agent's behavior is erratic -- sometimes it succeeds, sometimes it overshoots, sometimes it misses the object entirely. High entropy and long effective horizon create indecisive behavior.
 
 **No-HER baseline** (SAC without HER -- ~5% SR):
 
-![No-HER: random flailing](videos/ch04_push_no_her_grid.gif)
+![No-HER: random flailing](../videos/ch04_push_no_her_grid.gif)
 
 Without HER, the agent never learns meaningful push behavior. The gripper moves aimlessly, occasionally bumping the object by chance.
 
