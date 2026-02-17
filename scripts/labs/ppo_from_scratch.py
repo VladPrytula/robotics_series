@@ -33,6 +33,7 @@ from torch.distributions import Normal
 # Network Architecture
 # =============================================================================
 
+# --8<-- [start:actor_critic_network]
 class ActorCritic(nn.Module):
     """Simple actor-critic network with separate heads.
 
@@ -73,6 +74,7 @@ class ActorCritic(nn.Module):
         value = self.critic(features).squeeze(-1)
 
         return dist, value
+# --8<-- [end:actor_critic_network]
 
 
 # =============================================================================

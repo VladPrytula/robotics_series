@@ -252,11 +252,74 @@ L(\theta) = \mathbb{E}_{s \sim \mathcal{B}, a \sim \pi_\theta}\left[ \alpha \log
 
 ## Part 2.5: BUILD IT -- From Equations to Code
 
-This section shows how SAC's math maps to code. We use pedagogical implementations from `scripts/labs/sac_from_scratch.py`—these are for understanding, not production.
+This section builds SAC piece by piece, verifying each component before moving to the next. We use pedagogical implementations from `scripts/labs/sac_from_scratch.py` -- these are for understanding, not production.
 
-### 2.5.1 Twin Q-Network Loss
+### 2.5.1 The Replay Buffer
 
-The critic update from Section 2.2:
+Off-policy learning (Section 2.2) requires storing transitions for reuse. Unlike PPO, which discards data after each update, SAC stores every transition in a circular buffer and samples from it repeatedly:
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:replay_buffer"
+```
+
+!!! lab "Checkpoint"
+    Add transitions and verify sampling works:
+
+    ```python
+    buf = ReplayBuffer(obs_dim=10, act_dim=4, capacity=1000)
+    for i in range(100):
+        buf.add(np.random.randn(10), np.random.randn(4), -0.5, np.random.randn(10), False)
+
+    batch = buf.sample(32, torch.device("cpu"))
+    print(f"obs shape:     {batch['obs'].shape}")      # (32, 10)
+    print(f"actions shape: {batch['actions'].shape}")   # (32, 4)
+    print(f"rewards shape: {batch['rewards'].shape}")   # (32,)
+    print(f"buffer size:   {buf.size}")                 # 100
+    ```
+
+### 2.5.2 The Twin Q-Network
+
+SAC uses two Q-networks to reduce overestimation bias (Section 2.1). Each takes a state-action pair and outputs a scalar Q-value:
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:twin_q_network"
+```
+
+!!! lab "Checkpoint"
+    Verify forward pass shapes and that initial Q-values are near zero (random initialization):
+
+    ```python
+    q_net = TwinQNetwork(obs_dim=10, act_dim=4)
+    obs = torch.randn(32, 10); actions = torch.randn(32, 4)
+    q1, q2 = q_net(obs, actions)
+    print(f"Q1 shape: {q1.shape}")       # (32,)
+    print(f"Q1 mean:  {q1.mean():.4f}")  # near 0 at init
+    print(f"Q2 mean:  {q2.mean():.4f}")  # near 0 at init
+    ```
+
+### 2.5.3 The Squashed Gaussian Policy
+
+SAC's policy outputs a squashed Gaussian -- a normal distribution passed through tanh to bound actions to $[-1, 1]$. The log probability includes a Jacobian correction for the tanh transformation:
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:gaussian_policy"
+```
+
+!!! lab "Checkpoint"
+    Verify actions are bounded and log probabilities are finite:
+
+    ```python
+    policy = GaussianPolicy(obs_dim=10, act_dim=4)
+    obs = torch.randn(32, 10)
+    actions, log_probs = policy(obs)
+    print(f"Actions in [{actions.min():.2f}, {actions.max():.2f}]")  # within [-1, 1]
+    print(f"Log probs finite: {torch.isfinite(log_probs).all()}")    # True
+    print(f"Log probs mean:   {log_probs.mean():.2f}")               # negative (probabilities < 1)
+    ```
+
+### 2.5.4 Twin Q-Network Loss (Critic Update)
+
+The critic update from Section 2.2 minimizes the Bellman error:
 
 $$L(\phi_i) = \mathbb{E}\left[ \left( Q_{\phi_i}(s, a) - y \right)^2 \right] \quad \text{where} \quad y = r + \gamma \left[ \min_j Q_{\bar{\phi}_j}(s', a') - \alpha \log \pi(a' | s') \right]$$
 
@@ -274,9 +337,20 @@ In code:
 | $\min_j Q_{\bar{\phi}_j}$ | `torch.min(target_q1, target_q2)` | Pessimistic target (reduces overestimation) |
 | $\alpha \log \pi$ | `alpha * next_log_probs` | Entropy bonus in target |
 
-### 2.5.2 Actor Loss with Entropy
+!!! lab "Checkpoint"
+    The initial Q-loss magnitude tells you the critic is learning. With random networks, Q-values and targets are both near zero, so the loss should be small initially:
 
-The policy update from Section 2.2:
+    ```python
+    # After creating q_network, target_q_network, policy, and a random batch:
+    q_loss, info = compute_q_loss(q_network, target_q_network, policy, batch)
+    print(f"Q1 loss:      {info['q1_loss']:.4f}")        # typically < 1.0 at init
+    print(f"Q1 mean:      {info['q1_mean']:.4f}")        # near 0 at init
+    print(f"Target Q mean: {info['target_q_mean']:.4f}") # near 0 at init
+    ```
+
+### 2.5.5 Actor Loss with Entropy
+
+The policy update from Section 2.2 maximizes Q-values while maintaining entropy:
 
 $$L(\theta) = \mathbb{E}\left[ \alpha \log \pi_\theta(a | s) - \min_i Q_{\phi_i}(s, a) \right]$$
 
@@ -288,32 +362,102 @@ In code:
 
 **Key insight:** The actor wants high Q-values (good actions) *and* high entropy (exploration). The $\alpha$ parameter balances these goals.
 
-### 2.5.3 Automatic Temperature Tuning
+!!! lab "Checkpoint"
+    The actor loss should be positive at initialization (minimizing negative Q + alpha * log_pi):
 
-SAC can auto-tune $\alpha$ to maintain a target entropy level:
+    ```python
+    actor_loss, info = compute_actor_loss(policy, q_network, obs, alpha=0.2)
+    print(f"Actor loss: {info['actor_loss']:.4f}")  # positive (minimizing)
+    print(f"Entropy:    {info['entropy']:.4f}")      # positive (H = -E[log pi])
+    ```
+
+### 2.5.6 Automatic Temperature Tuning
+
+Instead of manually choosing the entropy coefficient $\alpha$, SAC can learn it by targeting a desired entropy level:
+
+$$L(\alpha) = \mathbb{E}\left[ -\alpha \left( \log \pi(a|s) + \bar{\mathcal{H}} \right) \right]$$
+
+where $\bar{\mathcal{H}} = -\dim(\mathcal{A})$ is the target entropy (Section 1.4).
 
 ```python
 --8<-- "scripts/labs/sac_from_scratch.py:temperature_loss"
 ```
 
-**Why this matters:** Manual $\alpha$ tuning is finicky. Auto-tuning adjusts exploration pressure throughout training—high early (more exploration), low late (more exploitation).
+!!! lab "Checkpoint"
+    Alpha starts at 1.0 (since `log_alpha` is initialized to 0) and adjusts based on the gap between current entropy and target:
 
-### 2.5.4 Verify the Lab
+    ```python
+    log_alpha = torch.tensor(0.0, requires_grad=True)
+    print(f"Initial alpha: {log_alpha.exp().item():.3f}")  # 1.000
 
-Run the from-scratch implementation's sanity checks:
+    # After a few updates, alpha adjusts toward the target entropy
+    ```
+
+### 2.5.7 Wiring It Together: The SAC Update
+
+The individual components above are combined into a single update step. SAC updates three components in sequence, then soft-updates the target networks:
+
+1. Q-networks: minimize Bellman error
+2. Policy: maximize Q-value + entropy
+3. Temperature: maintain target entropy
+4. Target networks: Polyak averaging $\bar{\phi} \leftarrow \tau \phi + (1 - \tau) \bar{\phi}$
+
+```python
+--8<-- "scripts/labs/sac_from_scratch.py:sac_update"
+```
+
+!!! lab "Checkpoint"
+    After 20 updates on random data, alpha should have changed and Q-values should have shifted:
+
+    ```python
+    initial_alpha = log_alpha.exp().item()
+    for _ in range(20):
+        info = sac_update(policy, q_network, target_q_network, log_alpha,
+                          policy_optimizer, q_optimizer, alpha_optimizer,
+                          batch, target_entropy)
+    print(f"Alpha: {initial_alpha:.4f} -> {info['alpha']:.4f}")  # has changed
+    print(f"Q1 loss: {info['q1_loss']:.4f}")                     # finite
+    print(f"Actor loss: {info['actor_loss']:.4f}")                # finite
+    ```
+
+### 2.5.8 Verify the Full Lab
+
+Run the from-scratch implementation's sanity checks -- this exercises all the components above end-to-end:
 
 ```bash
 bash docker/dev.sh python scripts/labs/sac_from_scratch.py --verify
 ```
 
 Expected output:
-- Q-networks produce finite values
-- Policy outputs bounded actions in [-1, 1]
-- Alpha auto-tunes (trends downward)
 
-This lab is **not** how we train policies—that's what SB3 is for. The lab shows *what* SB3 is doing internally.
+```
+============================================================
+SAC From Scratch -- Verification
+============================================================
+Verifying Q-network...
+  Q1 mean: X.XXXX                     # near 0 at init
+  Q2 mean: X.XXXX                     # near 0 at init
+  [PASS] Q-network OK
 
-### 2.5.5 Exercises: Modify and Observe
+Verifying policy...
+  Actions in [-X.XX, X.XX]            # within [-1, 1]
+  Log prob mean: -X.XXXX              # negative (probabilities < 1)
+  [PASS] Policy OK
+
+Verifying SAC update...
+  Q1 loss: X.XXXX                     # finite
+  Actor loss: X.XXXX                  # finite
+  Alpha: 1.0000 -> X.XXXX            # has changed
+  [PASS] SAC update OK
+
+============================================================
+[ALL PASS] SAC implementation verified
+============================================================
+```
+
+This lab is **not** how we train policies -- that's what SB3 is for. The lab shows *what* SB3 is doing internally, with every tensor operation visible.
+
+### 2.5.9 Exercises: Modify and Observe
 
 **Exercise 2.5.1: Twin Q-Network Ablation**
 
@@ -357,7 +501,7 @@ The `tau` parameter controls how quickly target networks track the main networks
 
 *Question:* What happens with `tau=1.0` (hard update every step)? Why does slow tracking help stability?
 
-### 2.5.6 Demo: SAC Solves Pendulum
+### 2.5.10 Demo: SAC Solves Pendulum
 
 The from-scratch implementation can actually solve a continuous control task. Run:
 

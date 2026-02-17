@@ -52,6 +52,7 @@ class MLP(nn.Module):
         return self.net(x)
 
 
+# --8<-- [start:gaussian_policy]
 class GaussianPolicy(nn.Module):
     """
     Gaussian policy with state-dependent mean and log_std.
@@ -89,8 +90,10 @@ class GaussianPolicy(nn.Module):
         log_prob -= (2 * (np.log(2) - x_t - F.softplus(-2 * x_t))).sum(dim=-1)
 
         return action, log_prob
+# --8<-- [end:gaussian_policy]
 
 
+# --8<-- [start:twin_q_network]
 class TwinQNetwork(nn.Module):
     """Twin Q-networks for reducing overestimation bias."""
 
@@ -102,12 +105,14 @@ class TwinQNetwork(nn.Module):
     def forward(self, obs: torch.Tensor, action: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = torch.cat([obs, action], dim=-1)
         return self.q1(x).squeeze(-1), self.q2(x).squeeze(-1)
+# --8<-- [end:twin_q_network]
 
 
 # =============================================================================
 # Replay Buffer (Minimal)
 # =============================================================================
 
+# --8<-- [start:replay_buffer]
 class ReplayBuffer:
     """Simple replay buffer for off-policy learning."""
 
@@ -141,6 +146,7 @@ class ReplayBuffer:
             "next_obs": torch.from_numpy(self.next_obs[idx]).to(device),
             "dones": torch.from_numpy(self.dones[idx]).to(device),
         }
+# --8<-- [end:replay_buffer]
 
 
 # =============================================================================

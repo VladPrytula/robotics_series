@@ -34,6 +34,7 @@ import numpy as np
 # Data Structures
 # =============================================================================
 
+# --8<-- [start:data_structures]
 class Transition(NamedTuple):
     """A single environment transition in a goal-conditioned setting."""
     obs: np.ndarray           # observation (e.g., robot state)
@@ -63,6 +64,7 @@ class GoalStrategy(Enum):
     FUTURE = "future"    # Sample from future timesteps
     EPISODE = "episode"  # Sample from anywhere in episode
     RANDOM = "random"    # Sample from replay buffer (requires buffer access)
+# --8<-- [end:data_structures]
 
 
 # --8<-- [start:goal_sampling]

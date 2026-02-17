@@ -90,21 +90,70 @@ This is why the syllabus builds SAC mastery (Weeks 2-3) before introducing HER (
 
 ## BUILD IT: HER Relabeling in Code
 
-This section shows how HER's goal relabeling maps to code. We use pedagogical implementations from `scripts/labs/her_relabeler.py`—these are for understanding, not production.
+This section builds HER's goal relabeling piece by piece, verifying each component before moving to the next. We use pedagogical implementations from `scripts/labs/her_relabeler.py` -- these are for understanding, not production.
 
-### Goal Sampling Strategies
+### 4.5.1 Data Structures: Transitions and Episodes
 
-The "future" strategy samples achieved goals from timesteps after the current transition:
+Before relabeling, we need to define what a goal-conditioned transition looks like. Each transition carries both the `achieved_goal` (where the agent ended up) and the `desired_goal` (where it was trying to go):
+
+```python
+--8<-- "scripts/labs/her_relabeler.py:data_structures"
+```
+
+!!! lab "Checkpoint"
+    Create a transition manually and verify field access:
+
+    ```python
+    import numpy as np
+    t = Transition(
+        obs=np.zeros(10), action=np.zeros(4), reward=-1.0,
+        next_obs=np.zeros(10), done=False,
+        achieved_goal=np.array([0.5, 0.4, 0.15]),
+        desired_goal=np.array([0.3, 0.2, 0.10]),
+    )
+    print(f"Reward:        {t.reward}")            # -1.0 (failure)
+    print(f"Achieved goal: {t.achieved_goal}")     # [0.5, 0.4, 0.15]
+    print(f"Desired goal:  {t.desired_goal}")      # [0.3, 0.2, 0.10]
+    print(f"Goal distance: {np.linalg.norm(t.achieved_goal - t.desired_goal):.3f}")  # ~0.283m
+    ```
+
+    The `GoalStrategy` enum defines the three sampling strategies from Andrychowicz et al. (2017): `FUTURE`, `FINAL`, and `EPISODE`.
+
+### 4.5.2 Goal Sampling Strategies
+
+HER needs to sample alternative goals for relabeling. The three strategies from the HOW section above are formalized as:
+
+- **FUTURE:** Sample $g'$ from $\{g_{\text{achieved}}(s_{t'}) : t' > t\}$ -- goals from future timesteps in the same episode
+- **FINAL:** Always use $g' = g_{\text{achieved}}(s_T)$ -- the final achieved goal
+- **EPISODE:** Sample $g'$ from $\{g_{\text{achieved}}(s_{t'}) : t' \in [0, T]\}$ -- any achieved goal in the episode
 
 ```python
 --8<-- "scripts/labs/her_relabeler.py:goal_sampling"
 ```
 
-**Key insight:** The `future` strategy ensures temporal consistency—we only relabel with goals the agent *actually reached* from states similar to the current one.
+!!! lab "Checkpoint"
+    Verify the strategies produce the expected behavior:
 
-### Relabeling a Transition
+    ```python
+    episode = create_synthetic_episode(n_steps=20)
 
-The core HER operation: substitute a new goal and recompute the reward:
+    # FUTURE at idx=5 of 20-step episode -> goals from indices [6, 19]
+    goals = sample_her_goals(episode, transition_idx=5, strategy=GoalStrategy.FUTURE, k=4)
+    print(f"FUTURE: {len(goals)} goals sampled")  # 4
+
+    # FINAL -> all goals identical (last achieved_goal)
+    goals = sample_her_goals(episode, transition_idx=5, strategy=GoalStrategy.FINAL, k=4)
+    all_same = all(np.array_equal(g, goals[0]) for g in goals)
+    print(f"FINAL: all identical? {all_same}")     # True
+    ```
+
+### 4.5.3 Relabeling a Transition
+
+The core HER operation substitutes a new goal and recomputes the reward. Formally, given a transition $(s_t, a_t, r_t, s_{t+1}, g)$ and a new goal $g'$:
+
+$$r'_t = R(g_{\text{achieved}}, g') = \begin{cases} 0 & \text{if } \|g_{\text{achieved}} - g'\| < \epsilon \\ -1 & \text{otherwise} \end{cases}$$
+
+The relabeled transition is $(s_t, a_t, r'_t, s_{t+1}, g')$ -- same observation and action, new goal and recomputed reward.
 
 ```python
 --8<-- "scripts/labs/her_relabeler.py:relabel_transition"
@@ -119,35 +168,123 @@ The core HER operation: substitute a new goal and recompute the reward:
 | Relabeled goal | `new_goal` | Substitute this as the "desired" goal |
 | New reward | `compute_reward_fn(achieved, new_goal)` | Did achieved match the new goal? |
 
-**Crucial:** The `achieved_goal` stays the same—only `desired_goal` changes. If achieved == new desired, the transition becomes a "success."
+**Crucial:** The `achieved_goal` stays the same -- only `desired_goal` changes. If achieved == new desired, the transition becomes a "success."
 
-### The Data Amplification Effect
+!!! lab "Checkpoint"
+    Relabeling with the transition's own achieved goal should always produce a success (reward = 0), because the distance is zero:
 
-Processing an episode with HER dramatically increases the success rate in the replay buffer:
+    ```python
+    episode = create_synthetic_episode(n_steps=10)
+    transition = episode.transitions[5]
+
+    # Relabel with own achieved goal -> guaranteed success
+    relabeled = relabel_transition(transition, transition.achieved_goal, sparse_reward)
+    print(f"Original reward:  {transition.reward}")    # -1.0 (failure)
+    print(f"Relabeled reward: {relabeled.reward}")     # 0.0 (success!)
+    print(f"Achieved unchanged: {np.array_equal(relabeled.achieved_goal, transition.achieved_goal)}")  # True
+
+    # Relabel with a distant goal -> still failure
+    far_goal = transition.achieved_goal + np.array([1.0, 1.0, 1.0])
+    relabeled_far = relabel_transition(transition, far_goal, sparse_reward)
+    print(f"Distant goal reward: {relabeled_far.reward}")  # -1.0 (still failure)
+    ```
+
+    **Before/after with concrete numbers:** If `achieved_goal = [0.50, 0.40, 0.15]` and we relabel with `new_goal = [0.50, 0.40, 0.15]`, then distance = 0.000m < 0.05m, so reward = 0 (success). If we relabel with `new_goal = [0.30, 0.20, 0.10]`, then distance = 0.283m > 0.05m, so reward = -1 (failure).
+
+### 4.5.4 The Data Amplification Effect
+
+Processing an episode with HER dramatically increases the success rate in the replay buffer. The arithmetic: a 50-step episode with `k=4` and `her_ratio=0.8` generates:
+
+- 50 original transitions (all with reward $-1$, assuming the episode failed)
+- $\sim 50 \times 0.8 \times 4 = 160$ relabeled transitions (many with reward $0$)
+- Total: $\sim 210$ transitions, with a significant fraction being "successes"
+
+The **HER ratio** is the fraction of relabeled transitions: $160 / 210 \approx 0.76$.
 
 ```python
 --8<-- "scripts/labs/her_relabeler.py:her_buffer_insert"
 ```
 
-**Without HER:** Nearly 0% of transitions have positive reward (sparse signal).
-**With HER:** Many relabeled transitions are "successes" because achieved == relabeled goal.
+!!! lab "Checkpoint"
+    Verify the arithmetic on synthetic data:
 
-### Verify the Lab
+    ```python
+    episode = create_synthetic_episode(n_steps=50)
 
-Run the from-scratch implementation's sanity checks:
+    # Original: ~0% success (random trajectory, sparse rewards)
+    original_success = compute_success_fraction(episode.transitions)
+    print(f"Original: {len(episode)} transitions, {original_success:.0%} success")
+
+    # With HER: ~210 transitions, ~16% success
+    her_transitions = process_episode_with_her(
+        episode, sparse_reward, strategy=GoalStrategy.FUTURE, k=4, her_ratio=0.8
+    )
+    her_success = compute_success_fraction(her_transitions)
+    print(f"With HER: {len(her_transitions)} transitions, {her_success:.0%} success")
+    ```
+
+    The success fraction (~16%) seems low -- why not higher? Because this is a *random* trajectory. With a trained policy that moves purposefully, future achieved goals would be closer to each other, making more relabeled transitions successful. HER amplifies competence; it doesn't create it from nothing.
+
+### 4.5.5 Wiring It Together: Full Episode Processing
+
+The `process_episode_with_her()` function above is the complete wiring -- it iterates through each transition, adds the original, samples goals, and relabels. Let's trace through a concrete example to verify the counts match our arithmetic:
+
+!!! lab "Checkpoint"
+    Walk through the pipeline end-to-end:
+
+    ```python
+    episode = create_synthetic_episode(n_steps=50)
+    her_transitions = process_episode_with_her(
+        episode, sparse_reward, strategy=GoalStrategy.FUTURE, k=4, her_ratio=0.8
+    )
+    n_original = len(episode)          # 50
+    n_relabeled = len(her_transitions) - n_original  # ~160 (50 * 0.8 * 4)
+    ratio = n_relabeled / len(her_transitions)
+    print(f"Original:  {n_original}")
+    print(f"Relabeled: {n_relabeled}")
+    print(f"Total:     {len(her_transitions)}")
+    print(f"HER ratio: {ratio:.2f}")     # ~0.76
+    ```
+
+### 4.5.6 Verify the Full Lab
+
+Run the from-scratch implementation's sanity checks -- this exercises all the components above end-to-end:
 
 ```bash
 bash docker/dev.sh python scripts/labs/her_relabeler.py --verify
 ```
 
 Expected output:
-- Goal sampling produces correct number of goals
-- Relabeling with own achieved goal produces reward=0 (success)
-- HER processing increases success rate in synthetic data (0% → ~16%)
 
-This lab is **not** how we train policies—SB3's HER wrapper handles that. The lab shows *what* relabeling does to your data.
+```
+============================================================
+HER Relabeler -- Verification
+============================================================
+Verifying goal sampling...
+  final: sampled 4 goals
+  future: sampled 4 goals
+  episode: sampled 4 goals
+  [PASS] Goal sampling OK
 
-### Exercises: Modify and Observe
+Verifying relabeling...
+  Original reward: -1.0                # failure (random trajectory)
+  Relabeled reward: 0.0                # success (own achieved goal)
+  [PASS] Relabeling OK
+
+Verifying HER processing...
+  Original success rate: 0.0%          # no accidental successes
+  HER success rate: ~16%               # relabeling creates successes
+  Transitions: 50 -> ~210             # 4.2x data amplification
+  [PASS] HER processing OK
+
+============================================================
+[ALL PASS] HER implementation verified
+============================================================
+```
+
+This lab is **not** how we train policies -- SB3's HER wrapper handles that. The lab shows *what* relabeling does to your data, with every operation visible.
+
+### 4.5.7 Exercises: Modify and Observe
 
 **Exercise: Goal Sampling Strategy Comparison**
 
@@ -181,9 +318,9 @@ Change `her_ratio=0.8` to different values:
 
 **Exercise: Understand Why HER Only Gets ~16% Success**
 
-The verification shows ~16% success rate on synthetic data. This seems low—why not higher?
+The verification shows ~16% success rate on synthetic data. This seems low -- why not higher?
 
-*Hint:* The synthetic trajectory uses random actions, so achieved goals are scattered randomly. With a *trained* policy that moves toward goals, future achieved goals would be closer to the current state, making more relabeled transitions successful. HER amplifies competence—it doesn't create it from nothing.
+*Hint:* The synthetic trajectory uses random actions, so achieved goals are scattered randomly. With a *trained* policy that moves toward goals, future achieved goals would be closer to the current state, making more relabeled transitions successful. HER amplifies competence -- it doesn't create it from nothing.
 
 ---
 
