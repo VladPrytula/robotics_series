@@ -1,0 +1,28 @@
+{
+  "chapters_checked": 2,
+  "error_count": 0,
+  "warning_count": 1,
+  "issues": [
+    {
+      "chapter": 1,
+      "severity": "info",
+      "category": "length",
+      "message": "Chapter is 8,375 words",
+      "line": null
+    },
+    {
+      "chapter": 2,
+      "severity": "warning",
+      "category": "code_length",
+      "message": "Code block has 52 lines (guideline: <=45)",
+      "line": 796
+    },
+    {
+      "chapter": 2,
+      "severity": "info",
+      "category": "length",
+      "message": "Chapter is 8,146 words",
+      "line": null
+    }
+  ]
+}

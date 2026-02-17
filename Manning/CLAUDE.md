@@ -10,11 +10,13 @@ Manning/
   chapters/       -- Book chapter drafts (chNN_<topic>.md)
   scaffolds/      -- Phase 1 scaffold files (chNN_scaffold.md)
   reviews/        -- Phase 3 review files (chNN_review.md)
+  output/         -- Built PDF and DOCX files (generated, do not edit)
+  reference.docx  -- DOCX style template (optional, customizable)
 ```
 
 ## How to Produce Book Content
 
-Four specialized agents produce book chapters. Their prompts live in
+Five specialized agents produce book chapters. Their prompts live in
 `manning_proposal/agents/`. Always follow the chapter production protocol
 in `manning_proposal/chapter_production_protocol.md`.
 
@@ -26,6 +28,7 @@ in `manning_proposal/chapter_production_protocol.md`.
 | Lab Engineer | `agents/lab_engineer.md` | Reads scaffold + CLAUDE.md -> produces lab code |
 | Book Writer | `agents/writer.md` | Reads scaffold + persona -> produces chapter prose |
 | Reviewer | `agents/reviewer.md` | Reads chapter + scaffold + persona -> produces review |
+| Publisher | `agents/publisher.md` | Validates + builds chapter -> PDF and DOCX |
 
 **Workflow:**
 
@@ -43,6 +46,26 @@ in `manning_proposal/chapter_production_protocol.md`.
     [Address review findings, re-run Writer if needed]
           |
 4. Verify: run commands, check artifacts, final read-through
+          |
+5. Publisher agent  -->  Manning/output/chNN_<topic>.pdf
+                         Manning/output/chNN_<topic>.docx
+                         Manning/output/build_report.json
+```
+
+**Build commands (used by Publisher agent):**
+
+```bash
+# Build all chapters as PDF + DOCX
+python scripts/build_book.py
+
+# Build specific chapter
+python scripts/build_book.py --chapters 1
+
+# Validate without building
+python scripts/build_book.py --validate-only --verbose
+
+# Build combined manuscript
+python scripts/build_book.py --combined
 ```
 
 **Key rules:**
