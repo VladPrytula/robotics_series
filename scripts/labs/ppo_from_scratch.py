@@ -15,11 +15,13 @@ Usage:
     # Train on a simple environment (demonstration)
     python scripts/labs/ppo_from_scratch.py --demo
 
-Key regions exported for tutorials:
+Key regions exported for book chapters:
+    - actor_critic_network: Shared-backbone actor-critic with Gaussian policy
     - gae_computation: Generalized Advantage Estimation
     - ppo_loss: Clipped surrogate objective
     - value_loss: Critic MSE loss
     - ppo_update: Full update step combining all losses
+    - ppo_training_loop: Rollout collection and batch assembly
 """
 from __future__ import annotations
 
@@ -412,6 +414,27 @@ def ppo_update(
 # Verification (Sanity Checks)
 # =============================================================================
 
+def verify_network():
+    """Verify actor-critic network shapes and parameter count."""
+    print("Verifying actor-critic network...")
+
+    obs_dim, act_dim = 16, 4
+    model = ActorCritic(obs_dim, act_dim)
+    obs = torch.randn(1, obs_dim)
+    dist, value = model(obs)
+
+    assert dist.mean.shape == (1, 4), f"Action mean shape: {dist.mean.shape}, expected (1, 4)"
+    assert value.shape == (1,), f"Value shape: {value.shape}, expected (1,)"
+    assert torch.isfinite(dist.mean).all(), "Non-finite action mean"
+    assert torch.isfinite(value).all(), "Non-finite value"
+
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"  dist.mean shape: {dist.mean.shape}")
+    print(f"  value shape:     {value.shape}")
+    print(f"  total params:    {total_params:,}")
+    print("  [PASS] Actor-critic network OK")
+
+
 def verify_gae():
     """Verify GAE computation produces sensible values."""
     print("Verifying GAE computation...")
@@ -431,6 +454,8 @@ def verify_gae():
     assert torch.isfinite(advantages).all(), "Advantages contain NaN/Inf"
     assert torch.isfinite(returns).all(), "Returns contain NaN/Inf"
     assert advantages[-1] > 0, "Final advantage should be positive (got reward)"
+    assert torch.allclose(returns, advantages + values, atol=1e-6), \
+        "Returns should equal advantages + values"
     print(f"  Advantages: {advantages.tolist()}")
     print(f"  Returns: {returns.tolist()}")
     print("  [PASS] GAE computation OK")
@@ -457,14 +482,39 @@ def verify_ppo_loss():
     dist, _ = model(obs)
     loss, info = compute_ppo_loss(dist, old_log_probs, actions, advantages)
 
-    # Checks
+    # Checks: same model, same params -> no clipping, ratio=1, kl~0
     assert torch.isfinite(loss), "Loss is NaN/Inf"
-    assert 0 <= info["clip_fraction"] <= 1, "Clip fraction out of range"
-    assert info["approx_kl"] >= 0, "KL should be non-negative"
+    assert abs(info["clip_fraction"] - 0.0) < 1e-6, \
+        f"clip_fraction should be 0.0 for same policy, got {info['clip_fraction']}"
+    assert abs(info["ratio_mean"] - 1.0) < 1e-4, \
+        f"ratio_mean should be 1.0 for same policy, got {info['ratio_mean']}"
+    assert info["approx_kl"] < 1e-4, \
+        f"approx_kl should be ~0.0 for same policy, got {info['approx_kl']}"
     print(f"  Loss: {loss.item():.4f}")
-    print(f"  Approx KL: {info['approx_kl']:.4f}")
+    print(f"  Approx KL: {info['approx_kl']:.6f}")
     print(f"  Clip fraction: {info['clip_fraction']:.4f}")
+    print(f"  Ratio mean: {info['ratio_mean']:.4f}")
     print("  [PASS] PPO loss OK")
+
+
+def verify_value_loss():
+    """Verify value loss computation."""
+    print("Verifying value loss...")
+
+    batch_size = 64
+    values = torch.randn(batch_size) * 0.01  # near-zero predictions at init
+    returns = torch.randn(batch_size)          # target values with variance
+
+    loss, info = compute_value_loss(values, returns)
+
+    assert torch.isfinite(loss), "Value loss is NaN/Inf"
+    assert 0.1 < info["value_loss"] < 2.0, \
+        f"Unexpected value_loss: {info['value_loss']:.4f} (expected ~0.5)"
+    assert abs(info["explained_variance"]) < 0.2, \
+        f"Unexpected explained_variance: {info['explained_variance']:.4f} (expected ~0.0)"
+    print(f"  value_loss:         {info['value_loss']:.4f} (expected ~0.5)")
+    print(f"  explained_variance: {info['explained_variance']:.4f} (expected ~0.0)")
+    print("  [PASS] Value loss OK")
 
 
 def verify_update():
@@ -506,9 +556,13 @@ def verify_update():
     # Checks
     assert info["value_loss"] < initial_value_loss, "Value loss should decrease"
     assert torch.isfinite(torch.tensor(info["total_loss"])), "Total loss is NaN/Inf"
+    assert info["approx_kl"] < 0.05, \
+        f"approx_kl should be < 0.05, got {info['approx_kl']}"
+    assert torch.isfinite(torch.tensor(info["grad_norm"])), "Grad norm is NaN/Inf"
     print(f"  Initial value loss: {initial_value_loss:.4f}")
     print(f"  Final value loss: {info['value_loss']:.4f}")
     print(f"  Approx KL: {info['approx_kl']:.4f}")
+    print(f"  Grad norm: {info['grad_norm']:.4f}")
     print("  [PASS] PPO update OK")
 
 
@@ -518,9 +572,13 @@ def run_verification():
     print("PPO From Scratch -- Verification")
     print("=" * 60)
 
+    verify_network()
+    print()
     verify_gae()
     print()
     verify_ppo_loss()
+    print()
+    verify_value_loss()
     print()
     verify_update()
 
@@ -802,20 +860,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  --verify           Run sanity checks
+  --verify           Run sanity checks (all 6 components)
   --compare-sb3      Compare GAE against SB3 RolloutBuffer
+  --bridge           Alias for --compare-sb3
   --demo             Train on CartPole and solve it
   --demo --record    Train and save a GIF of the solved policy
         """
     )
     parser.add_argument("--verify", action="store_true", help="Run verification checks")
     parser.add_argument("--compare-sb3", action="store_true", help="Compare core invariants against SB3")
+    parser.add_argument("--bridge", action="store_true", help="Alias for --compare-sb3")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for --compare-sb3 (default: 0)")
     parser.add_argument("--demo", action="store_true", help="Run demo training on CartPole")
     parser.add_argument("--record", action="store_true", help="Record a GIF after training")
     args = parser.parse_args()
 
-    if args.compare_sb3:
+    if args.compare_sb3 or args.bridge:
         run_sb3_comparison(seed=args.seed)
     elif args.verify:
         run_verification()
