@@ -68,6 +68,13 @@ python scripts/build_book.py --validate-only --verbose
 python scripts/build_book.py --combined
 ```
 
+**Pipeline design note:** Agents 1-4 (Scaffolder through Reviewer) are pure
+text-in/text-out -- they read and write markdown only. The Publisher (Phase 5)
+is the only agent that runs external tools (pandoc, xelatex). This separation
+means the Publisher catches build-specific issues invisible to the Reviewer:
+math that renders in MkDocs but breaks in pandoc, images that resolve on the
+web but not locally, code blocks that overflow page width in PDF.
+
 **Key rules:**
 - Never modify `tutorials/` when writing book chapters
 - The scaffold is the handoff artifact between agents
@@ -75,3 +82,31 @@ python scripts/build_book.py --combined
 - Book voice follows `manning_proposal/manning_writer_persona.md`, NOT the
   tutorial voice in root `CLAUDE.md`
 - Always review before manual verification (cheap checks before expensive ones)
+
+## Build Dependencies
+
+The Publisher agent and `scripts/build_book.py` require:
+
+```bash
+# Ubuntu/Debian (DGX or CI)
+sudo apt-get install pandoc texlive-xetex texlive-latex-extra \
+    texlive-fonts-recommended fonts-dejavu fonts-dejavu-extra
+
+# Optional: for GIF image conversion
+sudo apt-get install imagemagick
+```
+
+These are already installed in CI (`.github/workflows/pdfs.yml`).
+
+## DOCX Reference Template
+
+If Manning provides a Word template with their house styles, drop it at
+`Manning/reference.docx`. All future DOCX builds pick it up automatically
+(heading fonts, body spacing, code block styling). To generate a default
+starting template:
+
+```bash
+python3 scripts/build_book.py --init-reference-doc
+```
+
+Open in Word or LibreOffice, customize styles, save in place.
