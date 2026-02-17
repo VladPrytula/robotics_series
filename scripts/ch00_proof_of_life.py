@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -296,11 +296,15 @@ def cmd_all(args: argparse.Namespace) -> int:
         "--preferred",
         *args.preferred,
     ]
-    # Mac/OSMesa: EGL is never available, so skip the guaranteed-failure attempt.
-    if platform.system() == "Darwin":
-        render_gl = {"MUJOCO_GL": "osmesa", "PYOPENGL_PLATFORM": "osmesa"}
+    parent_backend = os.environ.get("MUJOCO_GL")
+    if parent_backend in {"egl", "osmesa"}:
+        backend = parent_backend
     else:
-        render_gl = {"MUJOCO_GL": "egl", "PYOPENGL_PLATFORM": "egl"}
+        backend = "egl" if shutil.which("nvidia-smi") else "osmesa"
+
+    render_gl = {"MUJOCO_GL": backend}
+    if backend in {"egl", "osmesa"}:
+        render_gl["PYOPENGL_PLATFORM"] = os.environ.get("PYOPENGL_PLATFORM", backend)
     rc = run_step(render_args, render_gl)
     if rc != 0:
         return rc

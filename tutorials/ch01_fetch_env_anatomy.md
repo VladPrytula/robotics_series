@@ -6,6 +6,14 @@ This chapter develops a precise understanding of what a reinforcement learning a
 
 The central result of this chapter is that Fetch environments implement a specific mathematical structure: the *goal-conditioned Markov Decision Process*. This structure--characterized by observation dictionaries with explicit goal representations and reward functions that can be evaluated for arbitrary goals--is not merely a design choice; it is the mathematical substrate that enables Hindsight Experience Replay and related techniques. We find that researchers who skip this step often struggle to use those techniques correctly.
 
+## Run It (TL;DR)
+
+```bash
+bash docker/dev.sh python scripts/ch01_env_anatomy.py all
+```
+
+Done when `results/ch01_env_describe.json` and `results/ch01_random_metrics.json` exist, and `reward-check` prints `OK:`.
+
 ---
 
 ## Part 0: The Practical Context
@@ -17,7 +25,7 @@ You have completed Chapter 0. You now have:
 - MuJoCo physics simulation running headlessly
 - A verified training loop that produces checkpoints
 
-You are running on a DGX cluster (or similar GPU workstation). Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
+You are running on a DGX cluster, a Linux workstation, or a Mac. Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
 
 **How to Execute Commands.** All commands in this curriculum run through the Docker wrapper:
 
@@ -36,7 +44,7 @@ bash docker/dev.sh
 
 When you run `bash docker/dev.sh python some_script.py`, the following happens:
 
-1. **Container launches** with GPU access (`--gpus all`) and your repository mounted at `/workspace`
+1. **Container launches** (with GPU access via `--gpus all` when available) and your repository mounted at `/workspace`
 2. **Virtual environment** is created (first run) or activated in `.venv/`
 3. **Dependencies** from `requirements.txt` are installed (cached by hash--reinstalls only when requirements change)
 4. **Your command executes** inside this isolated environment
@@ -44,7 +52,7 @@ When you run `bash docker/dev.sh python some_script.py`, the following happens:
 
 The script preserves your host user ID, so files created inside the container are owned by you, not root.
 
-**First Run.** On first invocation, `dev.sh` builds the Docker image `robotics-rl:latest` from `docker/Dockerfile`. This takes several minutes but only happens once. Subsequent runs start in seconds.
+**First Run.** On first invocation, `dev.sh` builds the appropriate Docker image (`robotics-rl:latest` on Linux, `robotics-rl:mac` on Mac) from the corresponding Dockerfile. This takes several minutes but only happens once. Subsequent runs start in seconds.
 
 ### 0.2 What We Are Simulating
 
@@ -93,7 +101,7 @@ In simulation, we collect a million timesteps in minutes. Policies trained in si
 | **Arm** | 7 DOF, matches real kinematics |
 | **Gripper** | Parallel-jaw, 2 fingers |
 | **Workspace** | ~1m reach from base |
-| **Control mode** | Cartesian velocity (internal IK solver) |
+| **Control mode** | Cartesian delta-position (internal IK/controller) |
 | **Physics rate** | 500Hz internal, 25Hz control interface |
 
 The simulation includes a table with objects (for Push/PickAndPlace tasks) and a red sphere marking the goal position. The arm is mounted on a fixed base (we do not simulate the mobile platform).
@@ -103,8 +111,8 @@ The simulation includes a table with objects (for Push/PickAndPlace tasks) and a
 - [Original OpenAI Gym Robotics paper](https://arxiv.org/abs/1802.09464) -- Plappert et al., "Multi-Goal Reinforcement Learning" (introduces these environments)
 - [Fetch Robotics product page](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) -- real robot specifications
 
-**What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian velocity commands:
-- `(vx, vy, vz)`: Desired end-effector velocity in world frame
+**What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian delta-position commands:
+- `(dx, dy, dz)`: Desired end-effector delta in world frame
 - `gripper`: Open (<0) or close (>0) command
 
 An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques. This simplification means the agent does not need to learn inverse kinematics--it just says "move left" and the controller figures out which joints to actuate.
@@ -137,7 +145,7 @@ The Gymnasium-Robotics package provides four manipulation tasks of increasing di
 
 Each task has two reward variants:
 - **Dense** (e.g., `FetchReachDense-v4`): Reward = negative distance to goal. Provides continuous feedback.
-- **Sparse** (e.g., `FetchReach-v4`): Reward = 0 if goal reached, −1 otherwise. Binary feedback only.
+- **Sparse** (e.g., `FetchReach-v4`): Reward = 0 if goal reached, -1 otherwise. Binary feedback only.
 
 ### 0.5 Why Environment Anatomy Matters
 
@@ -169,7 +177,7 @@ For this relabeling trick to work, the environment must provide three things:
    This lets us ask "what would the reward have been if the goal were X?" without re-running the simulation. This is how we recompute rewards after relabeling.
 
 3. **A geometric success threshold.**
-   Success means `distance(achieved_goal, desired_goal) < 0.05` (5 centimeters). This concrete definition lets us determine success for any goal we choose to relabel with.
+   Success means `distance(achieved_goal, desired_goal) <= 0.05` (5 centimeters). This concrete definition lets us determine success for any goal we choose to relabel with.
 
 **Bottom Line.**
 These three interface features--dictionary observations, recomputable rewards, geometric success--are not arbitrary design choices. They are the mathematical substrate that makes HER possible. If any feature were missing, HER would not work.
@@ -253,15 +261,15 @@ The goal-achievement mapping $\phi$ is crucial: it extracts from each state the 
 
 The separation of achieved and desired goals is what enables relabeling. Given a trajectory with observations $(o_0, \ldots, o_T)$, we can substitute any $g' \in \mathcal{G}$ for the desired goal and recompute rewards as $R(s_t, a_t, s_{t+1}, g')$.
 
-**Proposition (Reward Recomputation).** *Given a reward function $r: \mathcal{S} \times \mathcal{A} \times \mathcal{G} \to \mathbb{R}$ that can be evaluated for arbitrary goals, the reward for any hypothetical desired goal $g'$ can be computed from a stored transition $(s_t, a_t, s_{t+1})$ without re-simulating the trajectory:*
+**Proposition (Reward Recomputation).** *Suppose the reward can be evaluated for arbitrary goals, i.e., we can compute $R(s_t, a_t, s_{t+1}, g')$ for any $g' \in \mathcal{G}$. Then we can relabel a stored transition $(s_t, a_t, s_{t+1})$ with a new goal $g'$ and recompute the reward without re-simulating:*
 
-$$r' := r(s_t, a_t, g')$$
+$$r' := R(s_t, a_t, s_{t+1}, g')$$
 
-*This is the only operation HER performs on the reward function (Andrychowicz et al., 2017, Algorithm 1). No structural assumption on $r$ is needed beyond evaluability at arbitrary goals.*
+*This is the only operation HER performs on the reward labels (Andrychowicz et al., 2017, Algorithm 1). No structural assumption on $R$ is needed beyond evaluability at arbitrary goals.*
 
-**Notation.** *The paper writes $r(s_t, a_t, g')$, but in Fetch environments the reward actually depends on the next state $s_{t+1}$ (to extract the achieved goal $\phi(s_{t+1})$). This is why we store the full transition $(s_t, a_t, s_{t+1})$. In Gymnasium-Robotics, recomputation uses* `compute_reward(achieved_goal, new_goal, info)` *where* `achieved_goal` *comes from $s_{t+1}$.*
+**Notation.** *The paper often writes $r(s_t, a_t, g')$, but in Fetch environments the reward depends on the next state $s_{t+1}$ through the achieved goal $g_a = \phi(s_{t+1})$. Gymnasium-Robotics exposes recomputation as* `compute_reward(achieved_goal, desired_goal, info)` *where* `achieved_goal` *comes from $s_{t+1}$.*
 
-The Fetch environments satisfy a stronger property that makes this recomputation particularly clean: the reward depends on the goal only through distance, i.e., $R(s, a, s', g') = f(\|\phi(s') - g'\|)$ for some $f: \mathbb{R}_{\geq 0} \to \mathbb{R}$. In the sparse case, $f(d) = -\mathbf{1}[d \geq \epsilon]$; in the dense case, $f(d) = -d$. This distance structure is a convenience of Fetch, not a requirement of HER.
+The Fetch environments satisfy a stronger property that makes this recomputation particularly clean: the reward depends on the goal only through distance, i.e., $R(s, a, s', g') = f(\|\phi(s') - g'\|)$ for some $f: \mathbb{R}_{\geq 0} \to \mathbb{R}$. In the sparse case, $f(d) = -\mathbf{1}[d > \epsilon]$; in the dense case, $f(d) = -d$. This distance structure is a convenience of Fetch, not a requirement of HER.
 
 ### 2.2 The Fetch Environment as Goal-Conditioned MDP
 
@@ -269,13 +277,13 @@ The Gymnasium-Robotics Fetch environments implement the goal-conditioned MDP str
 
 **State Space $\mathcal{S}$.** The underlying state includes joint positions, joint velocities, gripper state, and (for manipulation tasks) object positions and velocities. The proprioceptive portion exposed to the agent has dimension $d_s = 10$ for reaching tasks and $d_s = 25$ for manipulation tasks.
 
-**Action Space $\mathcal{A}$.** Actions are 4-dimensional: $a = (v_x, v_y, v_z, g) \in [-1, 1]^4$. The first three components specify Cartesian velocity commands for the end-effector; the fourth controls the gripper (positive = close, negative = open).
+**Action Space $\mathcal{A}$.** Actions are 4-dimensional: $a = (dx, dy, dz, g) \in [-1, 1]^4$. The first three components specify Cartesian delta-position commands for the end-effector; the fourth controls the gripper (positive = close, negative = open).
 
 **Goal Space $\mathcal{G}$.** Goals are 3-dimensional Cartesian positions: $g \in \mathbb{R}^3$. For reaching tasks, the goal is the target end-effector position; for manipulation tasks, it is the target object position.
 
 **Reward Function $R$.** Two variants exist:
 - *Dense:* $R(s, a, s', g) = -\|\phi(s') - g\|_2$
-- *Sparse:* $R(s, a, s', g) = \begin{cases} 0 & \text{if } \|\phi(s') - g\|_2 < \epsilon \\ -1 & \text{otherwise} \end{cases}$
+- *Sparse:* $R(s, a, s', g) = \begin{cases} 0 & \text{if } \|\phi(s') - g\|_2 \leq \epsilon \\ -1 & \text{otherwise} \end{cases}$
 
 where $\epsilon = 0.05$ is the success threshold.
 
@@ -288,7 +296,7 @@ Fetch environments return observations as Python dictionaries with three keys:
 ```python
 {
     'observation': np.ndarray,   # shape (d_s,), proprioceptive state
-    'achieved_goal': np.ndarray, # shape (3,), φ(s)
+    'achieved_goal': np.ndarray, # shape (3,), phi(s)
     'desired_goal': np.ndarray   # shape (3,), g
 }
 ```
@@ -376,12 +384,12 @@ The 4-dimensional action vector is interpreted as follows:
 
 | Index | Semantic | Range | Effect |
 |-------|----------|-------|--------|
-| 0 | $v_x$ | $[-1, 1]$ | End-effector velocity in $x$ |
-| 1 | $v_y$ | $[-1, 1]$ | End-effector velocity in $y$ |
-| 2 | $v_z$ | $[-1, 1]$ | End-effector velocity in $z$ |
+| 0 | $dx$ | $[-1, 1]$ | End-effector delta-position in $x$ |
+| 1 | $dy$ | $[-1, 1]$ | End-effector delta-position in $y$ |
+| 2 | $dz$ | $[-1, 1]$ | End-effector delta-position in $z$ |
 | 3 | gripper | $[-1, 1]$ | Gripper command ($>0$ = close, $<0$ = open) |
 
-**Remark (Cartesian vs. Joint Control).** *The Fetch environments use Cartesian velocity control, not joint torque control. This is a significant simplification: the agent does not need to learn inverse kinematics. The Cartesian commands are converted to joint commands by an internal controller that is part of the environment dynamics.*
+**Remark (Cartesian vs. Joint Control).** *The Fetch environments use Cartesian delta-position control, not joint torque control. This is a significant simplification: the agent does not need to learn inverse kinematics. The Cartesian commands are converted to joint commands by an internal controller that is part of the environment dynamics.*
 
 **Remark (Action Scaling).** *Actions are scaled by a factor before being applied. The exact scaling depends on the environment configuration. The agent outputs values in $[-1, 1]$; the environment scales these to physical units.*
 
@@ -393,7 +401,12 @@ We verify the critical invariant that `env.step()` rewards match `compute_reward
 bash docker/dev.sh python scripts/ch01_env_anatomy.py reward-check --n-steps 500
 ```
 
-**Expected Output.** A message confirming that all 500 reward comparisons matched within numerical tolerance.
+This check verifies three things:
+1. `env.step(action)` reward matches `env.unwrapped.compute_reward(achieved_goal, desired_goal, info)`
+2. `compute_reward` matches the Fetch distance-based formula for the current goal (dense: `-||ag - dg||`; sparse: `0/-1` with threshold)
+3. `compute_reward` matches the same formula for randomly sampled alternative goals (a proxy for HER relabeling)
+
+**Expected Output.** A message confirming the checks passed within numerical tolerance.
 
 **Failure Mode.** If rewards do not match, HER will learn from incorrect reward labels. This would be a critical bug in either the environment or our understanding of its API.
 
@@ -415,12 +428,13 @@ bash docker/dev.sh python scripts/ch01_env_anatomy.py random-episodes --env-id F
 
 **Expected Output (FetchReachDense-v4):**
 - `success_rate`: ~0.0-0.1 (random flailing occasionally reaches the goal)
-- `mean_return`: ~−15 to −25 (negative because rewards are negative distances)
-- `mean_episode_length`: 50 (environments truncate at 50 steps)
+- `return_mean`: ~-15 to -25 (negative because rewards are negative distances)
+- `ep_len_mean`: 50 (environments truncate at 50 steps)
 
 **Expected Output (FetchReach-v4, sparse):**
 - `success_rate`: ~0.0-0.05 (very unlikely to reach by chance)
-- `mean_return`: ~−50 (constant −1 per step when not at goal)
+- `return_mean`: ~-50 (constant -1 per step when not at goal)
+- `ep_len_mean`: 50
 
 These baselines establish the performance floor. Any trained agent that does not significantly exceed random performance is not learning.
 
@@ -433,16 +447,16 @@ These baselines establish the performance floor. Any trained agent that does not
 The dictionary observation structure is not arbitrary; it is the interface through which HER operates.
 
 **Proposition (Sufficient Conditions for HER).** *Hindsight Experience Replay (Andrychowicz et al., 2017) is applicable to an environment if:*
-1. *The observation includes an explicit `achieved_goal` $g_a = \phi(s)$, via a mapping $m: \mathcal{S} \to \mathcal{G}$ such that $f_{m(s)}(s) = 1$ (the paper's §3.2 formalization)*
-2. *The reward function $r: \mathcal{S} \times \mathcal{A} \times \mathcal{G} \to \mathbb{R}$ can be evaluated for arbitrary goals $g$ without re-simulating the trajectory*
+1. *The observation includes an explicit `achieved_goal` $g_a = \phi(s)$ (a goal value that is achievable in that state; in the HER paper's Sec. 3.2 notation, this corresponds to a mapping $m$ satisfying $f_{m(s)}(s) = 1$)*
+2. *The reward for a transition can be recomputed for arbitrary goals without re-simulating the trajectory (in Fetch: `env.unwrapped.compute_reward(achieved_goal, goal, info)`)*
 
-*These two conditions are all that Algorithm 1 of the paper requires. The algorithm stores transitions $(s_t \| g, a_t, r_t, s_{t+1} \| g)$ and replays them with alternative goals $g'$, recomputing rewards as $r' := r(s_t, a_t, g')$. No assumption is made about the functional form of $r$.*
+*These two conditions are all that Algorithm 1 of the paper requires. The algorithm stores transitions and replays them with alternative goals $g'$, recomputing rewards under the new goals. No assumption is made about the functional form of the reward beyond recomputability for arbitrary goals.*
 
 The Fetch environments satisfy both conditions by construction. They also satisfy a stronger property that makes implementation particularly clean:
 
 3. *The reward depends on the goal only through $\|g_a - g\|$*
 
-Condition 3 is not strictly necessary for HER -- any reward function satisfying conditions 1 and 2 suffices -- but it makes reward recomputation trivial (a single distance calculation) and ensures that relabeled rewards are geometrically meaningful. The paper's own experiments use binary rewards $r(s, a, g) = -[f_g(s') = 0]$ (§3.1, §4.1), not distance-based rewards. In fact, the paper's §4.4 shows that shaped (distance-based) rewards *hurt* performance with HER -- DDPG+HER with shaped rewards failed on all three manipulation tasks, while DDPG+HER with sparse binary rewards solved them.
+Condition 3 is not strictly necessary for HER -- any reward function satisfying conditions 1 and 2 suffices -- but it makes reward recomputation trivial (a single distance calculation) and ensures that relabeled rewards are geometrically meaningful. The paper's own experiments use binary rewards $r(s, a, g) = -[f_g(s') = 0]$ (Sec. 3.1, Sec. 4.1), not distance-based rewards. In fact, the paper's Sec. 4.4 shows that shaped (distance-based) rewards *hurt* performance with HER -- DDPG+HER with shaped rewards failed on all three manipulation tasks, while DDPG+HER with sparse binary rewards solved them.
 
 **Corollary.** *Standard (non-goal-conditioned) environments cannot use HER without modification. An environment that returns flat observations with no goal separation does not expose the structure HER requires.*
 
@@ -456,13 +470,13 @@ The choice between sparse and dense rewards involves a fundamental trade-off:
 - Con: May encourage undesirable behaviors (e.g., hovering near the goal without reaching it)
 - Con: Reward shaping may not align with true task objective
 
-**Sparse Rewards:** $R = \mathbf{1}[\|g_a - g_d\| < \epsilon] - 1$
+**Sparse Rewards:** $R = \mathbf{1}[\|g_a - g_d\| \leq \epsilon] - 1$
 - Pro: Clearly defined success criterion
 - Pro: No reward shaping artifacts
 - Con: No gradient signal until goal is reached
 - Con: Requires HER or similar techniques for sample-efficient learning
 
-**Remark (When to Use Each).** *For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards. Andrychowicz et al. (2017, §4.4) found that HER with sparse binary rewards outperformed HER with shaped rewards on all three Fetch manipulation tasks--shaped rewards introduced a discrepancy between the optimization objective and the true success criterion, and penalized exploration by discouraging contact with the object.*
+**Remark (When to Use Each).** *For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards. Andrychowicz et al. (2017, Sec. 4.4) found that HER with sparse binary rewards outperformed HER with shaped rewards on all three Fetch manipulation tasks--shaped rewards introduced a discrepancy between the optimization objective and the true success criterion, and penalized exploration by discouraging contact with the object.*
 
 ### 4.3 The Observation Dimension and Policy Architecture
 
@@ -536,7 +550,7 @@ Chapter 4 will introduce HER for sparse-reward tasks. The `compute_reward` funct
 |-------|----------|--------|
 | 0-2 | Gripper position | `grip_pos` |
 | 3-5 | Object position | `object_pos` |
-| 6-8 | Object relative position (object − gripper) | `object_rel_pos` |
+| 6-8 | Object relative position (object - gripper) | `object_rel_pos` |
 | 9-10 | Gripper finger positions (right, left) | `gripper_state` = `robot_qpos[-2:]` |
 | 11-13 | Object rotation (Euler angles: roll, pitch, yaw) | `object_rot` via `mat2euler` |
 | 14-16 | Object linear velocity (relative to gripper) | `object_velp` |
@@ -558,7 +572,7 @@ Chapter 4 will introduce HER for sparse-reward tasks. The `compute_reward` funct
 
 **Requirement 3: Reward depends only on goal distance.**
 - Verified: Dense reward is $-\|g_a - g_d\|$; sparse is threshold on same.
-- Test: Verify `compute_reward(ag, dg, {})` equals `−np.linalg.norm(ag − dg)` for dense.
+- Test: Verify `compute_reward(ag, dg, {})` equals `-np.linalg.norm(ag - dg)` for dense.
 
 All three requirements are verified by `scripts/ch01_env_anatomy.py reward-check`.
 

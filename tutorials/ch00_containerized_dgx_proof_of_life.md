@@ -8,6 +8,15 @@ We borrow the term *proof of life* from hostage negotiations, where it means evi
 
 We find it tempting to skip "setup" chapters, but this one does more than configure tools -- it establishes the laboratory in which all subsequent results are produced. A result that cannot be reproduced because the environment cannot be reconstructed is not a result at all. This chapter ensures that our laboratory is sound.
 
+## Run It (TL;DR)
+
+```bash
+# From the host, in your repo clone:
+bash docker/dev.sh python scripts/ch00_proof_of_life.py all
+```
+
+Done when `smoke_frame.png` and `ppo_smoke.zip` are created.
+
 ---
 
 ## Part I: The Problem
@@ -117,7 +126,7 @@ Training can proceed without rendering, but evaluation will be limited to numeri
 
 **The test.** Create a Fetch environment with `render_mode="rgb_array"`, call `env.render()`, and save the resulting numpy array as a PNG image. If the image file exists and is non-empty, offscreen rendering works.
 
-**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image. The fallback works by calling `os.execvpe`, which *replaces* the current process entirely with a new invocation using different environment variables -- this is not a retry within the same process, but a full re-exec. As a result, on DGX systems where EGL fails, you may see the script's startup output appear twice in logs -- once for the EGL attempt and once for the OSMesa retry. This is expected behavior, not an error. On Mac, the `all` subcommand sets OSMesa directly (since EGL is never available), so the double-output pattern does not occur.
+**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image. The fallback works by calling `os.execvpe`, which *replaces* the current process entirely with a new invocation using different environment variables -- this is not a retry within the same process, but a full re-exec. As a result, on DGX systems where EGL fails, you may see the script's startup output appear twice in logs -- once for the EGL attempt and once for the OSMesa retry. This is expected behavior, not an error. On systems without an NVIDIA driver stack (no `nvidia-smi`), the `all` subcommand starts with OSMesa, so the double-output pattern does not occur unless you explicitly force `MUJOCO_GL=egl`.
 
 #### Test 4: Training Loop Completion
 
@@ -176,7 +185,7 @@ A subtle point deserves elaboration. We use a Python virtual environment *inside
 
 **Proposition.** *A virtual environment inside a container provides additional benefits: (1) it enables `pip install -e .` for editable installs of the project; (2) it allows project dependencies to shadow container dependencies when necessary; (3) it makes the dependency specification explicit in `requirements.txt` rather than implicit in the Dockerfile.*
 
-On DGX/NVIDIA, the virtual environment is created with `--system-site-packages`, which allows it to inherit packages from the container's system Python. This avoids reinstalling PyTorch (which is large and CUDA-specific) while still allowing project-specific packages to be installed separately. On Mac, the container uses a plain `python:3.11-slim` base that does not include PyTorch, so a standard venv is used and all dependencies (including PyTorch) are installed from `requirements.txt`.
+On DGX/NVIDIA, the virtual environment is created with `--system-site-packages`, which allows it to inherit packages from the container's system Python. This avoids reinstalling PyTorch (which is large and CUDA-specific) while still allowing project-specific packages to be installed separately. On Mac, the container uses a plain `python:3.11-slim` base; `docker/dev.sh` installs CPU PyTorch into the venv (since `requirements.txt` intentionally does not pin `torch`), then installs the remaining dependencies from `requirements.txt`.
 
 ---
 
