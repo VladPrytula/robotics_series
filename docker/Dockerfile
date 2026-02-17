@@ -18,6 +18,7 @@ WORKDIR /workspace
 
 # Default to headless EGL on DGX; can override at runtime.
 ENV MUJOCO_GL=egl \
+    PYOPENGL_PLATFORM=egl \
     PYTHONUNBUFFERED=1
 
 RUN python -m pip install --no-cache-dir -U pip wheel \
@@ -27,5 +28,4 @@ RUN python -m pip install --no-cache-dir -U pip wheel \
     mujoco \
     stable-baselines3 \
     tensorboard \
-    imageio \
-    wandb
+    imageio

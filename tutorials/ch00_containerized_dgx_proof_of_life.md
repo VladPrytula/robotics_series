@@ -76,7 +76,7 @@ But GPU access inside a container is not automatic. The container runs in an iso
 
 Training will still *run* on CPU, but it will be 10-100× slower, making iterative experimentation impractical.
 
-**The test.** Run `nvidia-smi` inside the container. This command queries the NVIDIA driver for GPU status. If it succeeds, the container has GPU access. If it fails with "command not found" or "NVIDIA-SMI has failed," the container cannot see the GPU.
+**The test.** The script checks `torch.cuda.is_available()` inside the container. If CUDA is available, it reports the device name and count. If not, it prints a warning but does not halt the test sequence -- training can still proceed on CPU (this is the expected path on Mac). On a DGX system where CUDA *should* be available, treat a "CUDA not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
 
 #### Test 2: MuJoCo and Gymnasium-Robotics Functionality
 
@@ -115,7 +115,7 @@ Training can proceed without rendering, but evaluation will be limited to numeri
 
 **The test.** Create a Fetch environment with `render_mode="rgb_array"`, call `env.render()`, and save the resulting numpy array as a PNG image. If the image file exists and is non-empty, offscreen rendering works.
 
-**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image.
+**Remark (The Fallback Chain).** The proof-of-life script implements a fallback chain: it first attempts EGL (preferred, hardware-accelerated), then OSMesa (slower, but compatible), then disables rendering entirely. The test passes if *any* backend produces a valid image. The fallback works by re-executing the entire script process with different environment variables (via `os.execvpe`). This means that if EGL fails, you may see the script's startup output appear twice in logs--once for the EGL attempt and once for the OSMesa retry. This is expected behavior, not an error.
 
 #### Test 4: Training Loop Completion
 
@@ -147,9 +147,9 @@ GPU Access → MuJoCo Functionality → Headless Rendering → Training Loop
 
 Each test assumes the previous tests pass. There is no point testing rendering if MuJoCo cannot initialize. There is no point testing training if the GPU is inaccessible (training would "work" but be too slow to iterate).
 
-**Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The proof-of-life script's `all` subcommand respects this ordering and stops at the first failure.
+**Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The `all` subcommand respects this ordering and stops at the first failure. The one exception is `gpu-check`, which is advisory: it warns but does not block subsequent tests, because CPU-only operation is valid on Mac and other non-NVIDIA platforms.
 
-These tests are implemented in `scripts/ch00_proof_of_life.py`. The script provides subcommands for running each test individually (`list-envs`, `render`, `ppo-smoke`) or all tests in sequence (`all`).
+These tests are implemented in `scripts/ch00_proof_of_life.py`. The script provides subcommands for running each test individually (`gpu-check`, `list-envs`, `render`, `ppo-smoke`) or all tests in sequence (`all`).
 
 ### 2.3 The Container Architecture
 
@@ -160,9 +160,11 @@ Our container architecture consists of two layers:
 **Project Layer.** On top of the base, we install system dependencies for MuJoCo rendering (EGL, OSMesa) and Python dependencies for the project (Gymnasium, Gymnasium-Robotics, Stable Baselines 3). These are specified in the `docker/Dockerfile`, which builds the `robotics-rl:latest` image:
 
 - **System packages:** `libegl1`, `libgl1`, `libosmesa6` (headless rendering), `libglfw3` (windowed rendering), `ffmpeg` (video encoding)
-- **Python packages:** `gymnasium`, `gymnasium-robotics`, `mujoco`, `stable-baselines3`, `tensorboard`, `imageio`, `wandb`
+- **Python packages:** `gymnasium`, `gymnasium-robotics`, `mujoco`, `stable-baselines3`, `tensorboard`, `imageio`
 
 The `docker/dev.sh` script automatically builds this image on first run if it does not exist locally. If the build fails (e.g., network issues), it falls back to the raw NVIDIA base image--but rendering may be unavailable in that case.
+
+**Remark (On Version Pinning).** *The `requirements.txt` file specifies minimum version constraints (e.g., `stable-baselines3>=2.4.0`) rather than exact pins. For strict reproducibility, the Docker image digest is the true specification--it freezes the entire dependency tree. Readers who want to capture exact versions for a paper can run `pip freeze` inside the container and save the output.*
 
 **Remark (On the Two-Layer Architecture).** *The separation into base and project layers reflects a design principle: heavyweight, stable dependencies (CUDA, PyTorch) belong in the base layer; lightweight, project-specific dependencies belong in the project layer. This separation enables faster iteration--changing project dependencies does not require rebuilding the entire CUDA stack--while maintaining reproducibility.*
 
@@ -247,6 +249,8 @@ python scripts/ch00_proof_of_life.py ppo-smoke --n-envs 8 --total-steps 50000 --
 ```
 
 **Expected Output.** Training progress messages followed by the creation of `ppo_smoke.zip`.
+
+**Remark (Default Hyperparameters).** *The smoke test uses PPO's default rollout length (`n_steps=1024`) and mini-batch size (`batch_size=256`). These are configurable via `--n-steps` and `--batch-size` but the defaults are fine for verification. Chapter 2 discusses how these parameters affect learning.*
 
 **Failure Mode.** CUDA errors indicate GPU misconfiguration. Shape mismatch errors indicate problems with observation space handling. Import errors indicate missing dependencies.
 
@@ -383,7 +387,7 @@ Upon completion of this chapter, the following must be true:
 
 **D4.** All four tests in `scripts/ch00_proof_of_life.py all` pass without error.
 
-A reader who cannot satisfy all four conditions has not completed this chapter and should not proceed.
+We recommend satisfying all four conditions before proceeding. Skipping ahead tends to surface as mysterious failures in later chapters that are harder to diagnose than fixing them here.
 
 ---
 
@@ -417,7 +421,7 @@ A reader who cannot satisfy all four conditions has not completed this chapter a
 
 **Symptom.** `docker/dev.sh` reinstalls packages on every run.
 
-**Cause.** The requirements hash file (`.venv/.requirements_hash`) is missing or corrupt.
+**Cause.** The requirements hash file (`.venv/.requirements.sha256`) is missing or corrupt.
 
 **Resolution.** Delete `.venv` and re-run `docker/dev.sh` to recreate the environment.
 

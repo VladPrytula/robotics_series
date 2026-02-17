@@ -156,6 +156,18 @@ def pick_env_id(preferred: Iterable[str] | None, explicit: str | None) -> str:
     raise SystemExit("No Fetch* envs found in gym registry. Is `gymnasium-robotics` installed?")
 
 
+def cmd_gpu_check(_: argparse.Namespace) -> int:
+    import torch
+
+    if torch.cuda.is_available():
+        dev_name = torch.cuda.get_device_name(0)
+        dev_count = torch.cuda.device_count()
+        print(f"OK: CUDA available -- {dev_count} device(s), primary: {dev_name}")
+    else:
+        print("WARN: CUDA not available; training will use CPU (this is expected on Mac)")
+    return 0
+
+
 def cmd_list_envs(_: argparse.Namespace) -> int:
     _set_gl_backend("disable", force=True)
     _print_gl_env()
@@ -261,7 +273,12 @@ def cmd_all(args: argparse.Namespace) -> int:
         env.pop("ROBOTICS_GL_FALLBACK_TRIED", None)
         return subprocess.run([sys.executable, script, *step_args], env=env).returncode
 
-    print("== Fetch env registry (Fetch*) ==")
+    print("== GPU check ==")
+    rc = run_step(["gpu-check"], {})
+    if rc != 0:
+        return rc
+
+    print("\n== Fetch env registry (Fetch*) ==")
     rc = run_step(["list-envs"], {"MUJOCO_GL": "disable"})
     if rc != 0:
         return rc
@@ -318,6 +335,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p_gpu = sub.add_parser("gpu-check", help="Check GPU/CUDA availability via PyTorch.")
+    p_gpu.set_defaults(func=cmd_gpu_check)
+
     p_list = sub.add_parser("list-envs", help="List Fetch* env IDs registered in Gym.")
     p_list.set_defaults(func=cmd_list_envs)
 
@@ -349,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--out", default="ppo_smoke", help="Output path prefix (SB3 appends .zip).")
     p_train.set_defaults(func=cmd_ppo_smoke)
 
-    p_all = sub.add_parser("all", help="Run list-envs + render + PPO smoke train.")
+    p_all = sub.add_parser("all", help="Run gpu-check + list-envs + render + PPO smoke train.")
     p_all.add_argument("--env-id", default="auto", help="Gym env id (or 'auto').")
     p_all.add_argument("--preferred", nargs="*", default=preferred_default, help="Preferred env IDs (in order).")
     p_all.add_argument("--seed", type=int, default=0)

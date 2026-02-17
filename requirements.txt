@@ -1,6 +1,6 @@
-gymnasium[classic-control]
-gymnasium-robotics
-mujoco
-stable-baselines3
-tensorboard
-imageio
+gymnasium[classic-control]>=1.0.0
+gymnasium-robotics>=1.3.0
+mujoco>=3.0.0
+stable-baselines3>=2.4.0
+tensorboard>=2.18.0
+imageio>=2.36.0

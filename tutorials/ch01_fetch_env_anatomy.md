@@ -4,7 +4,7 @@
 
 This chapter develops a precise understanding of what a reinforcement learning agent "perceives" when interacting with a Gymnasium-Robotics Fetch environment. We formalize the observation space, action space, and reward function--not as implementation details to be glossed over, but as mathematical structures whose properties determine what algorithms can and cannot accomplish.
 
-The central result of this chapter is that Fetch environments implement a specific mathematical structure: the *goal-conditioned Markov Decision Process*. This structure--characterized by observation dictionaries with explicit goal representations and reward functions that can be evaluated for arbitrary goals--is not merely a design choice; it is the mathematical substrate that enables Hindsight Experience Replay and related techniques. A researcher who does not understand this structure cannot use those techniques correctly.
+The central result of this chapter is that Fetch environments implement a specific mathematical structure: the *goal-conditioned Markov Decision Process*. This structure--characterized by observation dictionaries with explicit goal representations and reward functions that can be evaluated for arbitrary goals--is not merely a design choice; it is the mathematical substrate that enables Hindsight Experience Replay and related techniques. We find that researchers who skip this step often struggle to use those techniques correctly.
 
 ---
 
@@ -253,13 +253,15 @@ The goal-achievement mapping $\phi$ is crucial: it extracts from each state the 
 
 The separation of achieved and desired goals is what enables relabeling. Given a trajectory with observations $(o_0, \ldots, o_T)$, we can substitute any $g' \in \mathcal{G}$ for the desired goal and recompute rewards as $R(s_t, a_t, s_{t+1}, g')$.
 
-**Proposition (Reward Recomputation).** *If the reward function $R$ depends on the goal only through the distance $\|g_a - g_d\|$, then the reward for any achieved goal $g_a$ and any hypothetical desired goal $g'$ can be computed without re-simulating the trajectory:*
+**Proposition (Reward Recomputation).** *Given a reward function $r: \mathcal{S} \times \mathcal{A} \times \mathcal{G} \to \mathbb{R}$ that can be evaluated for arbitrary goals, the reward for any hypothetical desired goal $g'$ can be computed from a stored transition $(s_t, a_t, s_{t+1})$ without re-simulating the trajectory:*
 
-$$R(s, a, s', g') = f(\|\phi(s') - g'\|)$$
+$$r' := r(s_t, a_t, g')$$
 
-*for some function $f: \mathbb{R}_{\geq 0} \to \mathbb{R}$.*
+*This is the only operation HER performs on the reward function (Andrychowicz et al., 2017, Algorithm 1). No structural assumption on $r$ is needed beyond evaluability at arbitrary goals.*
 
-This proposition is the mathematical foundation of Hindsight Experience Replay. It requires that the environment expose both $\phi$ (the goal-achievement mapping) and $R$ (the reward function) in a form that allows evaluation for arbitrary goals.
+**Notation.** *The paper writes $r(s_t, a_t, g')$, but in Fetch environments the reward actually depends on the next state $s_{t+1}$ (to extract the achieved goal $\phi(s_{t+1})$). This is why we store the full transition $(s_t, a_t, s_{t+1})$. In Gymnasium-Robotics, recomputation uses* `compute_reward(achieved_goal, new_goal, info)` *where* `achieved_goal` *comes from $s_{t+1}$.*
+
+The Fetch environments satisfy a stronger property that makes this recomputation particularly clean: the reward depends on the goal only through distance, i.e., $R(s, a, s', g') = f(\|\phi(s') - g'\|)$ for some $f: \mathbb{R}_{\geq 0} \to \mathbb{R}$. In the sparse case, $f(d) = -\mathbf{1}[d \geq \epsilon]$; in the dense case, $f(d) = -d$. This distance structure is a convenience of Fetch, not a requirement of HER.
 
 ### 2.2 The Fetch Environment as Goal-Conditioned MDP
 
@@ -345,21 +347,23 @@ The naming convention encodes task and reward type: environments without "Dense"
 bash docker/dev.sh python scripts/ch01_env_anatomy.py describe --json-out results/ch01_env_describe.json
 ```
 
-This command produces a JSON file documenting the precise structure of observations and actions.
+This command produces a JSON file documenting the precise structure of observations and actions. By default (with `--env-id auto`), the script selects `FetchReachDense-v4` -- the first match in the preferred list. The observation and action shapes are identical for sparse and dense variants of the same task; only the reward computation differs.
 
-**Expected Structure (FetchReach-v4):**
+**Expected Structure (FetchReachDense-v4):**
 
 ```json
 {
   "action_space": {
+    "type": "Box",
     "shape": [4],
-    "low": [-1, -1, -1, -1],
-    "high": [1, 1, 1, 1]
+    "dtype": "float32",
+    "low": [-1.0, -1.0, -1.0, -1.0],
+    "high": [1.0, 1.0, 1.0, 1.0]
   },
   "observation_space": {
-    "observation": {"shape": [10], "low": [...], "high": [...]},
-    "achieved_goal": {"shape": [3], "low": [...], "high": [...]},
-    "desired_goal": {"shape": [3], "low": [...], "high": [...]}
+    "observation": {"type": "Box", "shape": [10], "dtype": "float64", "low": [...], "high": [...]},
+    "achieved_goal": {"type": "Box", "shape": [3], "dtype": "float64", "low": [...], "high": [...]},
+    "desired_goal": {"type": "Box", "shape": [3], "dtype": "float64", "low": [...], "high": [...]}
   }
 }
 ```
@@ -403,6 +407,12 @@ Before training any agent, we establish baseline performance with a random polic
 bash docker/dev.sh python scripts/ch01_env_anatomy.py random-episodes --n-episodes 10 --json-out results/ch01_random_metrics.json
 ```
 
+By default, this runs on FetchReachDense-v4 (the first match in the preferred list). To see sparse-reward metrics, specify the environment explicitly:
+
+```bash
+bash docker/dev.sh python scripts/ch01_env_anatomy.py random-episodes --env-id FetchReach-v4 --n-episodes 10 --json-out results/ch01_random_sparse.json
+```
+
 **Expected Output (FetchReachDense-v4):**
 - `success_rate`: ~0.0-0.1 (random flailing occasionally reaches the goal)
 - `mean_return`: ~−15 to −25 (negative because rewards are negative distances)
@@ -422,12 +432,17 @@ These baselines establish the performance floor. Any trained agent that does not
 
 The dictionary observation structure is not arbitrary; it is the interface through which HER operates.
 
-**Theorem (HER Applicability).** *Hindsight Experience Replay is applicable to an environment if and only if:*
-1. *The observation includes an explicit `achieved_goal` $g_a = \phi(s)$*
-2. *The reward function $R(s, a, s', g)$ can be evaluated for arbitrary goals $g$*
+**Proposition (Sufficient Conditions for HER).** *Hindsight Experience Replay (Andrychowicz et al., 2017) is applicable to an environment if:*
+1. *The observation includes an explicit `achieved_goal` $g_a = \phi(s)$, via a mapping $m: \mathcal{S} \to \mathcal{G}$ such that $f_{m(s)}(s) = 1$ (the paper's §3.2 formalization)*
+2. *The reward function $r: \mathcal{S} \times \mathcal{A} \times \mathcal{G} \to \mathbb{R}$ can be evaluated for arbitrary goals $g$ without re-simulating the trajectory*
+
+*These two conditions are all that Algorithm 1 of the paper requires. The algorithm stores transitions $(s_t \| g, a_t, r_t, s_{t+1} \| g)$ and replays them with alternative goals $g'$, recomputing rewards as $r' := r(s_t, a_t, g')$. No assumption is made about the functional form of $r$.*
+
+The Fetch environments satisfy both conditions by construction. They also satisfy a stronger property that makes implementation particularly clean:
+
 3. *The reward depends on the goal only through $\|g_a - g\|$*
 
-The Fetch environments satisfy all three conditions by construction.
+Condition 3 is not strictly necessary for HER -- any reward function satisfying conditions 1 and 2 suffices -- but it makes reward recomputation trivial (a single distance calculation) and ensures that relabeled rewards are geometrically meaningful. The paper's own experiments use binary rewards $r(s, a, g) = -[f_g(s') = 0]$ (§3.1, §4.1), not distance-based rewards. In fact, the paper's §4.4 shows that shaped (distance-based) rewards *hurt* performance with HER -- DDPG+HER with shaped rewards failed on all three manipulation tasks, while DDPG+HER with sparse binary rewards solved them.
 
 **Corollary.** *Standard (non-goal-conditioned) environments cannot use HER without modification. An environment that returns flat observations with no goal separation does not expose the structure HER requires.*
 
@@ -447,7 +462,7 @@ The choice between sparse and dense rewards involves a fundamental trade-off:
 - Con: No gradient signal until goal is reached
 - Con: Requires HER or similar techniques for sample-efficient learning
 
-**Remark (When to Use Each).** *For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards.*
+**Remark (When to Use Each).** *For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards. Andrychowicz et al. (2017, §4.4) found that HER with sparse binary rewards outperformed HER with shaped rewards on all three Fetch manipulation tasks--shaped rewards introduced a discrepancy between the optimization objective and the true success criterion, and penalized exploration by discouraging contact with the object.*
 
 ### 4.3 The Observation Dimension and Policy Architecture
 
@@ -484,7 +499,7 @@ Upon completion of this chapter, the following must exist:
 - What is the success threshold $\epsilon$? *(Answer: 0.05)*
 - Why can HER relabel trajectories? *(Answer: because `compute_reward` can evaluate arbitrary goals)*
 
-A reader who cannot produce these deliverables or answer these questions has not completed the chapter.
+We recommend producing these deliverables and answering these questions before moving on. They serve as a self-check that the material has landed.
 
 ---
 
@@ -508,25 +523,26 @@ Chapter 4 will introduce HER for sparse-reward tasks. The `compute_reward` funct
 
 ### A.1 FetchReach Observation (10 dimensions)
 
-| Index | Semantic |
-|-------|----------|
-| 0-2 | Gripper position $(x, y, z)$ |
-| 3-5 | Gripper velocity $(\dot{x}, \dot{y}, \dot{z})$ |
-| 6-7 | Gripper finger positions |
-| 8-9 | Gripper finger velocities |
+| Index | Semantic | Source |
+|-------|----------|--------|
+| 0-2 | Gripper position $(x, y, z)$ | `grip_pos` |
+| 3-4 | Gripper finger positions (right, left) | `gripper_state` = `robot_qpos[-2:]` |
+| 5-7 | Gripper linear velocity $(\dot{x}, \dot{y}, \dot{z})$ | `grip_velp` |
+| 8-9 | Gripper finger velocities (right, left) | `gripper_vel` = `robot_qvel[-2:] * dt` |
 
 ### A.2 FetchPush/PickAndPlace Observation (25 dimensions)
 
-| Index | Semantic |
-|-------|----------|
-| 0-2 | Gripper position |
-| 3-5 | Object position |
-| 6-8 | Object relative position (object − gripper) |
-| 9-11 | Gripper velocity |
-| 12-14 | Object velocity |
-| 15-17 | Object relative velocity |
-| 18-21 | Object rotation (quaternion) |
-| 22-24 | Object angular velocity |
+| Index | Semantic | Source |
+|-------|----------|--------|
+| 0-2 | Gripper position | `grip_pos` |
+| 3-5 | Object position | `object_pos` |
+| 6-8 | Object relative position (object − gripper) | `object_rel_pos` |
+| 9-10 | Gripper finger positions (right, left) | `gripper_state` = `robot_qpos[-2:]` |
+| 11-13 | Object rotation (Euler angles: roll, pitch, yaw) | `object_rot` via `mat2euler` |
+| 14-16 | Object linear velocity (relative to gripper) | `object_velp` |
+| 17-19 | Object angular velocity | `object_velr` |
+| 20-22 | Gripper linear velocity | `grip_velp` |
+| 23-24 | Gripper finger velocities (right, left) | `gripper_vel` = `robot_qvel[-2:] * dt` |
 
 ---
 

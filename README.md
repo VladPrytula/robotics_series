@@ -185,7 +185,7 @@ robotics/
 ├── tutorials/           # Textbook-style documentation (chNN_<topic>.md)
 ├── train.py             # Training CLI (PPO/SAC/TD3, HER, vectorized envs, TensorBoard)
 ├── eval.py              # Evaluation CLI (metrics: success rate, return, smoothness)
-├── requirements.txt     # Python dependencies (pinned versions)
+├── requirements.txt     # Python dependencies (version-constrained)
 └── syllabus.md          # 10-week curriculum
 ```
 
@@ -336,7 +336,7 @@ This repository uses the Fetch robotic arm tasks from Gymnasium-Robotics:
 
 **Docker-First.** Every command executes inside a container. No host-side package installation. No "it works on my machine" excuses. The `docker/dev.sh` script is the single entry point.
 
-**Reproducibility.** All dependencies pinned in `requirements.txt`. All training runs seeded. All results reported with confidence intervals over multiple seeds.
+**Reproducibility.** All dependencies version-constrained in `requirements.txt`. All training runs seeded. All results reported with confidence intervals over multiple seeds.
 
 **Quantification.** Claims require numbers. "The policy works" is inadmissible; "Success rate: 94.2% ± 2.1% (5 seeds, 100 episodes each)" is acceptable.
 
@@ -514,7 +514,18 @@ For readers who complete the 10-week curriculum and wish to continue:
 
 ## §15. License
 
-This repository is an educational research platform. Code is provided as-is for academic use. If you build upon this work, cite the foundational papers and acknowledge the pedagogical structure.
+This repository uses dual licensing:
+
+| Component | License | File |
+|-----------|---------|------|
+| **Source code** (`train.py`, `eval.py`, `scripts/`, `docker/`) | MIT | [`LICENSE`](LICENSE) |
+| **Tutorials and documentation** (`tutorials/`, `docs/`, `README.md`, `syllabus.md`) | CC BY-NC-SA 4.0 | [`LICENSE-DOCS`](LICENSE-DOCS) |
+
+**What this means:**
+- **Code:** Use freely, including commercially. Attribution appreciated but not required.
+- **Tutorials:** Share and adapt for non-commercial purposes with attribution. If you build educational materials on top, use the same license.
+
+If you build upon this work, please cite the foundational papers (see §14) and acknowledge the pedagogical structure.
 
 ---
 

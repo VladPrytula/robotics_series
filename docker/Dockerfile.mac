@@ -36,5 +36,4 @@ RUN python -m pip install --no-cache-dir -U pip wheel \
     mujoco \
     stable-baselines3 \
     tensorboard \
-    imageio \
-    wandb
+    imageio

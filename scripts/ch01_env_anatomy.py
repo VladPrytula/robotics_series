@@ -91,8 +91,8 @@ def _space_summary(space: Any) -> Any:
             "type": "Box",
             "shape": list(space.shape),
             "dtype": str(space.dtype),
-            "low_min": float(space.low.min()),
-            "high_max": float(space.high.max()),
+            "low": [float(x) for x in space.low.flat],
+            "high": [float(x) for x in space.high.flat],
         }
     return {"type": type(space).__name__, "repr": repr(space)}
 
@@ -176,6 +176,8 @@ def cmd_reward_check(args: argparse.Namespace) -> int:
                     break
 
             if terminated or truncated:
+                # Use timestep index (not episode count) so each reset gets a unique seed,
+                # even if episodes vary in length across runs.
                 obs, info = env.reset(seed=args.seed + t + 1)
 
         if mismatches:
