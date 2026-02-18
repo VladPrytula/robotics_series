@@ -3,7 +3,7 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────
 # push-public.sh -- Push filtered content to the public GitHub repo
 #
-# Usage:  bash scripts/push-public.sh [--dry-run]
+# Usage:  bash scripts/push-public.sh [--dry-run] [-m "commit message"]
 #
 # What it does:
 #   1. Creates a temporary orphan branch from current HEAD
@@ -16,7 +16,19 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────
 
 DRY_RUN=false
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
+COMMIT_MSG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=true; shift ;;
+        --message|-m) COMMIT_MSG="$2"; shift 2 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+if [[ -z "$COMMIT_MSG" ]]; then
+    COMMIT_MSG="public: filtered export from $(git rev-parse --short HEAD)"
+fi
 
 GITHUB_REMOTE="github"
 PUBLIC_BRANCH="__public_staging"
@@ -101,7 +113,7 @@ PUBIGNORE
 git add .gitignore
 
 echo "==> Committing filtered state..."
-git commit --allow-empty -m "public: filtered export from $(git rev-parse --short HEAD)"
+git commit --allow-empty -m "${COMMIT_MSG}"
 
 if $DRY_RUN; then
     echo "==> [DRY RUN] Would push to '${GITHUB_REMOTE}/main'"
