@@ -110,7 +110,7 @@ site/
 Thumbs.db
 PUBIGNORE
 
-git add .gitignore
+git rm --cached .gitignore >/dev/null 2>&1 || true
 
 echo "==> Committing filtered state..."
 git commit --allow-empty -m "${COMMIT_MSG}"
