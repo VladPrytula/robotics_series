@@ -2,7 +2,7 @@
 """Chapter 05: PickAndPlace -- From Push to Grasping
 
 Week 5 goals:
-1. Dense debug: validate pipeline on FetchPickAndPlaceDense-v4 (~5 min)
+1. Dense debug: validate pipeline on FetchPickAndPlaceDense-v4 (~13 min)
 2. Sparse + HER: transfer ch04's proven hyperparameters to PickAndPlace
 3. Stratified evaluation: measure air-goal vs table-goal performance separately
 4. Stress evaluation: quantify robustness under observation/action noise
@@ -338,9 +338,10 @@ class NoisyEvalWrapper:
         self.obs_noise_std = obs_noise_std
         self.act_noise_std = act_noise_std
         self.rng = np.random.default_rng(seed)
-        # Forward common attributes
-        self.observation_space = env.observation_space
-        self.action_space = env.action_space
+        # Forward common attributes (env may be None when used as param carrier)
+        if env is not None:
+            self.observation_space = env.observation_space
+            self.action_space = env.action_space
 
     def reset(self, **kwargs: Any) -> tuple:
         obs, info = self.env.reset(**kwargs)

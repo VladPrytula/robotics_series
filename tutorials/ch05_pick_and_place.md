@@ -105,28 +105,7 @@ At 500k steps we see enough learning signal to distinguish "pipeline works but t
 
 If you see WARNING, fix the pipeline before proceeding. Dense debugging takes 13 minutes; discovering a bug after a 5M-step sparse run takes hours.
 
-#### What Our Dense Debug Actually Showed
-
-Running `dense-debug` on our DGX with an RTX A100 (~540 fps):
-
-| Metric | Value | Interpretation |
-|--------|-------|----------------|
-| Training steps | 500k | ~15 min wall time |
-| Final rolling success | 3-8% | Agent finds occasional successes |
-| Eval success (50 ep, deterministic) | 0.0% | Within statistical noise at this success rate |
-| Mean return | -13.77 | Above random baseline (~-15) |
-| Mean final distance | 0.2754m | Agent approaches but doesn't reach goals |
-| Table goal return | -9.78 | Nearly 2x better than air goals |
-| Air goal return | -16.22 | Harder -- requires grasping |
-| Verdict | **LEARNING** | Pipeline validated |
-
-**Why 0% eval success despite 3-8% training success?** This is a common and instructive RL evaluation gap:
-
-1. **Training success** is a rolling average across many episodes, including exploratory (non-deterministic) actions. Occasional random grasps inflate the rolling average.
-2. **Eval success** runs 50 episodes with **deterministic** actions. A policy at ~4% success has only ~2 expected successes in 50 episodes -- and with variance, 0 is entirely plausible. (Formally: $P(\text{0 successes}) = 0.96^{50} \approx 0.13$ -- a 13% chance.)
-3. **The more robust signal is mean return.** A return of -13.77 is reliably above the random baseline (-15), confirming the agent learned something about approaching objects even if it cannot yet complete the full grasp-lift-place sequence.
-
-The stratified data confirms what section 5.3 predicted: the agent is nearly 2x closer to success on table goals (distance 0.196m) than air goals (distance 0.324m). It has learned to move toward objects on the table -- a behavior similar to Push -- but has not yet discovered grasping. This is exactly the learning progression we expect, and it validates that goal stratification is revealing information that aggregate metrics hide.
+Our dense debug produced a LEARNING verdict: 0% eval success but mean return of -13.77, above the random baseline of ~-15. The stratified data confirmed section 5.3's prediction -- table goals were nearly 2x closer to success than air goals, showing the agent learned pushing-like behavior before grasping. Full results and analysis are in section 5.10.
 
 ---
 
@@ -188,7 +167,7 @@ Standard evaluation tests the policy under clean conditions -- the same physics 
 1. **Observation noise:** $\tilde{s}_t = s_t + \epsilon_s$, where $\epsilon_s \sim \mathcal{N}(0, \sigma_{\text{obs}}^2 I)$
 2. **Action noise:** $\tilde{a}_t = \text{clip}(a_t + \epsilon_a, a_{\text{low}}, a_{\text{high}})$, where $\epsilon_a \sim \mathcal{N}(0, \sigma_{\text{act}}^2 I)$
 
-Default noise levels: $\sigma_{\text{obs}} = 0.01$, $\sigma_{\text{act}} = 0.05$.
+Default noise levels: $\sigma_{\text{obs}} = 0.01$, $\sigma_{\text{act}} = 0.05$. Note: observation noise is applied only to the `observation` key of the dict observation, not to `desired_goal` or `achieved_goal` -- we are testing robustness to sensor noise, not changing the task.
 
 **Why these noise levels?** The observation noise $\sigma_{\text{obs}} = 0.01$ corresponds to roughly 1cm position error, which is realistic for camera-based state estimation. The action noise $\sigma_{\text{act}} = 0.05$ corresponds to 5% of the action range, a reasonable model of actuator imprecision.
 
@@ -208,14 +187,16 @@ If sparse PickAndPlace success remains below 60% after 5M steps, we have a fallb
 
 **Motivating problem.** The full PickAndPlace goal distribution includes goals that require the most complex behavior (grasping + lifting to a specific height). If the agent rarely encounters goals it can solve early in training, it collects few positive rewards and learning stalls. Curriculum learning addresses this by starting with goals the agent can already solve and gradually expanding the difficulty.
 
+**Intuition.** Think of learning to juggle: you start with one ball before adding two and three. Curriculum learning applies the same principle -- give the agent easy goals first (nearby, on the table) so it experiences success, then gradually introduce harder goals (farther away, in the air) as it improves.
+
 **Definition (Curriculum Learning).** Instead of sampling goals from the full distribution, we start with easy goals and gradually increase difficulty:
 
 - **Difficulty 0:** Goals within 2cm of the object, all on the table (essentially a very short Push)
 - **Difficulty 1:** Goals up to 15cm away, ~50% in the air (full distribution)
 
-A schedule function $d(t) : [0, T] \to [0, 1]$ maps training progress to difficulty. We implement two modes:
+A schedule function $d(t) : [0, T_{\text{train}}] \to [0, 1]$ maps training progress (timestep $t$ out of $T_{\text{train}}$ total training steps) to difficulty. We implement two modes:
 
-1. **Linear:** $d(t) = t / T$ -- difficulty increases steadily regardless of performance
+1. **Linear:** $d(t) = t / T_{\text{train}}$ -- difficulty increases steadily regardless of performance
 2. **Success-gated:** $d(t) = d(t-1) + \Delta$ only when $\text{SR}(t) > \theta$ over a sliding window -- difficulty advances only when the agent masters the current level
 
 Curriculum learning is **not** in the default pipeline -- it is an option if the direct approach fails. We prefer testing the simpler approach first: if ch04's hyperparameters transfer directly, we don't need the added complexity. This follows a general principle: add complexity only when simpler approaches demonstrably fail, and keep the simpler approach as the baseline for comparison.
@@ -310,15 +291,16 @@ The callback advances difficulty during SB3 training. It implements the `__call_
 
 To use curriculum with `make_vec_env`, pass a factory function:
 
-```python
-from stable_baselines3.common.env_util import make_vec_env
+!!! lab "Illustrative"
+    ```python
+    from stable_baselines3.common.env_util import make_vec_env
 
-def make_curriculum_fn():
-    env = gym.make("FetchPickAndPlace-v4")
-    return CurriculumGoalWrapper(env, initial_difficulty=0.0)
+    def make_curriculum_fn():
+        env = gym.make("FetchPickAndPlace-v4")
+        return CurriculumGoalWrapper(env, initial_difficulty=0.0)
 
-vec_env = make_vec_env(make_curriculum_fn, n_envs=8)
-```
+    vec_env = make_vec_env(make_curriculum_fn, n_envs=8)
+    ```
 
 Note a subtlety: when using vectorized environments, each sub-environment gets its own `CurriculumGoalWrapper` instance. The schedule callback should reference one of them (or a shared difficulty value) to advance difficulty. The chapter script handles this by accessing the wrapper through `vec_env.envs[0]`.
 
@@ -457,26 +439,28 @@ bash docker/dev.sh python scripts/ch05_pick_and_place.py eval \
     --ckpt checkpoints/sac_her_FetchPickAndPlace-v4_seed0.zip
 ```
 
-The evaluation reports overall, air, and table success rates separately. Example output:
+The evaluation reports overall, air, and table success rates separately. Our actual output (seed 0):
 
 ```
 ============================================================
 Evaluation Results: FetchPickAndPlace-v4
 ============================================================
-  Overall:    XX.X% success (100 episodes)
-  Air goals:  XX.X% success (N episodes)
-  Table goals: XX.X% success (N episodes)
-  Time to success: XX.X steps (among successes)
-  Final distance:  0.XXXXm
-  Action smoothness: 0.XXXXXX
+  Overall:     100.0% success (100 episodes)
+  Air goals:   100.0% success (56 episodes)
+  Table goals: 100.0% success (44 episodes)
+  Time to success: 10.7 steps (among successes)
+  Final distance:  0.0138m
+  Action smoothness: 0.196
 ```
+
+Action smoothness measures how much consecutive actions differ (we will define this formally in Chapter 6). Lower values indicate smoother, more physically plausible motion.
 
 **What to look for:**
 
-- Overall success rate: target >60% (good), >80% (strong)
-- Air gap: table success - air success. If >20%, the agent pushes well but grasps poorly
-- Time to success: should be shorter for table goals (simpler behavior, fewer phases)
-- Final distance: should decrease as training progresses; air goals will have larger distances
+- Overall success rate: target >60% (good), >80% (strong). We achieved **100%**.
+- Air gap: table success - air success. If >20%, the agent pushes well but grasps poorly. Ours: **0%**.
+- Time to success: should be shorter for table goals (simpler behavior, fewer phases). Confirmed: **8.2 vs 12.6 steps**.
+- Final distance: air goals achieve tighter placement (0.009m) than table goals (0.018m) -- grasping gives more precise control than pushing.
 
 ### 5.13 Stress Evaluation
 
@@ -485,7 +469,7 @@ bash docker/dev.sh python scripts/ch05_pick_and_place.py stress \
     --ckpt checkpoints/sac_her_FetchPickAndPlace-v4_seed0.zip
 ```
 
-Injects observation noise ($\sigma = 0.01$) and action noise ($\sigma = 0.05$) during evaluation:
+Injects observation noise ($\sigma = 0.01$) and action noise ($\sigma = 0.05$) during evaluation using a `NoisyEvalWrapper` (a lightweight `gym.Wrapper` that adds Gaussian noise to observations and actions at each step). Our actual output (seed 0):
 
 ```
 ============================================================
@@ -493,18 +477,18 @@ Stress Test Results: FetchPickAndPlace-v4
 ============================================================
   Condition            |    Success |        Air |      Table
   -------------------------------------------------------
-  Clean                |     XX.X% |      XX.X% |      XX.X%
-  Stress               |     XX.X% |      XX.X% |      XX.X%
-  Degradation          |    +X.X%  |     +X.X%  |     +X.X%
+  Clean                |    100.0% |    100.0% |    100.0%
+  Stress               |    100.0% |    100.0% |    100.0%
+  Degradation          |     +0.0% |     +0.0% |     +0.0%
 
-  Verdict: ROBUST / MODERATE / FRAGILE
+  Verdict: ROBUST -- less than 10% degradation under noise
 ```
 
 **What to look for:**
 
-- Degradation < 10%: robust policy, good sign
-- Air degradation vs table degradation: grasping may be more sensitive to noise (precision finger control) than pushing (tolerates sloppy contact)
-- If fragile: the policy relies on precise trajectories rather than robust behavior
+- Degradation < 10%: robust policy. We achieved **1.7% mean degradation** -- well within ROBUST.
+- Air degradation vs table degradation: grasping is more noise-sensitive. Confirmed: **up to 7.1% air degradation vs 0% table degradation** (seed 2).
+- If fragile: the policy relies on precise trajectories. Our policies are robust -- even the worst seed under noise achieves 96% overall and 92.9% on air goals.
 
 ### 5.14 Full Pipeline
 
@@ -517,16 +501,28 @@ This runs all stages in sequence (~5 hours total for 3 seeds). The `compare` sta
 
 ### 5.15 Results and Analysis
 
-*Sparse training results will be filled after the full pipeline completes.*
-
 #### Hyperparameter Transfer from Push
 
 | Metric | Push (ch04) | PickAndPlace (ch05) | Transfer? |
 |--------|-------------|---------------------|-----------|
-| Overall success | 99.4% +/- 0.9% | TBD | |
+| Overall success | 99.4% +/- 0.9% | **100.0% +/- 0.0%** | Yes |
 | Training steps | 2M | 5M | More steps needed |
 | gamma | 0.95 | 0.95 | Same |
 | ent_coef | 0.05 | 0.05 | Same |
+
+**The hyperparameters transfer completely.** Ch04's configuration ($\gamma = 0.95$, `ent_coef = 0.05`, `n_sampled_goal = 4`) achieves 100% success on PickAndPlace across all 3 seeds -- matching or exceeding Push's 99.4%. This is strong evidence that these values capture general properties of sparse goal-conditioned learning in Fetch environments, not task-specific tuning.
+
+The learning curve reveals when grasping "clicks":
+
+| Steps | Seed 0 | Seed 1 | Seed 2 |
+|-------|--------|--------|--------|
+| 1M | 19% | 17% | 8% |
+| 2M | 52% | 42% | -- |
+| 3M | 96% | 69% | -- |
+| 4M | 95% | 99% | -- |
+| 5M | **98%** | **98%** | -- |
+
+The inflection around 2-3M steps marks where the agent transitions from primarily pushing (table goals) to reliable grasping (air goals). Before this point, success rates are 17-52% -- mostly table goals solved by pushing. After 3M steps, grasping clicks and success jumps to 69-98%.
 
 #### Dense Debug (Pipeline Validation)
 
@@ -539,21 +535,33 @@ This runs all stages in sequence (~5 hours total for 3 seeds). The `compare` sta
 | Air gap (return) | 6.44 | Table goals ~2x easier |
 | Verdict | LEARNING | Pipeline works, task needs more steps |
 
-#### Stratified Breakdown (Sparse, 5M steps)
+#### Stratified Breakdown (Sparse, 5M steps, 3 seeds)
 
 | Goal Type | Success Rate | Time to Success | Final Distance |
 |-----------|-------------|-----------------|----------------|
-| Air | TBD | TBD | TBD |
-| Table | TBD | TBD | TBD |
-| Gap | TBD | -- | -- |
+| Air | 100.0% +/- 0.0% | ~12.6 steps | 0.0092m |
+| Table | 100.0% +/- 0.0% | ~8.2 steps | 0.0176m |
+| Gap | 0.0% | -- | -- |
 
-#### Stress Test Summary
+Success rates are mean +/- 95% CI across 3 seeds. Time-to-success and final distance are averaged across all episodes of seed 0 (100 episodes); cross-seed variation is negligible (< 0.3 steps).
+
+The air gap is **zero** -- the agent has fully mastered grasping. Two observations:
+
+1. **Air goals take longer** (12.6 vs 8.2 steps) because they require the full multi-phase sequence (approach, grasp, lift, carry, place) while table goals can be solved by shorter pushing trajectories.
+2. **Air goals achieve tighter final distance** (0.009m vs 0.018m). This seems counterintuitive, but makes sense: once the agent has grasped the object, it has precise control over placement. Pushing is inherently less precise because the object can slide unpredictably.
+
+#### Stress Test Summary (3 seeds)
 
 | Condition | Overall | Air | Table |
 |-----------|---------|-----|-------|
-| Clean | TBD | TBD | TBD |
-| Stress | TBD | TBD | TBD |
-| Degradation | TBD | TBD | TBD |
+| Clean | 100.0% | 100.0% | 100.0% |
+| Stress (seed 0) | 100.0% | 100.0% | 100.0% |
+| Stress (seed 1) | 99.0% | 98.2% | 100.0% |
+| Stress (seed 2) | 96.0% | 92.9% | 100.0% |
+| **Mean degradation** | **1.7% +/- 2.4%** | **3.0%** | **0.0%** |
+| Verdict | **ROBUST** | | |
+
+The +/- values are 95% CI across 3 seeds. The policies are robust under noise ($\sigma_{\text{obs}} = 0.01$, $\sigma_{\text{act}} = 0.05$), with mean degradation of only 1.7%. As predicted in section 5.7, **air goals are more noise-sensitive** than table goals (up to 7.1% degradation for seed 2 vs 0% for table). This confirms that grasping requires more precise finger-object coordination, but even the worst case (92.9% air success under noise) is well within the ROBUST threshold.
 
 ### 5.16 CLI Parameter Reference
 
@@ -605,9 +613,11 @@ Key options:
 | Goal stratification | Separate evaluation of air goals vs table goals |
 | Air gap | $\text{SR}_{\text{table}} - \text{SR}_{\text{air}}$: quantifies grasp learning vs push learning |
 | Stress evaluation | Noise injection to quantify policy robustness |
+| NoisyEvalWrapper | `gym.Wrapper` that injects observation and action noise during eval |
 | Degradation | Performance drop under noise: robust (<10%), moderate (10-30%), fragile (>30%) |
 | Curriculum learning | Gradually increasing goal difficulty during training |
 | Difficulty schedule | Mapping from training progress to goal distribution |
+| CurriculumGoalWrapper | `gym.Wrapper` that replaces goal sampling with difficulty-controlled distribution |
 | Air goal / table goal | Goal classification based on z-coordinate relative to table surface |
 
 ### Files Generated

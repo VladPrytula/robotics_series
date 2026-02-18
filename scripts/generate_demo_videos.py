@@ -11,8 +11,8 @@ Usage:
     # Quick test (fewer episodes)
     python scripts/generate_demo_videos.py --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip --n-episodes 3
 
-    # Custom output
-    python scripts/generate_demo_videos.py --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip --out videos/my_demo
+    # Custom output (mp4 always; add --gif for gif)
+    python scripts/generate_demo_videos.py --ckpt checkpoints/ppo_FetchReachDense-v4_seed0.zip --out videos/my_demo --gif
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--out", default="videos/demo",
-        help="Output path prefix (will create .mp4 and .gif)"
+        help="Output path prefix (creates .mp4; add --gif for .gif)"
     )
     parser.add_argument(
         "--fps", type=int, default=30,
@@ -59,10 +59,20 @@ def parse_args() -> argparse.Namespace:
         "--height", type=int, default=480,
         help="Video height"
     )
-    parser.add_argument(
-        "--deterministic", action="store_true", default=True,
-        help="Use deterministic policy"
+    det = parser.add_mutually_exclusive_group()
+    det.add_argument(
+        "--deterministic",
+        dest="deterministic",
+        action="store_true",
+        help="Use deterministic policy (default)",
     )
+    det.add_argument(
+        "--stochastic",
+        dest="deterministic",
+        action="store_false",
+        help="Use stochastic policy",
+    )
+    parser.set_defaults(deterministic=True)
     parser.add_argument(
         "--gif", action="store_true",
         help="Also generate GIF (slower, larger file)"

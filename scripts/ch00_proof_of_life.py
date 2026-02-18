@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -157,6 +159,24 @@ def pick_env_id(preferred: Iterable[str] | None, explicit: str | None) -> str:
     raise SystemExit("No Fetch* envs found in gym registry. Is `gymnasium-robotics` installed?")
 
 
+def _gather_versions() -> dict[str, str]:
+    versions: dict[str, str] = {"python": sys.version.replace("\n", " ")}
+    try:
+        import torch
+
+        versions["torch"] = getattr(torch, "__version__", "unknown")
+        versions["torch_cuda"] = str(getattr(torch.version, "cuda", "unknown"))
+    except Exception:
+        pass
+    for module_name in ["gymnasium", "gymnasium_robotics", "mujoco", "stable_baselines3", "numpy"]:
+        try:
+            module = __import__(module_name)
+            versions[module_name] = getattr(module, "__version__", "unknown")
+        except Exception:
+            continue
+    return versions
+
+
 def cmd_gpu_check(_: argparse.Namespace) -> int:
     import torch
 
@@ -261,7 +281,23 @@ def cmd_ppo_smoke(args: argparse.Namespace) -> int:
         env.close()
 
     suffix = "" if str(out_path).endswith(".zip") else ".zip"
-    print(f"OK: saved {out_path}{suffix} (device={device}, env={env_id})")
+    checkpoint = str(out_path) + suffix
+    meta_path = out_path.with_suffix(".meta.json") if suffix else Path(str(out_path) + ".meta.json")
+    metadata = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "algo": "ppo",
+        "env_id": env_id,
+        "seed": args.seed,
+        "device": device,
+        "n_envs": args.n_envs,
+        "total_steps": args.total_steps,
+        "checkpoint": checkpoint,
+        "versions": _gather_versions(),
+    }
+    meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    print(f"OK: saved {checkpoint} (device={device}, env={env_id})")
+    print(f"OK: wrote {meta_path}")
     return 0
 
 
