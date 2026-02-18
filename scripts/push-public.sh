@@ -8,7 +8,7 @@ set -euo pipefail
 # What it does:
 #   1. Creates a temporary orphan branch from current HEAD
 #   2. Removes private files (Manning materials, personas, etc.)
-#   3. Swaps in a public-safe .gitignore
+#   3. Removes .gitignore from the public commit
 #   4. Force-pushes to the 'github' remote as 'main'
 #   5. Returns you to your original branch
 #
@@ -60,56 +60,8 @@ for path in "${PRIVATE_PATHS[@]}"; do
     fi
 done
 
-# Write the public .gitignore (re-adds private exclusions)
-echo "==> Writing public .gitignore..."
-cat > .gitignore << 'PUBIGNORE'
-# Documentation metadata (private)
-AGENTS.md
-CLAUDE.md
-vlad_prytula_persona.md
-content/POSTING_NOTES.md
-Manning/
-manning_proposal/
-syllabus_book.md
-scripts/push-public.sh
-PUBLISHING.md
-
-# Python virtual environment
-.venv/
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-
-# Generated artifacts
-results/
-checkpoints/
-checkpoints_sanity/
-results_sanity/
-videos/*
-!videos/*_demo*.gif
-!videos/*_demo*.mp4
-!videos/*_exploration*.gif
-!videos/ch04_push_*_grid.gif
-runs/
-
-# MkDocs build output
-site/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-PUBIGNORE
-
+# Remove .gitignore from the public commit (not needed in public repo)
+echo "==> Removing .gitignore from index..."
 git rm --cached .gitignore >/dev/null 2>&1 || true
 
 echo "==> Committing filtered state..."
@@ -127,7 +79,7 @@ else
 fi
 
 echo "==> Returning to '${ORIGINAL_BRANCH}'..."
-git checkout "${ORIGINAL_BRANCH}"
+git checkout -f "${ORIGINAL_BRANCH}"
 git branch -D "${PUBLIC_BRANCH}"
 
 echo "==> Clean. You're back on '${ORIGINAL_BRANCH}'."
