@@ -93,8 +93,10 @@ class RandomShiftAug(nn.Module):
         crop_h = torch.randint(0, 2 * pad + 1, (B,), device=x.device)
         crop_w = torch.randint(0, 2 * pad + 1, (B,), device=x.device)
 
-        # Gather cropped windows using advanced indexing
-        # Build index grids for the H and W dimensions
+        # Gather cropped windows using advanced indexing.
+        # Note: this allocates (B, C, H, W)-shaped index tensors, using ~4x
+        # the image memory. The original DrQ uses grid_sample for efficiency;
+        # we use explicit indexing for pedagogical clarity.
         h_idx = torch.arange(H, device=x.device).unsqueeze(0) + crop_h.unsqueeze(1)  # (B, H)
         w_idx = torch.arange(W, device=x.device).unsqueeze(0) + crop_w.unsqueeze(1)  # (B, W)
 
@@ -114,7 +116,11 @@ class RandomShiftAug(nn.Module):
 # =============================================================================
 
 # --8<-- [start:drq_replay_buffer]
-class DrQDictReplayBuffer:
+from stable_baselines3.common.buffers import DictReplayBuffer
+from stable_baselines3.common.type_aliases import DictReplayBufferSamples
+
+
+class DrQDictReplayBuffer(DictReplayBuffer):
     """SB3 DictReplayBuffer subclass that applies augmentation at sample time.
 
     This is the core DrQ integration: instead of modifying the loss function
@@ -141,49 +147,31 @@ class DrQDictReplayBuffer:
             Default "pixels" (matching our PixelObservationWrapper).
     """
 
-    def __new__(cls, *args: Any, aug_fn: nn.Module | None = None,
-                image_key: str = "pixels", **kwargs: Any) -> Any:
-        """Dynamically create a DictReplayBuffer subclass with augmentation.
+    def __init__(self, *args: Any, aug_fn: nn.Module | None = None,
+                 image_key: str = "pixels", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.aug_fn = aug_fn
+        self.image_key = image_key
 
-        We use __new__ with delayed import so that this module can be imported
-        without SB3 installed (for standalone testing of RandomShiftAug).
-        The actual subclass is created on first instantiation.
-        """
-        from stable_baselines3.common.buffers import DictReplayBuffer
-        from stable_baselines3.common.type_aliases import DictReplayBufferSamples
-
-        # Create the actual subclass dynamically
-        class _DrQBuffer(DictReplayBuffer):
-            def __init__(self, *a: Any, aug_fn: nn.Module | None = None,
-                         image_key: str = "pixels", **kw: Any) -> None:
-                super().__init__(*a, **kw)
-                self.aug_fn = aug_fn
-                self.image_key = image_key
-
-            def _get_samples(self, batch_inds, env=None):
-                samples = super()._get_samples(batch_inds, env)
-                if self.aug_fn is not None:
-                    aug_obs = dict(samples.observations)
-                    aug_next = dict(samples.next_observations)
-                    aug_obs[self.image_key] = self.aug_fn(
-                        samples.observations[self.image_key]
-                    )
-                    aug_next[self.image_key] = self.aug_fn(
-                        samples.next_observations[self.image_key]
-                    )
-                    return DictReplayBufferSamples(
-                        observations=aug_obs,
-                        actions=samples.actions,
-                        next_observations=aug_next,
-                        dones=samples.dones,
-                        rewards=samples.rewards,
-                    )
-                return samples
-
-        instance = DictReplayBuffer.__new__(_DrQBuffer)
-        _DrQBuffer.__init__(instance, *args, aug_fn=aug_fn,
-                            image_key=image_key, **kwargs)
-        return instance
+    def _get_samples(self, batch_inds, env=None):
+        samples = super()._get_samples(batch_inds, env)
+        if self.aug_fn is not None:
+            aug_obs = dict(samples.observations)
+            aug_next = dict(samples.next_observations)
+            aug_obs[self.image_key] = self.aug_fn(
+                samples.observations[self.image_key]
+            )
+            aug_next[self.image_key] = self.aug_fn(
+                samples.next_observations[self.image_key]
+            )
+            return DictReplayBufferSamples(
+                observations=aug_obs,
+                actions=samples.actions,
+                next_observations=aug_next,
+                dones=samples.dones,
+                rewards=samples.rewards,
+            )
+        return samples
 # --8<-- [end:drq_replay_buffer]
 
 

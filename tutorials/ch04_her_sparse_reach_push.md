@@ -500,7 +500,7 @@ bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py push-all \
 | Method | Success Rate | Notes |
 |--------|--------------|-------|
 | SAC (no HER) | ~0-5% | Almost never succeeds; no learning |
-| SAC + HER (best config) | **99.4% +/- 0.9%** | ent=0.05, gamma=0.95 (5 seeds) |
+| SAC + HER (best config) | **99.4% +/- 0.9%** | ent=0.05, gamma=0.95 (5 seeds; 3-seed pipeline yields ~99%) |
 | **Delta** | **>94 pp** | **This is the "clear separation" we seek** |
 
 #### Actual Results: Initial Attempt (500k steps)
@@ -984,6 +984,30 @@ Success Rate = 99.4% +/- 0.9% (5 seeds, 95% CI)
 ```
 **Rigorous clear separation: +94 pp vs no-HER, validated across 5 seeds.**
 
+*Clean re-run:* **Main pipeline with winning config (2M steps, 3 seeds):**
+
+After validating the winning hyperparameters through the sweep, we re-ran the main `env-all` pipeline with the correct settings. This is what you will see when running the recommended command:
+
+```
+======================================================================
+Week 4: HER vs No-HER Comparison (FetchPush-v4)
+======================================================================
+
+Metric                    |               No-HER |                  HER |        Delta
+-------------------------------------------------------------------------------------
+Success Rate              |        5.0% +/- 0.0% |       99.0% +/- 1.2% |       +94.0%
+Return (mean)             |    -47.500 +/- 0.000 |    -13.197 +/- 1.704 |      +34.303
+Final Distance (mean)     |    0.1841 +/- 0.0004 |    0.0257 +/- 0.0007 |      -0.1584
+-------------------------------------------------------------------------------------
+Seeds evaluated           |                    3 |                    3 |
+
+======================================================================
+CLEAR SEPARATION: HER dramatically outperforms no-HER on sparse rewards.
+Success rate improvement: 94.0%
+```
+
+Per-seed breakdown: seed 0 = 100%, seed 1 = 99%, seed 2 = 98%. This is consistent with the sweep result (99.4% +/- 0.9% across 5 seeds) and confirms the finding is not seed-specific.
+
 ### Statistical Validity
 
 With 3 seeds, you can report:
@@ -1108,7 +1132,7 @@ bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py train \
 
 Based on our experience, here is a systematic debugging approach:
 
-#### Step 1: Verify the Setup (Eliminiate User Error)
+#### Step 1: Verify the Setup (Eliminate User Error)
 
 Before blaming the algorithm, check:
 
@@ -1284,7 +1308,8 @@ Raw results are in `results/sweep/sweep_results_raw.json`. Each entry contains t
 | FetchReach-v4 | 96% | 100% | 500k steps | Reach too easy -- weak separation |
 | FetchPush-v4 | 5% | 5% | 500k, auto entropy | Insufficient training + entropy collapse |
 | FetchPush-v4 | 5% | 25% | 2M, auto entropy | Entropy collapsed to ~0.005 |
-| FetchPush-v4 | 5% | **99.4% +/- 0.9%** | 2M, **ent=0.05, gamma=0.95** | **Clear separation (+94 pp, 5 seeds)** |
+| FetchPush-v4 | 5% | **99.0% +/- 1.2%** | 2M, **ent=0.05, gamma=0.95** | **Clear separation (+94 pp, 3 seeds)** |
+| FetchPush-v4 (sweep) | 5% | **99.4% +/- 0.9%** | 2M, same config | **Confirmed across 5 seeds (120-run sweep)** |
 
 ### Sweep-Validated Recommendations
 
@@ -1300,7 +1325,7 @@ Raw results are in `results/sweep/sweep_results_raw.json`. Each entry contains t
 1. **Reach is too easy** -- both methods succeed, weak separation
 2. **Push requires fixed entropy** -- auto-tuning collapses exploration too early
 3. **Gamma=0.95 is the dominant factor** -- matches the task's 15-25 step timescale
-4. **HER + optimal config achieves 99.4% +/- 0.9%** -- massive improvement over no-HER (~5%)
+4. **HER + optimal config achieves 99.0% +/- 1.2% (3 seeds), 99.4% +/- 0.9% (5 seeds)** -- massive improvement over no-HER (~5%)
 5. **The simplest config wins** -- the best parameters are all the simplest choices (lower entropy, default nsg, early learning start, lower gamma)
 
 ### Files Generated

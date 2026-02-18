@@ -61,9 +61,12 @@ class NatureCNN(nn.Module):
     Args:
         in_channels: Number of input channels (3 for RGB).
         features_dim: Output feature dimension (512 in original paper).
+        image_size: Input image dimensions as (height, width). Default (84, 84)
+            matches Mnih et al. (2015) conventions.
     """
 
-    def __init__(self, in_channels: int = 3, features_dim: int = 512):
+    def __init__(self, in_channels: int = 3, features_dim: int = 512,
+                 image_size: tuple[int, int] = (84, 84)):
         super().__init__()
 
         self.conv = nn.Sequential(
@@ -78,7 +81,7 @@ class NatureCNN(nn.Module):
 
         # Compute flatten dim by doing a forward pass with dummy input
         with torch.no_grad():
-            dummy = torch.zeros(1, in_channels, 84, 84)
+            dummy = torch.zeros(1, in_channels, image_size[0], image_size[1])
             n_flatten = self.conv(dummy).shape[1]
 
         self.fc = nn.Sequential(
@@ -397,9 +400,8 @@ def visual_sac_update(
     policy_optimizer.step()
 
     # --- Temperature update ---
-    with torch.no_grad():
-        _, log_probs_det = policy(pixels, goal)
-    alpha_loss = -(log_alpha.exp() * (log_probs_det + target_entropy)).mean()
+    # Reuse log_probs from actor step (detached to stop gradient through policy)
+    alpha_loss = -(log_alpha.exp() * (log_probs.detach() + target_entropy)).mean()
 
     alpha_optimizer.zero_grad()
     alpha_loss.backward()

@@ -12,6 +12,7 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 | [Chapter 3](ch03_sac_dense_reach.md) | SAC + Replay Diagnostics | SAC matches PPO, Q-values stable | `ch03_sac_dense_reach.py` | `labs/sac_from_scratch.py` |
 | [Chapter 4](ch04_her_sparse_reach_push.md) | HER for Sparse | HER vs no-HER separation on Reach/Push | `ch04_her_sparse_reach_push.py` | `labs/her_relabeler.py` |
 | [Chapter 5](ch05_pick_and_place.md) | PickAndPlace | Stratified eval, stress testing, curriculum | `ch05_pick_and_place.py` | `labs/curriculum_wrapper.py` |
+| [Chapter 6](ch06_action_interface.md) | Policies as Controllers | RL vs PD decomposition, engineering metrics | `ch06_action_interface.py` | `labs/action_interface.py` |
 
 **Legend:**
 
@@ -33,7 +34,9 @@ Chapter 4: Can I handle sparse rewards? (HER)
     |
 Chapter 5: Can I grasp and place? (PickAndPlace)
     |
-Chapters 6-10: Advanced topics
+Chapter 6: How well does it behave? (Policies as Controllers)
+    |
+Chapters 7-10: Advanced topics
 ```
 
 ## Running Commands
@@ -56,6 +59,7 @@ bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all --seed 0
 bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py reach-all --seeds 0,1,2
 bash docker/dev.sh python scripts/ch05_pick_and_place.py all --seeds 0,1,2
+bash docker/dev.sh python scripts/ch06_action_interface.py all --seed 0 --include-push
 
 # Partial execution
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py train --total-steps 100000
@@ -198,6 +202,32 @@ tmux attach -t rl                 # Reattach later
 - Why is PickAndPlace harder than Push? *(multi-phase control: grasp, lift, place)*
 - What does the air gap tell you? *(table goals may be solvable by pushing; air goals require grasping)*
 - Why test with dense rewards first? *(catches pipeline bugs in 5 min instead of 5 hours)*
+
+---
+
+### [Chapter 6: Policies as Controllers](ch06_action_interface.md)
+
+**Goal:** Treat learned policies like controllers and quantify stability.
+
+**You will:**
+
+- Evaluate SAC+HER checkpoints under action scaling and low-pass filtering
+- Build a proportional controller (PD) as a classical baseline
+- Compare RL vs PD with engineering metrics (smoothness, TTS, path length, energy)
+- Decompose tasks into "planning" vs "control" problems
+
+**Actual Results:**
+
+| Environment | RL (SAC+HER) | PD (best Kp) | Gap | Task Type |
+|-------------|:------------:|:------------:|:---:|-----------|
+| FetchReach-v4 | 100% | 100% | 0% | Pure control |
+| FetchPush-v4 | 100% | 5% | +95% | Requires planning |
+
+**Done when:** You can compare RL vs baseline on controller metrics and answer:
+
+- Why does scaling down hurt Push but not Reach? *(Push needs minimum contact force)*
+- Why does heavy filtering cost 15% success on Push? *(delays approach-to-push transition)*
+- What does a 95% gap between RL and PD tell you? *(RL learned multi-phase strategies PD cannot)*
 
 ---
 

@@ -3,8 +3,12 @@
 Pixel Observation Wrapper -- Pedagogical Implementation
 
 This module implements a pixel observation wrapper for Fetch environments,
-replacing the flat state vector with rendered camera images. Goals stay as
-vectors (HER-compatible for future chapters).
+replacing the flat state vector with rendered camera images.
+
+Observation design variants (controlled by `goal_mode`):
+- "none": pixels only (no privileged coordinates exposed in the observation)
+- "desired": pixels + desired_goal (goal-conditioned, but still privileged)
+- "both": pixels + achieved_goal + desired_goal (fully goal-conditioned, most privileged)
 
 Usage:
     # Run verification (sanity checks, ~30 seconds)
@@ -62,7 +66,7 @@ def render_and_resize(
 
     # Resize via PIL (bilinear is the default and a good trade-off)
     pil_img = Image.fromarray(frame)
-    pil_img = pil_img.resize((image_size[1], image_size[0]), Image.BILINEAR)
+    pil_img = pil_img.resize((image_size[1], image_size[0]), Image.Resampling.BILINEAR)
 
     # HWC -> CHW for PyTorch/SB3
     pixels = np.array(pil_img, dtype=np.uint8).transpose(2, 0, 1)
@@ -78,31 +82,40 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         {"observation": float64[10], "achieved_goal": float64[3], "desired_goal": float64[3]}
 
     This wrapper replaces the "observation" key with a "pixels" key containing
-    a rendered camera image. Goals stay as vectors -- they are low-dimensional
-    and needed for HER relabeling.
+    a rendered camera image. Goal keys are optional (see `goal_mode`).
 
-    The output observation space:
-        {
-            "pixels": Box(0, 255, (3, H, W), uint8),
-            "achieved_goal": Box(3,),
-            "desired_goal": Box(3,),
-        }
+    The output observation space depends on `goal_mode`:
+        goal_mode="none":
+            {"pixels": Box(0, 255, (3, H, W), uint8)}
+        goal_mode="desired":
+            {"pixels": Box(...), "desired_goal": Box(3,)}
+        goal_mode="both":
+            {"pixels": Box(...), "achieved_goal": Box(3,), "desired_goal": Box(3,)}
 
     SB3's CombinedExtractor automatically detects the image space via
-    is_image_space() and routes it through NatureCNN, while goal vectors
-    go through an MLP. No custom policy_kwargs needed.
+    is_image_space() and routes it through NatureCNN. Non-image keys
+    (for example, goal vectors) are flattened and concatenated; the
+    policy/value MLP comes after concatenation. No custom policy_kwargs needed.
 
     Args:
         env: A goal-conditioned Gymnasium environment with render_mode="rgb_array".
         image_size: Target (height, width) for rendered images. Default (84, 84)
             matches the NatureCNN input size from Mnih et al. (2015).
+        goal_mode: One of {"none", "desired", "both"} controlling which (if any)
+            goal vectors are exposed in the observation dict. Even when goals
+            are not exposed, the wrapper stores the last raw goal dict on
+            `last_raw_obs` for evaluation/debugging (not used by the policy).
     """
 
     def __init__(
         self,
         env: gym.Env,
         image_size: tuple[int, int] = (84, 84),
+        goal_mode: str = "both",
     ):
+        if goal_mode not in {"none", "desired", "both"}:
+            raise ValueError(f"Invalid goal_mode={goal_mode!r}, expected one of: none, desired, both")
+
         # Validate render mode before wrapping
         assert env.render_mode == "rgb_array", (
             f"PixelObservationWrapper requires render_mode='rgb_array', "
@@ -111,21 +124,27 @@ class PixelObservationWrapper(gym.ObservationWrapper):
 
         super().__init__(env)
         self._image_size = image_size
+        self._goal_mode = goal_mode
+        self.last_raw_obs: dict[str, np.ndarray] | None = None
 
         # Build new observation space: pixels + goal vectors
         # The original dict space has observation, achieved_goal, desired_goal
         old_spaces = env.observation_space.spaces
 
-        self.observation_space = gym.spaces.Dict({
+        new_spaces: dict[str, gym.Space] = {
             "pixels": gym.spaces.Box(
                 low=0,
                 high=255,
                 shape=(3, image_size[0], image_size[1]),
                 dtype=np.uint8,
             ),
-            "achieved_goal": old_spaces["achieved_goal"],
-            "desired_goal": old_spaces["desired_goal"],
-        })
+        }
+        if self._goal_mode in {"desired", "both"}:
+            new_spaces["desired_goal"] = old_spaces["desired_goal"]
+        if self._goal_mode == "both":
+            new_spaces["achieved_goal"] = old_spaces["achieved_goal"]
+
+        self.observation_space = gym.spaces.Dict(new_spaces)
 
     def observation(self, observation: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """Transform observation: replace flat state with pixels.
@@ -133,13 +152,17 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         This is called after every reset() and step(). The MuJoCo scene
         is already in the correct state, so we just need to render.
         """
+        # Keep the raw (goal-conditioned) observation for evaluation/debugging.
+        # This is not part of the observation passed to the policy when goal_mode="none".
+        self.last_raw_obs = observation
         pixels = render_and_resize(self.env, self._image_size)
 
-        return {
-            "pixels": pixels,
-            "achieved_goal": observation["achieved_goal"],
-            "desired_goal": observation["desired_goal"],
-        }
+        out: dict[str, np.ndarray] = {"pixels": pixels}
+        if self._goal_mode in {"desired", "both"}:
+            out["desired_goal"] = observation["desired_goal"]
+        if self._goal_mode == "both":
+            out["achieved_goal"] = observation["achieved_goal"]
+        return out
 # --8<-- [end:pixel_obs_wrapper]
 
 
@@ -152,7 +175,7 @@ class PixelReplayBuffer:
     """Replay buffer that stores images as uint8 for memory efficiency.
 
     Standard replay buffers store observations as float32. For 84x84x3 images,
-    that is 84,768 bytes per image. Storing as uint8 costs only 21,192 bytes --
+    that is 84,672 bytes per image. Storing as uint8 costs only 21,168 bytes --
     a 4x savings. With 200K transitions (obs + next_obs), this saves ~25GB.
 
     The buffer converts to float32 [0, 1] only at sample time, when the batch
@@ -208,6 +231,10 @@ class PixelReplayBuffer:
             next_obs: Next observation dict.
             done: Whether episode terminated.
         """
+        assert "achieved_goal" in obs and "desired_goal" in obs, (
+            "PixelReplayBuffer requires 'achieved_goal' and 'desired_goal' "
+            "in obs. Use PixelObservationWrapper with goal_mode='both'."
+        )
         self.pixels[self.ptr] = obs["pixels"]
         self.achieved_goals[self.ptr] = obs["achieved_goal"]
         self.desired_goals[self.ptr] = obs["desired_goal"]
@@ -266,30 +293,37 @@ def verify_observation_space():
 
     print("Verifying observation space...")
 
-    env = gym.make("FetchReachDense-v4", render_mode="rgb_array")
-    wrapped = PixelObservationWrapper(env, image_size=(84, 84))
+    for goal_mode in ["none", "desired", "both"]:
+        env = gym.make("FetchReachDense-v4", render_mode="rgb_array")
+        wrapped = PixelObservationWrapper(env, image_size=(84, 84), goal_mode=goal_mode)
+        space = wrapped.observation_space
 
-    space = wrapped.observation_space
+        # Check keys
+        assert "pixels" in space.spaces, "Missing 'pixels' key"
+        assert "observation" not in space.spaces, "Flat 'observation' should be removed"
+        if goal_mode in {"desired", "both"}:
+            assert "desired_goal" in space.spaces, "Missing 'desired_goal' key"
+        else:
+            assert "desired_goal" not in space.spaces, "desired_goal should not be exposed in goal_mode='none'"
+        if goal_mode == "both":
+            assert "achieved_goal" in space.spaces, "Missing 'achieved_goal' key"
+        else:
+            assert "achieved_goal" not in space.spaces, "achieved_goal should not be exposed unless goal_mode='both'"
 
-    # Check keys
-    assert "pixels" in space.spaces, "Missing 'pixels' key"
-    assert "achieved_goal" in space.spaces, "Missing 'achieved_goal' key"
-    assert "desired_goal" in space.spaces, "Missing 'desired_goal' key"
-    assert "observation" not in space.spaces, "Flat 'observation' should be removed"
+        # Check pixel space
+        px_space = space["pixels"]
+        assert px_space.shape == (3, 84, 84), f"Expected (3,84,84), got {px_space.shape}"
+        assert px_space.dtype == np.uint8, f"Expected uint8, got {px_space.dtype}"
+        assert px_space.low.min() == 0 and px_space.high.max() == 255
 
-    # Check pixel space
-    px_space = space["pixels"]
-    assert px_space.shape == (3, 84, 84), f"Expected (3,84,84), got {px_space.shape}"
-    assert px_space.dtype == np.uint8, f"Expected uint8, got {px_space.dtype}"
-    assert px_space.low.min() == 0 and px_space.high.max() == 255
+        # Check goal space shapes when present
+        if "desired_goal" in space.spaces:
+            assert space["desired_goal"].shape == (3,), f"desired_goal shape: {space['desired_goal'].shape}"
+        if "achieved_goal" in space.spaces:
+            assert space["achieved_goal"].shape == (3,), f"achieved_goal shape: {space['achieved_goal'].shape}"
 
-    # Check goal spaces preserved
-    assert space["achieved_goal"].shape == (3,), f"Goal shape: {space['achieved_goal'].shape}"
-    assert space["desired_goal"].shape == (3,), f"Goal shape: {space['desired_goal'].shape}"
-
-    wrapped.close()
-    print(f"  Pixel space: {px_space.shape}, dtype={px_space.dtype}")
-    print(f"  Goal spaces: achieved={space['achieved_goal'].shape}, desired={space['desired_goal'].shape}")
+        wrapped.close()
+        print(f"  goal_mode={goal_mode}: keys={list(space.spaces.keys())}")
     print("  [PASS] Observation space OK")
 
 
@@ -333,7 +367,7 @@ def verify_goal_preservation():
     print("Verifying goal preservation...")
 
     env = gym.make("FetchReachDense-v4", render_mode="rgb_array")
-    wrapped = PixelObservationWrapper(env, image_size=(84, 84))
+    wrapped = PixelObservationWrapper(env, image_size=(84, 84), goal_mode="both")
 
     obs, _ = wrapped.reset()
     ag = obs["achieved_goal"]
@@ -368,20 +402,19 @@ def verify_sb3_compatibility():
         print("  [SKIP] SB3 not installed")
         return
 
-    env = gym.make("FetchReachDense-v4", render_mode="rgb_array")
-    wrapped = PixelObservationWrapper(env, image_size=(84, 84))
+    for goal_mode in ["none", "desired", "both"]:
+        env = gym.make("FetchReachDense-v4", render_mode="rgb_array")
+        wrapped = PixelObservationWrapper(env, image_size=(84, 84), goal_mode=goal_mode)
+        px_space = wrapped.observation_space["pixels"]
+        detected = is_image_space(px_space)
+        wrapped.close()
 
-    px_space = wrapped.observation_space["pixels"]
-    detected = is_image_space(px_space)
-
-    wrapped.close()
-
-    assert detected, (
-        "SB3 is_image_space() did not recognize our pixel space. "
-        f"Space: shape={px_space.shape}, dtype={px_space.dtype}, "
-        f"low={px_space.low.min()}, high={px_space.high.max()}"
-    )
-    print(f"  is_image_space(pixels) = {detected}")
+        assert detected, (
+            "SB3 is_image_space() did not recognize our pixel space. "
+            f"Space: shape={px_space.shape}, dtype={px_space.dtype}, "
+            f"low={px_space.low.min()}, high={px_space.high.max()}"
+        )
+        print(f"  goal_mode={goal_mode}: is_image_space(pixels) = {detected}")
     print("  [PASS] SB3 compatibility OK")
 
 

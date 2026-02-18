@@ -4,7 +4,7 @@
 Week 10 goals:
 1. Demonstrate state vs pixel observation trade-off on the same task
 2. Train SAC on FetchReachDense with privileged state (baseline from Ch3)
-3. Train SAC on FetchReachDense with pixel observations (CNN encoder)
+3. Train SAC on FetchReachDense from pixels only (no goal vectors in obs)
 4. Measure the sample-efficiency gap quantitatively
 5. Train SAC with DrQ augmentation (Kostrikov et al. 2020) to close the gap
 6. Three-way comparison: state vs pixel vs pixel+DrQ
@@ -78,6 +78,7 @@ class Ch10Config:
     pixel_total_steps: int = 2_000_000
     pixel_buffer_size: int = 200_000
     image_size: int = 84
+    pixel_goal_mode: str = "none"  # {"none", "desired", "both"} (see PixelObservationWrapper)
 
     # DrQ (pixel + augmentation)
     drq_pad: int = 4
@@ -165,6 +166,16 @@ def _comparison_path(cfg: Ch10Config) -> Path:
 # Commands
 # =============================================================================
 
+def _pixel_mode_tag(cfg: Ch10Config) -> str:
+    """Filename tag for pixel-mode runs (encodes goal exposure)."""
+    return "pixel" if cfg.pixel_goal_mode == "none" else f"pixel_{cfg.pixel_goal_mode}"
+
+
+def _drq_mode_tag(cfg: Ch10Config) -> str:
+    """Filename tag for DrQ pixel-mode runs (encodes goal exposure)."""
+    return "drq" if cfg.pixel_goal_mode == "none" else f"drq_{cfg.pixel_goal_mode}"
+
+
 def cmd_train_state(cfg: Ch10Config) -> int:
     """Train SAC on FetchReachDense with privileged state observations."""
     import gymnasium_robotics  # noqa: F401
@@ -248,9 +259,12 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
     """Train SAC on FetchReachDense with pixel observations.
 
     Uses PixelObservationWrapper from our lab module to replace the flat
-    state vector with rendered 84x84 RGB images. SB3's MultiInputPolicy
-    auto-detects the image space and uses CombinedExtractor (NatureCNN
-    for pixels, MLP for goal vectors).
+    state vector with rendered 84x84 RGB images. By default we expose
+    pixels only (goal vectors removed from the observation dict), so the
+    policy must infer both current state and target from the image.
+
+    SB3's MultiInputPolicy auto-detects the image space and uses
+    CombinedExtractor -> NatureCNN for the "pixels" key.
     """
     import gymnasium as gym
     import gymnasium_robotics  # noqa: F401
@@ -268,10 +282,15 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
           f"total_steps={cfg.pixel_total_steps}, device={device}")
     print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
           f"buffer_size={cfg.pixel_buffer_size}")
+    print(f"[ch10] pixel_goal_mode={cfg.pixel_goal_mode} (none=fully pixels-only)")
 
     def make_pixel_env():
         env = gym.make(cfg.env, render_mode="rgb_array")
-        return PixelObservationWrapper(env, image_size=(cfg.image_size, cfg.image_size))
+        return PixelObservationWrapper(
+            env,
+            image_size=(cfg.image_size, cfg.image_size),
+            goal_mode=cfg.pixel_goal_mode,
+        )
 
     env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed)
 
@@ -301,7 +320,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
         elapsed = time.perf_counter() - t0
         fps = cfg.pixel_total_steps / elapsed
 
-        ckpt = _ckpt_path(cfg, "pixel")
+        ckpt = _ckpt_path(cfg, _pixel_mode_tag(cfg))
         model.save(str(ckpt))
         print(f"[ch10] Saved: {ckpt}")
         print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
@@ -313,7 +332,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
     meta = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "chapter": 10,
-        "mode": "pixel",
+        "mode": _pixel_mode_tag(cfg),
         "algo": "sac",
         "env_id": cfg.env,
         "seed": cfg.seed,
@@ -324,6 +343,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
         "steps_per_sec": fps,
         "checkpoint": str(ckpt),
         "image_size": cfg.image_size,
+        "pixel_goal_mode": cfg.pixel_goal_mode,
         "hyperparams": {
             "batch_size": cfg.batch_size,
             "buffer_size": cfg.pixel_buffer_size,
@@ -370,10 +390,15 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
           f"total_steps={cfg.drq_total_steps}, device={device}")
     print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
           f"drq_pad={cfg.drq_pad}, buffer_size={cfg.pixel_buffer_size}")
+    print(f"[ch10] pixel_goal_mode={cfg.pixel_goal_mode} (none=fully pixels-only)")
 
     def make_pixel_env():
         env = gym.make(cfg.env, render_mode="rgb_array")
-        return PixelObservationWrapper(env, image_size=(cfg.image_size, cfg.image_size))
+        return PixelObservationWrapper(
+            env,
+            image_size=(cfg.image_size, cfg.image_size),
+            goal_mode=cfg.pixel_goal_mode,
+        )
 
     env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed)
 
@@ -406,7 +431,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
         elapsed = time.perf_counter() - t0
         fps = cfg.drq_total_steps / elapsed
 
-        ckpt = _ckpt_path(cfg, "drq")
+        ckpt = _ckpt_path(cfg, _drq_mode_tag(cfg))
         model.save(str(ckpt))
         print(f"[ch10] Saved: {ckpt}")
         print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
@@ -418,7 +443,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
     meta = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "chapter": 10,
-        "mode": "drq",
+        "mode": _drq_mode_tag(cfg),
         "algo": "sac",
         "env_id": cfg.env,
         "seed": cfg.seed,
@@ -430,6 +455,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
         "checkpoint": str(ckpt),
         "image_size": cfg.image_size,
         "drq_pad": cfg.drq_pad,
+        "pixel_goal_mode": cfg.pixel_goal_mode,
         "hyperparams": {
             "batch_size": cfg.batch_size,
             "buffer_size": cfg.pixel_buffer_size,
@@ -466,7 +492,11 @@ def cmd_eval(cfg: Ch10Config, ckpt: str, pixel: bool = False, json_out: str | No
         return 1
 
     if pixel:
-        return _eval_pixel(cfg, ckpt, json_out)
+        ckpt_name = Path(ckpt).name
+        inferred_mode = _drq_mode_tag(cfg) if "sac_drq" in ckpt_name else _pixel_mode_tag(cfg)
+        if json_out is None:
+            json_out = str(_result_path(cfg, inferred_mode))
+        return _eval_pixel(cfg, ckpt, json_out, mode=inferred_mode)
     else:
         return _eval_state(cfg, ckpt, json_out)
 
@@ -500,7 +530,7 @@ def _eval_state(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
     return result.returncode
 
 
-def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
+def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None, *, mode: str) -> int:
     """Evaluate a pixel-based checkpoint.
 
     We can't use eval.py directly because it doesn't know about our
@@ -517,7 +547,7 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
     from scripts.labs.pixel_wrapper import PixelObservationWrapper
 
     if json_out is None:
-        json_out = str(_result_path(cfg, "pixel"))
+        json_out = str(_result_path(cfg, _pixel_mode_tag(cfg)))
 
     Path(json_out).parent.mkdir(parents=True, exist_ok=True)
 
@@ -529,8 +559,23 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
     model = SAC.load(ckpt, device=device)
 
     # Create pixel environment
-    env = gym.make(cfg.env, render_mode="rgb_array")
-    env = PixelObservationWrapper(env, image_size=(cfg.image_size, cfg.image_size))
+    base_env = gym.make(cfg.env, render_mode="rgb_array")
+    env = PixelObservationWrapper(
+        base_env,
+        image_size=(cfg.image_size, cfg.image_size),
+        goal_mode=cfg.pixel_goal_mode,
+    )
+
+    # Validate observation space matches the loaded model
+    env_keys = set(env.observation_space.spaces.keys())
+    model_keys = set(model.observation_space.spaces.keys())
+    if env_keys != model_keys:
+        print(f"[ch10] ERROR: Observation space mismatch.")
+        print(f"[ch10]   Model expects keys: {sorted(model_keys)}")
+        print(f"[ch10]   Environment provides: {sorted(env_keys)}")
+        print(f"[ch10]   Check that --pixel-goal-mode matches training.")
+        env.close()
+        return 1
 
     episode_returns = []
     episode_successes = []
@@ -556,10 +601,17 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
         is_success = info.get("is_success", False)
         episode_successes.append(float(is_success))
 
-        # Final distance: achieved_goal vs desired_goal
-        dist = np.linalg.norm(
-            obs["achieved_goal"] - obs["desired_goal"]
-        )
+        # Final distance: achieved_goal vs desired_goal.
+        # In pixels-only mode these are not exposed in `obs`; we read them
+        # from the wrapper's stored raw observation.
+        if "achieved_goal" in obs and "desired_goal" in obs:
+            achieved = obs["achieved_goal"]
+            desired = obs["desired_goal"]
+        else:
+            assert env.last_raw_obs is not None, "PixelObservationWrapper did not store last_raw_obs"
+            achieved = env.last_raw_obs["achieved_goal"]
+            desired = env.last_raw_obs["desired_goal"]
+        dist = np.linalg.norm(achieved - desired)
         final_distances.append(float(dist))
 
     env.close()
@@ -580,8 +632,9 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
     report = {
         "checkpoint": ckpt,
         "env_id": cfg.env,
-        "mode": "pixel",
+        "mode": mode,
         "image_size": cfg.image_size,
+        "pixel_goal_mode": cfg.pixel_goal_mode,
         "n_episodes": cfg.n_eval_episodes,
         "deterministic": cfg.eval_deterministic,
         "aggregate": {
@@ -592,12 +645,16 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None) -> int:
             "final_distance_std": distance_std,
             "ep_len_mean": length_mean,
         },
-        "per_episode": {
-            "returns": episode_returns,
-            "successes": episode_successes,
-            "final_distances": final_distances,
-            "lengths": episode_lengths,
-        },
+        "per_episode": [
+            {
+                "seed": ep,
+                "return": episode_returns[ep],
+                "success": int(episode_successes[ep]),
+                "final_distance": final_distances[ep],
+                "length": episode_lengths[ep],
+            }
+            for ep in range(cfg.n_eval_episodes)
+        ],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "versions": _gather_versions(),
     }
@@ -614,11 +671,9 @@ def cmd_compare(cfg: Ch10Config) -> int:
     Prints a 3-column table when DrQ results are available, otherwise
     falls back to 2-column (state vs pixel) comparison.
     """
-    import math
-
     state_path = _result_path(cfg, "state")
-    pixel_path = _result_path(cfg, "pixel")
-    drq_path = _result_path(cfg, "drq")
+    pixel_path = _result_path(cfg, _pixel_mode_tag(cfg))
+    drq_path = _result_path(cfg, _drq_mode_tag(cfg))
 
     if not state_path.exists():
         print(f"[ch10] State results not found: {state_path}")
@@ -647,8 +702,8 @@ def cmd_compare(cfg: Ch10Config) -> int:
 
     # Load metadata for training steps
     state_ckpt = _ckpt_path(cfg, "state")
-    pixel_ckpt = _ckpt_path(cfg, "pixel")
-    drq_ckpt = _ckpt_path(cfg, "drq")
+    pixel_ckpt = _ckpt_path(cfg, _pixel_mode_tag(cfg))
+    drq_ckpt = _ckpt_path(cfg, _drq_mode_tag(cfg))
     state_steps = cfg.state_total_steps
     pixel_steps = cfg.pixel_total_steps
     drq_steps = cfg.drq_total_steps
@@ -739,11 +794,12 @@ def cmd_compare(cfg: Ch10Config) -> int:
             "env_id": cfg.env,
             "seed": cfg.seed,
             "state": {"total_steps": state_steps, **s},
-            "pixel": {"total_steps": pixel_steps, "image_size": cfg.image_size, **p},
+            "pixel": {"total_steps": pixel_steps, "image_size": cfg.image_size, "pixel_goal_mode": cfg.pixel_goal_mode, **p},
             "drq": {
                 "total_steps": drq_steps,
                 "image_size": cfg.image_size,
                 "drq_pad": cfg.drq_pad,
+                "pixel_goal_mode": cfg.pixel_goal_mode,
                 **d,
             },
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -784,7 +840,7 @@ def cmd_compare(cfg: Ch10Config) -> int:
             "env_id": cfg.env,
             "seed": cfg.seed,
             "state": {"total_steps": state_steps, **s},
-            "pixel": {"total_steps": pixel_steps, "image_size": cfg.image_size, **p},
+            "pixel": {"total_steps": pixel_steps, "image_size": cfg.image_size, "pixel_goal_mode": cfg.pixel_goal_mode, **p},
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -826,7 +882,7 @@ def cmd_all(cfg: Ch10Config) -> int:
 
     # 4. Evaluate pixel
     print("\n[4/7] Evaluating pixel checkpoint...")
-    pixel_ckpt = str(_ckpt_path(cfg, "pixel"))
+    pixel_ckpt = str(_ckpt_path(cfg, _pixel_mode_tag(cfg)))
     ret = cmd_eval(cfg, pixel_ckpt, pixel=True)
     if ret != 0:
         print("[ch10] Pixel evaluation failed")
@@ -841,8 +897,8 @@ def cmd_all(cfg: Ch10Config) -> int:
 
     # 6. Evaluate pixel + DrQ
     print("\n[6/7] Evaluating pixel+DrQ checkpoint...")
-    drq_ckpt = str(_ckpt_path(cfg, "drq"))
-    ret = cmd_eval(cfg, drq_ckpt, pixel=True, json_out=str(_result_path(cfg, "drq")))
+    drq_ckpt = str(_ckpt_path(cfg, _drq_mode_tag(cfg)))
+    ret = cmd_eval(cfg, drq_ckpt, pixel=True, json_out=str(_result_path(cfg, _drq_mode_tag(cfg))))
     if ret != 0:
         print("[ch10] DrQ evaluation failed")
         return ret
@@ -950,6 +1006,12 @@ Examples:
                           help="Replay buffer size for pixel (memory-conscious)")
     p_pixel.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size,
                           help="Image size for pixel observations")
+    p_pixel.add_argument(
+        "--pixel-goal-mode",
+        choices=["none", "desired", "both"],
+        default=DEFAULT_CONFIG.pixel_goal_mode,
+        help="Which goal vectors (if any) are included in the observation dict",
+    )
 
     # train-pixel-drq
     p_drq = sub.add_parser("train-pixel-drq",
@@ -967,6 +1029,12 @@ Examples:
                         help="Image size for pixel observations")
     p_drq.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad,
                         help="DrQ augmentation pad size (pixels)")
+    p_drq.add_argument(
+        "--pixel-goal-mode",
+        choices=["none", "desired", "both"],
+        default=DEFAULT_CONFIG.pixel_goal_mode,
+        help="Which goal vectors (if any) are included in the observation dict",
+    )
 
     # eval
     p_eval = sub.add_parser("eval", help="Evaluate a checkpoint",
@@ -980,6 +1048,12 @@ Examples:
                          help="Number of evaluation episodes")
     p_eval.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size,
                          help="Image size (must match training)")
+    p_eval.add_argument(
+        "--pixel-goal-mode",
+        choices=["none", "desired", "both"],
+        default=DEFAULT_CONFIG.pixel_goal_mode,
+        help="Pixel observation design (must match training for pixel checkpoints)",
+    )
 
     # compare
     p_cmp = sub.add_parser("compare", help="Compare state vs pixel vs pixel+DrQ results",
@@ -995,6 +1069,12 @@ Examples:
                         help="DrQ training steps (for ratio calculation)")
     p_cmp.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad,
                         help="DrQ augmentation pad size (for reporting)")
+    p_cmp.add_argument(
+        "--pixel-goal-mode",
+        choices=["none", "desired", "both"],
+        default=DEFAULT_CONFIG.pixel_goal_mode,
+        help="Which goal vectors (if any) were included during pixel training",
+    )
 
     # all
     p_all = sub.add_parser("all",
@@ -1012,6 +1092,12 @@ Examples:
     p_all.add_argument("--drq-total-steps", type=int, default=DEFAULT_CONFIG.drq_total_steps)
     p_all.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad)
     p_all.add_argument("--n-eval-episodes", type=int, default=DEFAULT_CONFIG.n_eval_episodes)
+    p_all.add_argument(
+        "--pixel-goal-mode",
+        choices=["none", "desired", "both"],
+        default=DEFAULT_CONFIG.pixel_goal_mode,
+        help="Which goal vectors (if any) are included in the pixel observation dict",
+    )
 
     args = parser.parse_args()
 
