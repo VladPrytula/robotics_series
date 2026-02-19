@@ -548,8 +548,10 @@ Expected output:
 ============================================================
 PPO From Scratch -- SB3 Comparison
 ============================================================
-Max abs advantage diff: ~0
-Max abs returns diff:   ~0
+Max abs advantage diff: 0.000e+00
+Max abs returns diff:   0.000e+00
+Tolerance (atol):       1.0e-06
+
 [PASS] Our GAE matches SB3 RolloutBuffer
 ```
 

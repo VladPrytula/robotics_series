@@ -48,6 +48,9 @@ def render_and_resize(
     2. PIL resizes to image_size (bilinear interpolation)
     3. We transpose HWC -> CHW for PyTorch/SB3 compatibility
 
+    When ``gym.make(..., width=W, height=H)`` renders natively at the target
+    size, step 2 is skipped entirely (no PIL import, no resize).
+
     Args:
         env: A Gymnasium environment with render_mode="rgb_array".
         image_size: Target (height, width) for the output image.
@@ -55,8 +58,6 @@ def render_and_resize(
     Returns:
         CHW uint8 array of shape (3, H, W) with values in [0, 255].
     """
-    from PIL import Image
-
     # MuJoCo render -> HWC uint8 (e.g., 480x480x3)
     frame = env.render()
     assert frame is not None, "env.render() returned None -- is render_mode='rgb_array'?"
@@ -64,7 +65,15 @@ def render_and_resize(
         f"Expected HWC image, got shape {frame.shape}"
     )
 
+    # Fast path: frame already at target size (native rendering).
+    # .copy() ensures the array owns its data -- MuJoCo may reuse the
+    # internal render buffer on the next call.
+    if frame.shape[:2] == image_size:
+        return frame.transpose(2, 0, 1).copy()
+
     # Resize via PIL (bilinear is the default and a good trade-off)
+    from PIL import Image
+
     pil_img = Image.fromarray(frame)
     pil_img = pil_img.resize((image_size[1], image_size[0]), Image.Resampling.BILINEAR)
 

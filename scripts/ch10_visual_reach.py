@@ -84,6 +84,12 @@ class Ch10Config:
     drq_pad: int = 4
     drq_total_steps: int = 2_000_000
 
+    # Fast mode -- bundles all speed optimizations
+    fast: bool = False           # --fast: enable native render + SubprocVecEnv + more envs
+    native_render: bool = False  # render at 84x84 natively (skip PIL resize)
+    gradient_steps: int = 1      # SAC gradient steps per env step
+    use_subproc: bool = False    # use SubprocVecEnv instead of DummyVecEnv
+
     # Shared SAC hyperparameters
     batch_size: int = 256
     learning_starts: int = 1_000
@@ -283,16 +289,38 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
     print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
           f"buffer_size={cfg.pixel_buffer_size}")
     print(f"[ch10] pixel_goal_mode={cfg.pixel_goal_mode} (none=fully pixels-only)")
+    if cfg.fast:
+        print(f"[ch10] FAST MODE: native_render={cfg.native_render}, "
+              f"use_subproc={cfg.use_subproc}, gradient_steps={cfg.gradient_steps}")
+
+    # Build env factory -- native_render passes width/height to MuJoCo
+    # so it renders at 84x84 directly, skipping PIL resize entirely.
+    # gymnasium_robotics is imported inside the factory because SubprocVecEnv
+    # runs each factory in a child process that needs the Fetch envs registered.
+    img_sz = cfg.image_size
 
     def make_pixel_env():
-        env = gym.make(cfg.env, render_mode="rgb_array")
-        return PixelObservationWrapper(
+        import gymnasium_robotics  # noqa: F401 -- register Fetch envs in subprocess
+        from scripts.labs.pixel_wrapper import PixelObservationWrapper as _Wrapper
+
+        make_kwargs: dict[str, Any] = {"render_mode": "rgb_array"}
+        if cfg.native_render:
+            make_kwargs["width"] = img_sz
+            make_kwargs["height"] = img_sz
+        env = gym.make(cfg.env, **make_kwargs)
+        return _Wrapper(
             env,
-            image_size=(cfg.image_size, cfg.image_size),
+            image_size=(img_sz, img_sz),
             goal_mode=cfg.pixel_goal_mode,
         )
 
-    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed)
+    vec_env_kwargs: dict[str, Any] = {}
+    if cfg.use_subproc:
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+        vec_env_kwargs["vec_env_cls"] = SubprocVecEnv
+
+    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed,
+                       **vec_env_kwargs)
 
     log_dir = _ensure_dir(cfg.log_dir)
     run_id = f"sac_pixel/{cfg.env}/seed{cfg.seed}"
@@ -313,6 +341,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
             gamma=cfg.gamma,
             tau=cfg.tau,
             ent_coef="auto",
+            gradient_steps=cfg.gradient_steps,
         )
 
         t0 = time.perf_counter()
@@ -344,6 +373,10 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
         "checkpoint": str(ckpt),
         "image_size": cfg.image_size,
         "pixel_goal_mode": cfg.pixel_goal_mode,
+        "fast_mode": cfg.fast,
+        "native_render": cfg.native_render,
+        "gradient_steps": cfg.gradient_steps,
+        "use_subproc": cfg.use_subproc,
         "hyperparams": {
             "batch_size": cfg.batch_size,
             "buffer_size": cfg.pixel_buffer_size,
@@ -352,6 +385,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
             "gamma": cfg.gamma,
             "tau": cfg.tau,
             "ent_coef": "auto",
+            "gradient_steps": cfg.gradient_steps,
         },
         "versions": _gather_versions(),
     }
@@ -391,16 +425,36 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
     print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
           f"drq_pad={cfg.drq_pad}, buffer_size={cfg.pixel_buffer_size}")
     print(f"[ch10] pixel_goal_mode={cfg.pixel_goal_mode} (none=fully pixels-only)")
+    if cfg.fast:
+        print(f"[ch10] FAST MODE: native_render={cfg.native_render}, "
+              f"use_subproc={cfg.use_subproc}, gradient_steps={cfg.gradient_steps}")
+
+    # gymnasium_robotics imported inside factory for SubprocVecEnv subprocess
+    # registration (same pattern as cmd_train_pixel).
+    img_sz = cfg.image_size
 
     def make_pixel_env():
-        env = gym.make(cfg.env, render_mode="rgb_array")
-        return PixelObservationWrapper(
+        import gymnasium_robotics  # noqa: F401 -- register Fetch envs in subprocess
+        from scripts.labs.pixel_wrapper import PixelObservationWrapper as _Wrapper
+
+        make_kwargs: dict[str, Any] = {"render_mode": "rgb_array"}
+        if cfg.native_render:
+            make_kwargs["width"] = img_sz
+            make_kwargs["height"] = img_sz
+        env = gym.make(cfg.env, **make_kwargs)
+        return _Wrapper(
             env,
-            image_size=(cfg.image_size, cfg.image_size),
+            image_size=(img_sz, img_sz),
             goal_mode=cfg.pixel_goal_mode,
         )
 
-    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed)
+    vec_env_kwargs: dict[str, Any] = {}
+    if cfg.use_subproc:
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+        vec_env_kwargs["vec_env_cls"] = SubprocVecEnv
+
+    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed,
+                       **vec_env_kwargs)
 
     log_dir = _ensure_dir(cfg.log_dir)
     run_id = f"sac_drq/{cfg.env}/seed{cfg.seed}"
@@ -419,6 +473,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
             gamma=cfg.gamma,
             tau=cfg.tau,
             ent_coef="auto",
+            gradient_steps=cfg.gradient_steps,
             replay_buffer_class=DrQDictReplayBuffer,
             replay_buffer_kwargs={
                 "aug_fn": RandomShiftAug(pad=cfg.drq_pad),
@@ -456,6 +511,10 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
         "image_size": cfg.image_size,
         "drq_pad": cfg.drq_pad,
         "pixel_goal_mode": cfg.pixel_goal_mode,
+        "fast_mode": cfg.fast,
+        "native_render": cfg.native_render,
+        "gradient_steps": cfg.gradient_steps,
+        "use_subproc": cfg.use_subproc,
         "hyperparams": {
             "batch_size": cfg.batch_size,
             "buffer_size": cfg.pixel_buffer_size,
@@ -464,6 +523,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
             "gamma": cfg.gamma,
             "tau": cfg.tau,
             "ent_coef": "auto",
+            "gradient_steps": cfg.gradient_steps,
             "drq_pad": cfg.drq_pad,
         },
         "versions": _gather_versions(),
@@ -559,7 +619,11 @@ def _eval_pixel(cfg: Ch10Config, ckpt: str, json_out: str | None, *, mode: str) 
     model = SAC.load(ckpt, device=device)
 
     # Create pixel environment
-    base_env = gym.make(cfg.env, render_mode="rgb_array")
+    make_kwargs: dict[str, Any] = {"render_mode": "rgb_array"}
+    if cfg.native_render:
+        make_kwargs["width"] = cfg.image_size
+        make_kwargs["height"] = cfg.image_size
+    base_env = gym.make(cfg.env, **make_kwargs)
     env = PixelObservationWrapper(
         base_env,
         image_size=(cfg.image_size, cfg.image_size),
@@ -940,13 +1004,53 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
                         help="Soft update coefficient")
 
 
+def _add_fast_args(parser: argparse.ArgumentParser) -> None:
+    """Add --fast mode arguments (shared by pixel training and eval)."""
+    parser.add_argument("--fast", action="store_true", default=False,
+                        help="Enable fast mode: native 84x84 render, SubprocVecEnv, "
+                             "more envs (12), gradient_steps=3")
+    parser.add_argument("--gradient-steps", type=int, default=None,
+                        help="SAC gradient steps per env step (default: 1, fast: 3)")
+
+
 def _config_from_args(args: argparse.Namespace) -> Ch10Config:
-    """Build Ch10Config from parsed args."""
+    """Build Ch10Config from parsed args.
+
+    When --fast is set, we apply speed-optimized defaults for fields the user
+    did not explicitly override.  The detection logic:
+    - ``--gradient-steps`` uses ``default=None`` as a sentinel.  If None and
+      fast, we set it to 3; if None and not fast, we set it to 1.
+    - ``--pixel-n-envs`` uses the dataclass default (4).  If the user didn't
+      pass it (value still 4) and fast, we bump to 12.
+    """
     cfg = Ch10Config()
     for attr in vars(cfg):
         arg_name = attr.replace("-", "_")
         if hasattr(args, arg_name):
-            setattr(cfg, attr, getattr(args, arg_name))
+            val = getattr(args, arg_name)
+            if val is not None:
+                setattr(cfg, attr, val)
+
+    # Resolve --fast defaults
+    fast = getattr(args, "fast", False)
+    if fast:
+        cfg.fast = True
+        cfg.native_render = True
+        cfg.use_subproc = True
+
+        # Bump pixel_n_envs only if user didn't explicitly set it
+        pixel_n_envs_from_cli = getattr(args, "pixel_n_envs", None)
+        if pixel_n_envs_from_cli == DEFAULT_CONFIG.pixel_n_envs:
+            cfg.pixel_n_envs = 12
+
+    # Resolve gradient_steps sentinel (None -> default)
+    gs = getattr(args, "gradient_steps", None)
+    if gs is not None:
+        cfg.gradient_steps = gs
+    elif fast:
+        cfg.gradient_steps = 3
+    # else: keep dataclass default (1)
+
     return cfg
 
 
@@ -1012,6 +1116,7 @@ Examples:
         default=DEFAULT_CONFIG.pixel_goal_mode,
         help="Which goal vectors (if any) are included in the observation dict",
     )
+    _add_fast_args(p_pixel)
 
     # train-pixel-drq
     p_drq = sub.add_parser("train-pixel-drq",
@@ -1035,6 +1140,7 @@ Examples:
         default=DEFAULT_CONFIG.pixel_goal_mode,
         help="Which goal vectors (if any) are included in the observation dict",
     )
+    _add_fast_args(p_drq)
 
     # eval
     p_eval = sub.add_parser("eval", help="Evaluate a checkpoint",
@@ -1054,6 +1160,7 @@ Examples:
         default=DEFAULT_CONFIG.pixel_goal_mode,
         help="Pixel observation design (must match training for pixel checkpoints)",
     )
+    _add_fast_args(p_eval)
 
     # compare
     p_cmp = sub.add_parser("compare", help="Compare state vs pixel vs pixel+DrQ results",
@@ -1098,6 +1205,7 @@ Examples:
         default=DEFAULT_CONFIG.pixel_goal_mode,
         help="Which goal vectors (if any) are included in the pixel observation dict",
     )
+    _add_fast_args(p_all)
 
     args = parser.parse_args()
 

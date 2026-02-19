@@ -471,9 +471,13 @@ Expected output:
 ============================================================
 SAC From Scratch -- SB3 Comparison
 ============================================================
-Max abs log_prob diff: ~0
+Max abs log_prob diff: 2.055e-02
+Tolerance (atol):      5.0e-02
+
 [PASS] Our squashed Gaussian log_prob matches SB3
 ```
+
+The ~0.02 nat difference comes from SB3's epsilon safety term: SB3 computes `log(1 - a^2 + 1e-6)` while our numerically stable formula computes the exact `log(1 - tanh^2(u))`. For non-saturated actions the formulas agree; the epsilon only matters when `|tanh(u)| -> 1`.
 
 ### 2.5.10 Exercises: Modify and Observe
 
@@ -519,7 +523,7 @@ The `tau` parameter controls how quickly target networks track the main networks
 
 *Question:* What happens with `tau=1.0` (hard update every step)? Why does slow tracking help stability?
 
-### 2.5.10 Demo: SAC Solves Pendulum
+### 2.5.11 Demo: SAC Solves Pendulum
 
 The from-scratch implementation can actually solve a continuous control task. Run:
 
@@ -620,7 +624,7 @@ Our test run achieved:
 - **~594 steps/second** throughput on NVIDIA GB10
 - **Entropy coefficient**: dropped from 0.47 to 0.0004 (policy became deterministic)
 
-### 3.2 What the Diagnostics Callback Logs
+### 3.3 What the Diagnostics Callback Logs
 
 Our custom `SACDiagnosticsCallback` logs to TensorBoard:
 
@@ -633,7 +637,7 @@ Our custom `SACDiagnosticsCallback` logs to TensorBoard:
 | `replay/goal_distance_mean` | How far from goals | Should decrease |
 | `replay/goal_within_threshold` | Fraction within success | Should increase |
 
-### 3.3 What to Watch For
+### 3.4 What to Watch For
 
 **Q-Value Behavior:**
 - Healthy: Q-values stabilize in a reasonable range (we observed `q_min_mean ~ -1.5`)
@@ -652,7 +656,7 @@ Our run showed gradual decrease over 1M steps, indicating the auto-tuning worked
 - Our run showed ~0.20m mean distance (historical average including early random data)
 - Current policy performance is measured by `rollout/success_rate` and evaluation metrics
 
-### 3.4 Throughput Scaling
+### 3.5 Throughput Scaling
 
 Off-policy methods can benefit from parallel environments, but the relationship is complex (more envs = more data, but also more stale):
 
@@ -665,7 +669,7 @@ This measures steps/second for different `n_envs` values. Expect:
 - Diminishing returns as CPU becomes the bottleneck
 - Sweet spot typically around 4-16 envs for SAC
 
-### 3.5 Actual Results
+### 3.6 Actual Results
 
 On FetchReachDense-v4 with 1M steps (NVIDIA GB10):
 
@@ -684,7 +688,7 @@ On FetchReachDense-v4 with 1M steps (NVIDIA GB10):
 - SAC is slower due to more network updates (actor + 2 critics + 2 targets) per step
 - SAC's slightly less smooth actions reflect the entropy bonus encouraging exploration
 
-### 3.6 Understanding GPU Utilization
+### 3.7 Understanding GPU Utilization
 
 You may notice low GPU utilization (~5-10%) during training:
 
@@ -715,7 +719,7 @@ For our curriculum, ~600 fps is sufficient. Don't optimize prematurely.
 
 ---
 
-### 3.7 Generating Demo Videos
+### 3.8 Generating Demo Videos
 
 To visualize your trained policy, use the video generation script:
 

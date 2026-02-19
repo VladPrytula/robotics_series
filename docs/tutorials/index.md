@@ -13,6 +13,8 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 | [Chapter 4](ch04_her_sparse_reach_push.md) | HER for Sparse | HER vs no-HER separation on Reach/Push | `ch04_her_sparse_reach_push.py` | `labs/her_relabeler.py` |
 | [Chapter 5](ch05_pick_and_place.md) | PickAndPlace | Stratified eval, stress testing, curriculum | `ch05_pick_and_place.py` | `labs/curriculum_wrapper.py` |
 | [Chapter 6](ch06_action_interface.md) | Policies as Controllers | RL vs PD decomposition, engineering metrics | `ch06_action_interface.py` | `labs/action_interface.py` |
+| [Chapter 7](ch07_robustness_curves.md) | Robustness Curves | Noise degradation analysis, robustness AUC | `ch07_robustness_curves.py` | `labs/robustness.py` |
+| [Chapter 10](ch10_visual_reach.md) | Visual SAC | State vs pixel vs DrQ comparison, `--fast` mode | `ch10_visual_reach.py` | `labs/pixel_wrapper.py`, `labs/visual_encoder.py`, `labs/image_augmentation.py` |
 
 **Legend:**
 
@@ -36,7 +38,9 @@ Chapter 5: Can I grasp and place? (PickAndPlace)
     |
 Chapter 6: How well does it behave? (Policies as Controllers)
     |
-Chapters 7-10: Advanced topics
+Chapter 7: How fragile is it? (Robustness Curves)
+    |
+Chapter 10: Can it learn from pixels? (Visual SAC + DrQ)
 ```
 
 ## Running Commands
@@ -228,6 +232,45 @@ tmux attach -t rl                 # Reattach later
 - Why does scaling down hurt Push but not Reach? *(Push needs minimum contact force)*
 - Why does heavy filtering cost 15% success on Push? *(delays approach-to-push transition)*
 - What does a 95% gap between RL and PD tell you? *(RL learned multi-phase strategies PD cannot)*
+
+---
+
+### [Chapter 7: Robustness Curves](ch07_robustness_curves.md)
+
+**Goal:** Quantify policy brittleness under observation and action noise.
+
+**You will:**
+
+- Inject calibrated noise into trained policies and measure degradation
+- Compute robustness metrics (critical sigma, degradation slope, AUC)
+- Compare robustness across algorithms and environments
+- Train noise-augmented policies for improved robustness
+
+**Done when:** Robustness sweeps complete and you can answer:
+
+- What noise level causes 50% success drop? *(critical sigma)*
+- Is the policy more sensitive to observation or action noise?
+- Does noise-augmented training improve robustness without hurting clean performance?
+
+---
+
+### [Chapter 10: Pixels, No Cheating](ch10_visual_reach.md)
+
+**Goal:** Quantify the cost of learning from pixels and recover part of the gap with DrQ.
+
+**You will:**
+
+- Train SAC on FetchReachDense with state observations (baseline)
+- Train SAC from 84x84 pixel observations (no privileged state)
+- Train SAC with DrQ random shift augmentation (Kostrikov et al., 2020)
+- Measure the sample-efficiency gap across all three configurations
+- Use `--fast` mode for 2-3x speedup (native rendering, SubprocVecEnv)
+
+**Done when:** Three-way comparison table exists and you can answer:
+
+- How many more samples does pixel SAC need vs state SAC?
+- How does DrQ regularization help the Q-function?
+- Why is rendering the bottleneck, not the GPU?
 
 ---
 

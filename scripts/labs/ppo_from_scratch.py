@@ -862,20 +862,18 @@ def main():
 Examples:
   --verify           Run sanity checks (all 6 components)
   --compare-sb3      Compare GAE against SB3 RolloutBuffer
-  --bridge           Alias for --compare-sb3
   --demo             Train on CartPole and solve it
   --demo --record    Train and save a GIF of the solved policy
         """
     )
     parser.add_argument("--verify", action="store_true", help="Run verification checks")
     parser.add_argument("--compare-sb3", action="store_true", help="Compare core invariants against SB3")
-    parser.add_argument("--bridge", action="store_true", help="Alias for --compare-sb3")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for --compare-sb3 (default: 0)")
     parser.add_argument("--demo", action="store_true", help="Run demo training on CartPole")
     parser.add_argument("--record", action="store_true", help="Record a GIF after training")
     args = parser.parse_args()
 
-    if args.compare_sb3 or args.bridge:
+    if args.compare_sb3:
         run_sb3_comparison(seed=args.seed)
     elif args.verify:
         run_verification()

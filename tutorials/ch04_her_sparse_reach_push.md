@@ -299,6 +299,9 @@ Expected output:
 HER Relabeler -- SB3 Comparison
 ============================================================
 Max abs reward diff: 0.000e+00
+Success fraction:    0.799
+n_sampled_goal:      4
+
 [PASS] SB3 HER relabeling is reward-consistent (compute_reward invariant)
 ```
 
