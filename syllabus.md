@@ -389,20 +389,20 @@ Done when
 - You can compare RL vs baseline on controller metrics (not just return).
 - You can separate “planning” issues from “control” issues with evidence.
 
-### Week 7 — Robustness: noise, randomization, brittleness curves
-Goal: quantify brittleness and improvements (don’t rely on videos).
+### Week 7 — Robustness: noise injection, brittleness curves, noise-augmented training
+Goal: quantify brittleness, train more robust policies, verify the improvement.
 
 Steps
-- [ ] Controlled noise injection sweeps:
-  - observation noise `σ`
-  - action execution noise `σ`
-- [ ] Domain randomization (start light):
-  - if physical params are hard to reach, begin with obs/action noise
-- [ ] Plot degradation curves with confidence bands across seeds.
+- [ ] Controlled noise injection sweeps (obs + action noise)
+- [ ] Degradation curves with confidence bands across seeds
+- [ ] P-controller baseline: same sweeps for comparison
+- [ ] Noise-augmented retraining: train SAC+HER under obs noise
+- [ ] Compare clean vs robust degradation curves
 
 Done when
-- At least one robustness technique measurably helps.
-- You can quantify “how brittle” with plots.
+- Degradation curves show clear brittleness patterns with CIs.
+- Noise-augmented policy shows improved critical sigma and robustness AUC.
+- Clean-vs-robust tradeoff is quantified with numbers.
 
 ### Week 8 — Second suite adapter (robosuite OR Meta-World)
 Goal: avoid overfitting intuition to Fetch.

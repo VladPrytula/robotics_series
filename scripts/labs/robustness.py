@@ -78,6 +78,7 @@ class NoisyEvalWrapper(gym.Wrapper):
         self.act_noise_std = act_noise_std
         self._rng = np.random.default_rng(seed)
 
+    # --8<-- [start:noisy_eval_wrapper_core]
     def reset(self, **kwargs: Any) -> tuple[Any, dict[str, Any]]:
         obs, info = self.env.reset(**kwargs)
         return self._add_obs_noise(obs), info
@@ -102,6 +103,7 @@ class NoisyEvalWrapper(gym.Wrapper):
             else:
                 noisy_obs[key] = val
         return noisy_obs
+    # --8<-- [end:noisy_eval_wrapper_core]
 # --8<-- [end:noisy_eval_wrapper]
 
 
@@ -202,6 +204,7 @@ def run_noise_sweep(
 
     results: list[NoiseSweepResult] = []
 
+    # --8<-- [start:run_noise_sweep_loop]
     for sigma in noise_levels:
         # Build wrapper kwargs based on noise type
         wrapper_kwargs: dict[str, Any] = {"seed": seed}
@@ -248,6 +251,7 @@ def run_noise_sweep(
             episode_successes=episode_successes,
         ))
 
+    # --8<-- [end:run_noise_sweep_loop]
     return results
 # --8<-- [end:run_noise_sweep]
 
@@ -364,6 +368,7 @@ def compute_degradation_summary(
             "robustness_auc": 0.0,
         }
 
+    # --8<-- [start:compute_degradation_summary_metrics]
     sigmas = [a["noise_std"] for a in aggregated]
     sr_means = [a["success_rate"]["mean"] for a in aggregated]
 
@@ -392,6 +397,7 @@ def compute_degradation_summary(
     for i in range(1, n):
         robustness_auc += 0.5 * (sr_means[i - 1] + sr_means[i]) * (sigmas[i] - sigmas[i - 1])
 
+    # --8<-- [end:compute_degradation_summary_metrics]
     return {
         "critical_sigma": critical_sigma,
         "degradation_slope": round(degradation_slope, 4),

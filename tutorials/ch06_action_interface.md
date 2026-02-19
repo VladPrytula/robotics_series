@@ -55,8 +55,8 @@ can insert transformations at evaluation time without retraining:
 
 1. **Action scaling:** $a_{\text{env}} = \text{clip}(\alpha \cdot a_{\text{raw}}, [-1, 1])$,
    where $\alpha > 0$ controls the magnitude.
-2. **Low-pass filtering:** $a_{\text{env}}^{(t)} = \beta \cdot a_{\text{raw}}^{(t)} + (1 - \beta) \cdot a_{\text{env}}^{(t-1)}$,
-   where $\beta \in (0, 1]$ controls the smoothing strength.
+2. **Low-pass filtering:** $a_{\text{env}}^{(t)} = \alpha \cdot a_{\text{raw}}^{(t)} + (1 - \alpha) \cdot a_{\text{env}}^{(t-1)}$,
+   where $\alpha \in (0, 1]$ controls the smoothing strength.
 
 These are **eval-time wrappers** -- they modify how actions are delivered
 without changing the learned policy weights. This lets us study the
@@ -131,19 +131,19 @@ rate may degrade at extreme scales.
 ### 6.6 Low-Pass Filtering (EMA)
 
 **Definition (Exponential Moving Average Filter).** Given a filter
-coefficient $\beta \in (0, 1]$, the filtered action at step $t$ is:
+coefficient $\alpha \in (0, 1]$, the filtered action at step $t$ is:
 
 $$
-a_{\text{out}}^{(t)} = \beta \cdot a_{\text{raw}}^{(t)} + (1 - \beta) \cdot a_{\text{out}}^{(t-1)}
+a_{\text{out}}^{(t)} = \alpha \cdot a_{\text{raw}}^{(t)} + (1 - \alpha) \cdot a_{\text{out}}^{(t-1)}
 $$
 
 with $a_{\text{out}}^{(0)} = a_{\text{raw}}^{(0)}$ (no prior history).
 
 **Intuition:** The filter blends the current raw action with the previous
-output. When $\beta = 1$, there is no filtering (pass-through). When
-$\beta \to 0$, the output barely changes -- extremely smooth but unresponsive.
+output. When $\alpha = 1$, there is no filtering (pass-through). When
+$\alpha \to 0$, the output barely changes -- extremely smooth but unresponsive.
 
-**Prediction:** Smoothness should decrease as $\beta$ decreases (heavier
+**Prediction:** Smoothness should decrease as $\alpha$ decreases (heavier
 filtering = smoother). But for tasks requiring fast reactions (e.g., pushing
 at contact), heavy filtering may hurt success rate.
 
@@ -458,12 +458,12 @@ force-threshold requirement that Reach does not.
 bash docker/dev.sh python scripts/ch06_action_interface.py filter --seed 0 --include-push
 ```
 
-We evaluate at filter coefficients $\beta \in \{0.2, 0.4, 0.6, 0.8, 1.0\}$.
+We evaluate at filter coefficients $\alpha \in \{0.2, 0.4, 0.6, 0.8, 1.0\}$.
 
 **FetchReach-v4 -- Filter Results:**
 
-| $\beta$ | Success | Smoothness | Peak \|a\| | Path (m) | Energy | TTS |
-|--------:|--------:|-----------:|-----------:|---------:|-------:|----:|
+| $\alpha$ | Success | Smoothness | Peak \|a\| | Path (m) | Energy | TTS |
+|---------:|--------:|-----------:|-----------:|---------:|-------:|----:|
 | 0.20 | 100% | 0.0710 | 0.986 | 0.347 | 23.2 | 3.8 |
 | 0.40 | 100% | 0.0479 | 0.982 | 0.218 | 14.2 | 2.8 |
 | 0.60 | 100% | 0.0374 | 0.982 | 0.175 | 12.7 | 2.7 |
@@ -473,7 +473,7 @@ We evaluate at filter coefficients $\beta \in \{0.2, 0.4, 0.6, 0.8, 1.0\}$.
 ![Low-Pass Filter -- FetchReach](../figures/ch06_filter_fetchreach-v4.png)
 
 **Interpretation:** For Reach, the filter does not hurt success rate at all.
-But note an interesting effect: at $\beta = 0.2$ (heavy smoothing),
+But note an interesting effect: at $\alpha = 0.2$ (heavy smoothing),
 smoothness actually *increases* to 0.071 (from 0.028 unfiltered). This
 seems counterintuitive -- should filtering not reduce smoothness?
 
@@ -487,8 +487,8 @@ smooth to a human" -- it is a specific mathematical quantity.
 
 **FetchPush-v4 -- Filter Results:**
 
-| $\beta$ | Success | Smoothness | Peak \|a\| | Path (m) | Energy | TTS |
-|--------:|--------:|-----------:|-----------:|---------:|-------:|----:|
+| $\alpha$ | Success | Smoothness | Peak \|a\| | Path (m) | Energy | TTS |
+|---------:|--------:|-----------:|-----------:|---------:|-------:|----:|
 | 0.20 | 85% | 0.258 | 0.976 | 1.042 | 62.1 | 29.1 |
 | 0.40 | 97% | 0.305 | 0.973 | 0.936 | 43.4 | 20.5 |
 | 0.60 | 99% | 0.356 | 0.970 | 0.904 | 36.3 | 16.3 |
@@ -497,11 +497,11 @@ smooth to a human" -- it is a specific mathematical quantity.
 
 ![Low-Pass Filter -- FetchPush](../figures/ch06_filter_fetchpush-v4.png)
 
-**Interpretation:** Here the filter *does* cost success rate. At $\beta = 0.2$,
+**Interpretation:** Here the filter *does* cost success rate. At $\alpha = 0.2$,
 success drops to 85%. Push requires temporally precise control -- the policy
 must switch from "approach" to "push" behavior at the moment of contact.
 Heavy filtering delays this transition, causing the gripper to overshoot or
-slide past the block. The 15% success drop at $\beta = 0.2$ is direct
+slide past the block. The 15% success drop at $\alpha = 0.2$ is direct
 evidence that Push's learned strategy depends on rapid action changes that
 filtering suppresses.
 
@@ -614,7 +614,7 @@ bash docker/dev.sh python scripts/ch06_action_interface.py video --seed 0 --incl
 |---------|-----------|
 | Action interface | Transformation between policy output and environment input |
 | Action scaling | Multiply actions by constant factor, clip to bounds |
-| Low-pass filter (EMA) | Smooth consecutive actions: $a_{\text{out}}^{(t)} = \beta a_{\text{raw}}^{(t)} + (1-\beta) a_{\text{out}}^{(t-1)}$ |
+| Low-pass filter (EMA) | Smooth consecutive actions: $a_{\text{out}}^{(t)} = \alpha a_{\text{raw}}^{(t)} + (1-\alpha) a_{\text{out}}^{(t-1)}$ |
 | Smoothness | Mean squared action difference: $\frac{1}{T-1}\sum \lVert a_t - a_{t-1}\rVert^2$ |
 | Time-to-success (TTS) | First step achieving goal within $\epsilon$ |
 | Peak action | Maximum absolute action component (saturation indicator) |

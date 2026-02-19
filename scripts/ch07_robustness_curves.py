@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Chapter 07: Robustness Curves -- Quantify Brittleness
+"""Chapter 07: Robustness Curves -- Quantify and Improve Brittleness
 
 After ch06 (action interface engineering), we can measure policy quality
-under ideal conditions. This chapter asks: how brittle are our policies?
+under ideal conditions. This chapter asks: how brittle are our policies,
+and can we train more robust ones?
 
-The core deliverable is degradation curves -- success_rate(sigma) with 95%
-confidence bands across seeds -- turning the binary stress test from ch05
-into a parametric, quantitative analysis.
+The core arc is diagnose -> treat -> verify:
+  - Diagnose: degradation curves -- success_rate(sigma) with 95% confidence
+    bands across seeds -- turning binary stress tests into parametric analysis.
+  - Treat: noise-augmented retraining -- train SAC+HER with observation noise
+    injected, so the policy learns to cope with imprecise observations.
+  - Verify: compare clean vs robust degradation curves to quantify improvement.
 
 Experiments:
-    1. Observation noise sweep: 6 levels, per env/seed
-    2. Action noise sweep: 6 levels, per env/seed
-    3. Mitigation: low-pass filter under action noise
-    4. Cross-env comparison: Reach vs Push brittleness
+    1. Observation noise sweep: 7 levels (up to sigma=0.2), per env/seed
+    2. Action noise sweep: 8 levels (up to sigma=0.5), per env/seed
+    3. P-controller baseline: same sweeps with a proportional controller
+    4. Mitigation: low-pass filter under action noise (sigma=0.5)
+    5. Cross-env comparison: Reach vs Push, SAC vs PD brittleness
+    6. Noise-augmented retraining: train under obs noise, compare degradation
 
 Usage:
     # Ensure checkpoints exist
@@ -24,13 +30,22 @@ Usage:
     # Action noise sweep
     python scripts/ch07_robustness_curves.py act-sweep --seeds 0
 
+    # P-controller baseline sweeps
+    python scripts/ch07_robustness_curves.py baseline --seeds 0
+
     # Mitigation experiment
     python scripts/ch07_robustness_curves.py mitigate --seeds 0
 
     # Compare all results
     python scripts/ch07_robustness_curves.py compare --seeds 0
 
-    # Full pipeline
+    # Train noise-augmented policy
+    python scripts/ch07_robustness_curves.py train-robust --seeds 0
+
+    # Compare clean vs robust
+    python scripts/ch07_robustness_curves.py compare-robust --seeds 0
+
+    # Full pipeline (diagnose -> treat -> verify)
     python scripts/ch07_robustness_curves.py all --seeds 0
 
     # Quick smoke test
@@ -88,19 +103,26 @@ class Config:
 
     # Observation noise sweep
     obs_noise_levels: list[float] = field(
-        default_factory=lambda: [0.0, 0.005, 0.01, 0.02, 0.05, 0.1]
+        default_factory=lambda: [0.0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
     )
 
     # Action noise sweep
     act_noise_levels: list[float] = field(
-        default_factory=lambda: [0.0, 0.01, 0.025, 0.05, 0.1, 0.2]
+        default_factory=lambda: [0.0, 0.01, 0.025, 0.05, 0.1, 0.2, 0.35, 0.5]
     )
 
     # Mitigation experiment
     mitigation_alphas: list[float] = field(
         default_factory=lambda: [0.3, 0.5, 0.7, 1.0]
     )
-    mitigation_act_noise: float = 0.1
+    mitigation_act_noise: float = 0.5
+
+    # P-controller baseline
+    pd_kp: float = 10.0
+
+    # Noise-augmented retraining
+    train_obs_noise_std: float = 0.02
+    robust_total_steps: int = 2_000_000  # Push needs 2M; Reach converges earlier
 
     # Paths
     checkpoints_dir: str = "checkpoints"
@@ -162,6 +184,11 @@ def _ckpt_path(env_id: str, seed: int, checkpoints_dir: str = "checkpoints") -> 
         return candidate
 
     return primary
+
+
+def _robust_ckpt_path(env_id: str, seed: int, checkpoints_dir: str = "checkpoints") -> Path:
+    """Path to noise-augmented (robust) SAC+HER checkpoint."""
+    return Path(checkpoints_dir) / f"sac_her_{env_id}_seed{seed}_robust.zip"
 
 
 def _load_sac_model(ckpt: str, env_id: str, device: str = "auto") -> Any:
@@ -256,6 +283,251 @@ def cmd_train(args: argparse.Namespace) -> int:
             if result.returncode != 0:
                 print(f"[ch07] Training failed for {env_id} seed {seed}")
                 return result.returncode
+
+    return 0
+
+
+def cmd_train_robust(args: argparse.Namespace) -> int:
+    """Train SAC+HER with observation noise injected during training.
+
+    Uses the same NoisyEvalWrapper from the robustness lab, but at training
+    time. The idea: a policy trained under mild observation noise should
+    degrade more gracefully than one trained under ideal conditions.
+    """
+    from scripts.labs.robustness import NoisyEvalWrapper
+
+    cfg = Config.from_args(args)
+    _ensure_writable_dir(cfg.results_dir, "Results dir")
+    ckpt_dir = _ensure_writable_dir(cfg.checkpoints_dir, "Checkpoints dir")
+
+    seeds = _parse_seeds(cfg.seeds)
+    noise_std = cfg.train_obs_noise_std
+
+    for env_id in _envs_for_config(cfg):
+        for seed in seeds:
+            ckpt = _robust_ckpt_path(env_id, seed, cfg.checkpoints_dir)
+            if ckpt.exists():
+                print(f"[ch07] Robust checkpoint exists: {ckpt} -- skipping")
+                continue
+
+            print(f"\n{'='*70}")
+            print(f"Noise-Augmented Training: {env_id} (seed {seed})")
+            print(f"Obs noise std: {noise_std}")
+            print(f"Total steps: {cfg.robust_total_steps}")
+            print(f"{'='*70}")
+
+            import gymnasium
+            import gymnasium_robotics  # noqa: F401
+            from stable_baselines3 import SAC
+            from stable_baselines3.common.env_util import make_vec_env
+
+            try:
+                from stable_baselines3 import HerReplayBuffer
+            except ImportError:
+                from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
+
+            # Callable factory: each parallel env gets its own NoisyEvalWrapper
+            # with a distinct RNG seed for noise diversity across envs.
+            env_counter = [0]
+
+            def make_noisy_env():
+                idx = env_counter[0]
+                env_counter[0] += 1
+                base = gymnasium.make(env_id)
+                return NoisyEvalWrapper(
+                    base, obs_noise_std=noise_std, seed=seed * 100 + idx,
+                )
+
+            env = make_vec_env(
+                make_noisy_env,
+                n_envs=cfg.n_envs,
+                seed=seed,
+            )
+
+            try:
+                # HER config: match ch04 hyperparameters
+                is_push = "Push" in env_id
+                n_sampled_goal = 8 if is_push else 4
+
+                model = SAC(
+                    "MultiInputPolicy",
+                    env,
+                    verbose=1,
+                    device=cfg.device,
+                    batch_size=256,
+                    buffer_size=1_000_000,
+                    learning_starts=1000,
+                    gamma=0.95,
+                    ent_coef=0.05,
+                    replay_buffer_class=HerReplayBuffer,
+                    replay_buffer_kwargs={
+                        "n_sampled_goal": n_sampled_goal,
+                        "goal_selection_strategy": "future",
+                    },
+                )
+
+                model.learn(total_timesteps=cfg.robust_total_steps)
+                model.save(str(ckpt))
+                print(f"[ch07] Saved robust checkpoint: {ckpt}")
+
+                # Save metadata
+                meta = {
+                    "algo": "sac",
+                    "her": True,
+                    "env_id": env_id,
+                    "seed": seed,
+                    "total_steps": cfg.robust_total_steps,
+                    "n_envs": cfg.n_envs,
+                    "train_obs_noise_std": noise_std,
+                    "n_sampled_goal": n_sampled_goal,
+                    "gamma": 0.95,
+                    "ent_coef": 0.05,
+                    "batch_size": 256,
+                    "buffer_size": 1_000_000,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "versions": _gather_versions(),
+                }
+                meta_path = ckpt.with_suffix(".meta.json")
+                _save_json(meta, meta_path)
+
+            finally:
+                env.close()
+
+    return 0
+
+
+def cmd_compare_robust(args: argparse.Namespace) -> int:
+    """Compare clean vs noise-augmented policies on obs noise sweeps.
+
+    Loads both checkpoints (clean from ch04, robust from cmd_train_robust),
+    runs the same observation noise sweep on both, and prints a side-by-side
+    comparison table with degradation summary metrics.
+    """
+    from scripts.labs.robustness import (
+        aggregate_across_seeds,
+        compute_degradation_summary,
+        run_noise_sweep,
+    )
+
+    cfg = Config.from_args(args)
+    results_dir = _ensure_writable_dir(cfg.results_dir, "Results dir")
+    seeds = _parse_seeds(cfg.seeds)
+
+    for env_id in _envs_for_config(cfg):
+        print(f"\n{'='*70}")
+        print(f"Clean vs Robust Comparison: {env_id}")
+        print(f"Seeds: {seeds}, Episodes/condition: {cfg.n_eval_episodes}")
+        print(f"{'='*70}")
+
+        clean_all_seeds: list[list] = []
+        robust_all_seeds: list[list] = []
+
+        for seed in seeds:
+            clean_ckpt = _ckpt_path(env_id, seed, cfg.checkpoints_dir)
+            robust_ckpt = _robust_ckpt_path(env_id, seed, cfg.checkpoints_dir)
+
+            if not clean_ckpt.exists():
+                print(f"[ch07] Clean checkpoint not found: {clean_ckpt}")
+                print("[ch07] Run 'train' subcommand first.")
+                return 1
+            if not robust_ckpt.exists():
+                print(f"[ch07] Robust checkpoint not found: {robust_ckpt}")
+                print("[ch07] Run 'train-robust' subcommand first.")
+                return 1
+
+            print(f"\n--- Seed {seed} ---")
+
+            # Sweep clean policy
+            clean_model = _load_sac_model(str(clean_ckpt), env_id, cfg.device)
+            clean_results = run_noise_sweep(
+                policy=clean_model,
+                env_id=env_id,
+                noise_type="obs",
+                noise_levels=cfg.obs_noise_levels,
+                n_episodes=cfg.n_eval_episodes,
+                deterministic=cfg.deterministic,
+                seed=seed,
+            )
+            clean_all_seeds.append(clean_results)
+
+            # Sweep robust policy
+            robust_model = _load_sac_model(str(robust_ckpt), env_id, cfg.device)
+            robust_results = run_noise_sweep(
+                policy=robust_model,
+                env_id=env_id,
+                noise_type="obs",
+                noise_levels=cfg.obs_noise_levels,
+                n_episodes=cfg.n_eval_episodes,
+                deterministic=cfg.deterministic,
+                seed=seed,
+            )
+            robust_all_seeds.append(robust_results)
+
+            # Per-seed side-by-side table
+            print(f"\n{'sigma':>8} | {'Clean SR':>9} | {'Robust SR':>10} | {'Delta':>7}")
+            print("-" * 45)
+            for c, r in zip(clean_results, robust_results):
+                delta = r.success_rate - c.success_rate
+                print(
+                    f"{c.noise_std:>8.4f} | {c.success_rate:>8.0%} | "
+                    f"{r.success_rate:>9.0%} | {delta:>+6.0%}"
+                )
+
+        # Aggregate across seeds
+        clean_agg = aggregate_across_seeds(clean_all_seeds)
+        robust_agg = aggregate_across_seeds(robust_all_seeds)
+        clean_summary = compute_degradation_summary(clean_agg)
+        robust_summary = compute_degradation_summary(robust_agg)
+
+        # Print aggregated comparison
+        if len(seeds) > 1:
+            print(f"\n--- Aggregated ({len(seeds)} seeds) ---")
+            print(f"{'sigma':>8} | {'Clean SR':>9} | {'Robust SR':>10} | {'Delta':>7}")
+            print("-" * 45)
+            for c, r in zip(clean_agg, robust_agg):
+                c_sr = c["success_rate"]["mean"]
+                r_sr = r["success_rate"]["mean"]
+                delta = r_sr - c_sr
+                print(
+                    f"{c['noise_std']:>8.4f} | {c_sr:>8.0%} | "
+                    f"{r_sr:>9.0%} | {delta:>+6.0%}"
+                )
+
+        # Print summary comparison
+        print(f"\n--- Degradation Summary ---")
+        print(f"{'Metric':<20} | {'Clean':>12} | {'Robust':>12}")
+        print("-" * 50)
+
+        c_crit = clean_summary["critical_sigma"]
+        r_crit = robust_summary["critical_sigma"]
+        c_crit_str = f"{c_crit:.4f}" if c_crit is not None else "None"
+        r_crit_str = f"{r_crit:.4f}" if r_crit is not None else "None"
+        print(f"{'Critical sigma':<20} | {c_crit_str:>12} | {r_crit_str:>12}")
+        print(f"{'Degradation slope':<20} | {clean_summary['degradation_slope']:>12.4f} | "
+              f"{robust_summary['degradation_slope']:>12.4f}")
+        print(f"{'Robustness AUC':<20} | {clean_summary['robustness_auc']:>12.4f} | "
+              f"{robust_summary['robustness_auc']:>12.4f}")
+
+        # Save comparison JSON
+        comparison = {
+            "experiment": "clean_vs_robust",
+            "env_id": env_id,
+            "seeds": seeds,
+            "train_obs_noise_std": cfg.train_obs_noise_std,
+            "clean": {
+                "aggregated": clean_agg,
+                "summary": clean_summary,
+            },
+            "robust": {
+                "aggregated": robust_agg,
+                "summary": robust_summary,
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "versions": _gather_versions(),
+        }
+        env_key = env_id.lower().replace("-", "_")
+        out_path = results_dir / f"ch07_clean_vs_robust_{env_key}.json"
+        _save_json(comparison, out_path)
 
     return 0
 
@@ -557,6 +829,116 @@ def cmd_mitigate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_baseline(args: argparse.Namespace) -> int:
+    """Run P-controller baseline through the same noise sweeps.
+
+    The ProportionalController from ch06 uses a simple Kp*(goal - position)
+    control law. By running it through the same obs/act noise levels as the
+    SAC policy, we get a direct comparison: learned robustness vs classical
+    controller fragility.
+    """
+    from scripts.labs.action_interface import ProportionalController
+    from scripts.labs.robustness import run_noise_sweep
+
+    cfg = Config.from_args(args)
+    results_dir = _ensure_writable_dir(cfg.results_dir, "Results dir")
+    seeds = _parse_seeds(cfg.seeds)
+
+    for env_id in _envs_for_config(cfg):
+        controller = ProportionalController(env_id, kp=cfg.pd_kp)
+
+        for seed in seeds:
+            # --- Observation noise sweep ---
+            print(f"\n{'='*70}")
+            print(f"Baseline (PD Kp={cfg.pd_kp}) Obs Noise Sweep: {env_id}")
+            print(f"Seed: {seed}, Episodes/condition: {cfg.n_eval_episodes}")
+            print(f"Noise levels: {cfg.obs_noise_levels}")
+            print(f"{'='*70}")
+
+            obs_results = run_noise_sweep(
+                policy=controller,
+                env_id=env_id,
+                noise_type="obs",
+                noise_levels=cfg.obs_noise_levels,
+                n_episodes=cfg.n_eval_episodes,
+                deterministic=True,
+                seed=seed,
+            )
+
+            print(f"\n{'sigma':>8} | {'Success':>8} | {'Return':>8} | "
+                  f"{'Smooth':>8} | {'Dist':>8} | {'TTS':>6}")
+            print("-" * 65)
+            for r in obs_results:
+                tts = r.time_to_success_mean
+                tts_str = f"{tts:.1f}" if tts is not None else "N/A"
+                print(
+                    f"{r.noise_std:>8.4f} | {r.success_rate:>7.0%} | "
+                    f"{r.return_mean:>8.2f} | {r.smoothness_mean:>8.4f} | "
+                    f"{r.final_distance_mean:>8.4f} | {tts_str:>6}"
+                )
+
+            out_data = {
+                "experiment": "baseline_obs_sweep",
+                "env_id": env_id,
+                "seed": seed,
+                "policy": "pd",
+                "pd_kp": cfg.pd_kp,
+                "n_episodes": cfg.n_eval_episodes,
+                "noise_levels": cfg.obs_noise_levels,
+                "results": [r.to_dict() for r in obs_results],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "versions": _gather_versions(),
+            }
+            out_path = results_dir / f"ch07_baseline_obs_sweep_{env_id.lower()}_seed{seed}.json"
+            _save_json(out_data, out_path)
+
+            # --- Action noise sweep ---
+            print(f"\n{'='*70}")
+            print(f"Baseline (PD Kp={cfg.pd_kp}) Act Noise Sweep: {env_id}")
+            print(f"Seed: {seed}, Episodes/condition: {cfg.n_eval_episodes}")
+            print(f"Noise levels: {cfg.act_noise_levels}")
+            print(f"{'='*70}")
+
+            act_results = run_noise_sweep(
+                policy=controller,
+                env_id=env_id,
+                noise_type="act",
+                noise_levels=cfg.act_noise_levels,
+                n_episodes=cfg.n_eval_episodes,
+                deterministic=True,
+                seed=seed,
+            )
+
+            print(f"\n{'sigma':>8} | {'Success':>8} | {'Return':>8} | "
+                  f"{'Smooth':>8} | {'Energy':>8} | {'TTS':>6}")
+            print("-" * 65)
+            for r in act_results:
+                tts = r.time_to_success_mean
+                tts_str = f"{tts:.1f}" if tts is not None else "N/A"
+                print(
+                    f"{r.noise_std:>8.4f} | {r.success_rate:>7.0%} | "
+                    f"{r.return_mean:>8.2f} | {r.smoothness_mean:>8.4f} | "
+                    f"{r.action_energy_mean:>8.2f} | {tts_str:>6}"
+                )
+
+            out_data = {
+                "experiment": "baseline_act_sweep",
+                "env_id": env_id,
+                "seed": seed,
+                "policy": "pd",
+                "pd_kp": cfg.pd_kp,
+                "n_episodes": cfg.n_eval_episodes,
+                "noise_levels": cfg.act_noise_levels,
+                "results": [r.to_dict() for r in act_results],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "versions": _gather_versions(),
+            }
+            out_path = results_dir / f"ch07_baseline_act_sweep_{env_id.lower()}_seed{seed}.json"
+            _save_json(out_data, out_path)
+
+    return 0
+
+
 def cmd_compare(args: argparse.Namespace) -> int:
     """Load all ch07 results and print comparison tables."""
     from scripts.labs.robustness import (
@@ -590,16 +972,33 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
         env_report: dict[str, Any] = {}
 
-        # --- Obs noise results ---
+        # --- Obs noise results (SAC) ---
         _print_sweep_comparison(
             results_dir, env_key, env_id, seeds, "obs_sweep",
-            cfg.obs_noise_levels, "Observation Noise", env_report,
+            cfg.obs_noise_levels, "SAC Observation Noise", env_report,
         )
 
-        # --- Act noise results ---
+        # --- Obs noise results (PD baseline) ---
+        _print_sweep_comparison(
+            results_dir, env_key, env_id, seeds, "baseline_obs_sweep",
+            cfg.obs_noise_levels, "PD Observation Noise", env_report,
+        )
+
+        # --- Act noise results (SAC) ---
         _print_sweep_comparison(
             results_dir, env_key, env_id, seeds, "act_sweep",
-            cfg.act_noise_levels, "Action Noise", env_report,
+            cfg.act_noise_levels, "SAC Action Noise", env_report,
+        )
+
+        # --- Act noise results (PD baseline) ---
+        _print_sweep_comparison(
+            results_dir, env_key, env_id, seeds, "baseline_act_sweep",
+            cfg.act_noise_levels, "PD Action Noise", env_report,
+        )
+
+        # --- Side-by-side SAC vs PD ---
+        _print_sac_vs_pd_comparison(
+            results_dir, env_key, env_id, seeds, cfg, env_report,
         )
 
         # --- Mitigation results ---
@@ -796,18 +1195,67 @@ def _print_mitigation_comparison(
     }
 
 
+def _print_sac_vs_pd_comparison(
+    results_dir: Path,
+    env_key: str,
+    env_id: str,
+    seeds: list[int],
+    cfg: Config,
+    env_report: dict[str, Any],
+) -> None:
+    """Print side-by-side SAC vs PD comparison for both noise types."""
+    seed = seeds[0]  # Use first seed for display
+
+    for noise_type, noise_levels, experiment_sac, experiment_pd in [
+        ("obs", cfg.obs_noise_levels, "obs_sweep", "baseline_obs_sweep"),
+        ("act", cfg.act_noise_levels, "act_sweep", "baseline_act_sweep"),
+    ]:
+        sac_path = results_dir / f"ch07_{experiment_sac}_{env_key}_seed{seed}.json"
+        pd_path = results_dir / f"ch07_{experiment_pd}_{env_key}_seed{seed}.json"
+
+        if not sac_path.exists() or not pd_path.exists():
+            continue
+
+        with open(sac_path) as f:
+            sac_data = json.load(f)
+        with open(pd_path) as f:
+            pd_data = json.load(f)
+
+        sac_by_sigma = {r["noise_std"]: r for r in sac_data["results"]}
+        pd_by_sigma = {r["noise_std"]: r for r in pd_data["results"]}
+
+        print(f"\n--- SAC vs PD: {noise_type.upper()} noise ({env_id}) ---")
+        print(f"{'sigma':>8} | {'SAC SR':>8} | {'PD SR':>8} | "
+              f"{'SAC Dist':>9} | {'PD Dist':>9}")
+        print("-" * 55)
+
+        for sigma in noise_levels:
+            sac_r = sac_by_sigma.get(sigma)
+            pd_r = pd_by_sigma.get(sigma)
+            sac_sr = f"{sac_r['success_rate']:>7.0%}" if sac_r else "   N/A"
+            pd_sr = f"{pd_r['success_rate']:>7.0%}" if pd_r else "   N/A"
+            sac_dist = f"{sac_r['final_distance_mean']:>9.4f}" if sac_r else "      N/A"
+            pd_dist = f"{pd_r['final_distance_mean']:>9.4f}" if pd_r else "      N/A"
+            print(f"{sigma:>8.4f} | {sac_sr} | {pd_sr} | {sac_dist} | {pd_dist}")
+
+
 def _print_cross_env_comparison(env_summaries: dict[str, dict[str, Any]]) -> None:
     """Print cross-environment robustness comparison."""
     print(f"\n{'='*70}")
     print("Cross-Environment Robustness Comparison")
     print(f"{'='*70}")
 
-    print(f"\n{'Env':<20} | {'Noise':>6} | {'Crit sigma':>11} | "
+    print(f"\n{'Policy':<6} | {'Env':<20} | {'Noise':>6} | {'Crit sigma':>11} | "
           f"{'Slope':>8} | {'AUC':>8}")
-    print("-" * 65)
+    print("-" * 75)
 
     for env_id, data in env_summaries.items():
-        for sweep_type in ["obs_sweep", "act_sweep"]:
+        for sweep_type, policy_label in [
+            ("obs_sweep", "SAC"),
+            ("act_sweep", "SAC"),
+            ("baseline_obs_sweep", "PD"),
+            ("baseline_act_sweep", "PD"),
+        ]:
             if sweep_type not in data:
                 continue
             summary = data[sweep_type]["summary"]
@@ -815,7 +1263,7 @@ def _print_cross_env_comparison(env_summaries: dict[str, dict[str, Any]]) -> Non
             crit = summary["critical_sigma"]
             crit_str = f"{crit:.4f}" if crit is not None else "N/A"
             print(
-                f"{env_id:<20} | {noise_label:>6} | {crit_str:>11} | "
+                f"{policy_label:<6} | {env_id:<20} | {noise_label:>6} | {crit_str:>11} | "
                 f"{summary['degradation_slope']:>8.4f} | "
                 f"{summary['robustness_auc']:>8.4f}"
             )
@@ -833,9 +1281,20 @@ def _print_cross_env_comparison(env_summaries: dict[str, dict[str, Any]]) -> Non
                 print(f"  {noise_label.capitalize()} noise: {more_brittle} is more brittle "
                       f"(AUC: {min(auc_a, auc_b):.4f} vs {max(auc_a, auc_b):.4f})")
 
+    # SAC vs PD verdict
+    for sweep_type, noise_label in [("obs_sweep", "observation"), ("act_sweep", "action")]:
+        bl_type = f"baseline_{sweep_type}"
+        for env_id, data in env_summaries.items():
+            if sweep_type in data and bl_type in data:
+                sac_auc = data[sweep_type]["summary"]["robustness_auc"]
+                pd_auc = data[bl_type]["summary"]["robustness_auc"]
+                winner = "SAC" if sac_auc >= pd_auc else "PD"
+                print(f"  {env_id} {noise_label} noise: {winner} more robust "
+                      f"(SAC AUC={sac_auc:.4f}, PD AUC={pd_auc:.4f})")
+
 
 def cmd_all(args: argparse.Namespace) -> int:
-    """Full pipeline: train -> obs-sweep -> act-sweep -> mitigate -> compare."""
+    """Full pipeline: train -> sweeps -> baseline -> mitigate -> compare -> train-robust -> compare-robust."""
     cfg = Config.from_args(args)
     seeds = _parse_seeds(cfg.seeds)
 
@@ -846,36 +1305,57 @@ def cmd_all(args: argparse.Namespace) -> int:
     print("=" * 70)
 
     # Step 1: Ensure checkpoints exist
-    print("\n[1/5] Checking checkpoints...")
+    print("\n[1/8] Checking checkpoints...")
     ret = cmd_train(args)
     if ret != 0:
         print("[ch07] Checkpoint preparation failed. Aborting.")
         return ret
 
-    # Step 2: Observation noise sweep
-    print("\n[2/5] Observation noise sweep...")
+    # Step 2: Observation noise sweep (SAC)
+    print("\n[2/8] Observation noise sweep...")
     ret = cmd_obs_sweep(args)
     if ret != 0:
         print("[ch07] Obs sweep failed.")
         return ret
 
-    # Step 3: Action noise sweep
-    print("\n[3/5] Action noise sweep...")
+    # Step 3: Action noise sweep (SAC)
+    print("\n[3/8] Action noise sweep...")
     ret = cmd_act_sweep(args)
     if ret != 0:
         print("[ch07] Act sweep failed.")
         return ret
 
-    # Step 4: Mitigation experiment
-    print("\n[4/5] Mitigation experiment...")
+    # Step 4: P-controller baseline sweeps
+    print("\n[4/8] P-controller baseline sweeps...")
+    ret = cmd_baseline(args)
+    if ret != 0:
+        print("[ch07] Baseline sweeps failed.")
+        return ret
+
+    # Step 5: Mitigation experiment
+    print("\n[5/8] Mitigation experiment...")
     ret = cmd_mitigate(args)
     if ret != 0:
         print("[ch07] Mitigation failed.")
         return ret
 
-    # Step 5: Comparison
-    print("\n[5/5] Comparison...")
-    return cmd_compare(args)
+    # Step 6: Comparison (diagnosis)
+    print("\n[6/8] Comparison...")
+    ret = cmd_compare(args)
+    if ret != 0:
+        print("[ch07] Comparison failed.")
+        return ret
+
+    # Step 7: Train noise-augmented policy (treatment)
+    print("\n[7/8] Training noise-augmented policy...")
+    ret = cmd_train_robust(args)
+    if ret != 0:
+        print("[ch07] Robust training failed.")
+        return ret
+
+    # Step 8: Clean vs robust comparison (verification)
+    print("\n[8/8] Clean vs robust comparison...")
+    return cmd_compare_robust(args)
 
 
 # =============================================================================
@@ -913,13 +1393,22 @@ Examples:
   # Action noise sweep
   python scripts/ch07_robustness_curves.py act-sweep --seeds 0
 
+  # P-controller baseline sweeps
+  python scripts/ch07_robustness_curves.py baseline --seeds 0
+
   # Mitigation experiment
   python scripts/ch07_robustness_curves.py mitigate --seeds 0
 
   # Compare all results
   python scripts/ch07_robustness_curves.py compare --seeds 0
 
-  # Full pipeline (Reach + Push)
+  # Train noise-augmented policy
+  python scripts/ch07_robustness_curves.py train-robust --seeds 0
+
+  # Compare clean vs robust degradation
+  python scripts/ch07_robustness_curves.py compare-robust --seeds 0
+
+  # Full pipeline (diagnose -> treat -> verify)
   python scripts/ch07_robustness_curves.py all --seeds 0
 
   # Quick smoke test (fewer episodes)
@@ -966,25 +1455,63 @@ Examples:
                        help="Fixed action noise for mitigation test")
     _add_common_args(p_mit)
 
+    # baseline
+    p_base = sub.add_parser("baseline",
+                            help="P-controller baseline noise sweeps",
+                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    p_base.add_argument("--pd-kp", type=float, default=DEFAULT_CONFIG.pd_kp,
+                        help="Proportional gain for P-controller")
+    _add_common_args(p_base)
+
     # compare
     p_cmp = sub.add_parser("compare",
                            help="Compare all results",
                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     _add_common_args(p_cmp)
 
+    # train-robust
+    p_robust = sub.add_parser("train-robust",
+                               help="Train SAC+HER with obs noise injection",
+                               formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    p_robust.add_argument("--env", default=DEFAULT_CONFIG.env,
+                          help="Environment ID")
+    p_robust.add_argument("--n-envs", type=int, default=DEFAULT_CONFIG.n_envs,
+                          help="Number of parallel envs for training")
+    p_robust.add_argument("--robust-total-steps", type=int,
+                          default=DEFAULT_CONFIG.robust_total_steps,
+                          help="Total training timesteps for robust training")
+    p_robust.add_argument("--train-obs-noise-std", type=float,
+                          default=DEFAULT_CONFIG.train_obs_noise_std,
+                          help="Obs noise std during training")
+    _add_common_args(p_robust)
+
+    # compare-robust
+    p_cmp_r = sub.add_parser("compare-robust",
+                              help="Compare clean vs noise-augmented policies",
+                              formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_cmp_r)
+
     # all
     p_all = sub.add_parser("all",
-                           help="Full pipeline: train -> obs -> act -> mitigate -> compare",
+                           help="Full pipeline: diagnose -> treat -> verify",
                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p_all.add_argument("--env", default=DEFAULT_CONFIG.env,
                        help="Primary environment ID")
     p_all.add_argument("--n-envs", type=int, default=DEFAULT_CONFIG.n_envs,
                        help="Number of parallel envs for training fallback")
     p_all.add_argument("--total-steps", type=int, default=DEFAULT_CONFIG.total_steps,
-                       help="Total training timesteps for training fallback")
+                       help="Total training timesteps for clean training fallback")
+    p_all.add_argument("--robust-total-steps", type=int,
+                       default=DEFAULT_CONFIG.robust_total_steps,
+                       help="Total training timesteps for robust training")
     p_all.add_argument("--mitigation-act-noise", type=float,
                        default=DEFAULT_CONFIG.mitigation_act_noise,
                        help="Fixed action noise for mitigation test")
+    p_all.add_argument("--pd-kp", type=float, default=DEFAULT_CONFIG.pd_kp,
+                       help="Proportional gain for P-controller baseline")
+    p_all.add_argument("--train-obs-noise-std", type=float,
+                       default=DEFAULT_CONFIG.train_obs_noise_std,
+                       help="Obs noise std for noise-augmented training")
     _add_common_args(p_all)
 
     args = parser.parse_args()
@@ -998,8 +1525,11 @@ Examples:
         "train": cmd_train,
         "obs-sweep": cmd_obs_sweep,
         "act-sweep": cmd_act_sweep,
+        "baseline": cmd_baseline,
         "mitigate": cmd_mitigate,
         "compare": cmd_compare,
+        "train-robust": cmd_train_robust,
+        "compare-robust": cmd_compare_robust,
         "all": cmd_all,
     }
 

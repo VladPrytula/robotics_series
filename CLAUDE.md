@@ -309,6 +309,19 @@ Ch5: dense-first debugging, multi-phase control, goal stratification,
      noise injection (observation noise, action noise), degradation,
      curriculum learning, difficulty schedule (linear, success-gated),
      NoisyEvalWrapper, CurriculumGoalWrapper
+
+Ch6: action interface, action scaling, low-pass filter (EMA),
+     smoothness (mean squared action difference), time-to-success (TTS),
+     peak action, path length, action energy, controller metric bundle,
+     proportional controller, planning-vs-control decomposition,
+     ActionScalingWrapper, LowPassFilterWrapper, run_controller_eval
+
+Ch7: degradation curve, critical sigma (sigma*), degradation slope,
+     robustness AUC, brittleness fingerprint, noise injection
+     (eval-time wrapper), observation noise model, action noise model,
+     cross-seed aggregation, NoiseSweepResult, run_noise_sweep,
+     aggregate_across_seeds, compute_degradation_summary,
+     noise-augmented training, clean-vs-robust tradeoff
 ```
 
 ### Canonical References
