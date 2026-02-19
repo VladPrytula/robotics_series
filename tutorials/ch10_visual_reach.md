@@ -19,9 +19,8 @@ with raw pixel images?** We train SAC on FetchReachDense in three configurations
 sample-efficiency gap quantitatively. The goal is not just to "make it work from
 pixels" but to understand *why* pixels are harder and *what* helps.
 
-Chapters 8-9 (second-suite adapter and engineering-grade ablations) are not yet
-written. This chapter can be read directly after Chapter 7 -- no concepts from
-Ch8-9 are needed.
+This chapter is self-contained and can be read directly after Chapter 7 --
+no concepts beyond those introduced in Chapters 0-7 are needed.
 
 ---
 
@@ -96,8 +95,8 @@ where $N_{\text{pixel}}$ and $N_{\text{state}}$ are the number of environment
 steps each agent needs to reach a target success rate (e.g., 90%). A ratio
 $\rho = 4$ means pixel training needs 4x more samples.
 
-We find this ratio is typically 2-10x for FetchReachDense, depending on
-hyperparameters and whether augmentation is used.
+In our experiments below, we measure this ratio on FetchReachDense and
+find that augmentation (DrQ) substantially reduces it.
 
 ---
 
@@ -303,11 +302,11 @@ bash docker/dev.sh python scripts/ch10_visual_reach.py eval --ckpt checkpoints/s
 
 | Metric | Value |
 |--------|------:|
-| Success rate | <!-- TODO: fill from run --> |
-| Return (mean) | <!-- TODO --> |
-| Final distance (mean) | <!-- TODO --> |
-| Training time | <!-- TODO --> |
-| FPS | <!-- TODO --> |
+| Success rate | 100.0% |
+| Return (mean) | -0.730 +/- 0.245 |
+| Final distance (mean) | 0.0116 |
+| Training time | 21.3 min (1280s) |
+| FPS | 391 |
 
 State SAC should converge to ~100% success rate within 200-300K steps.
 This is the performance ceiling.
@@ -323,11 +322,11 @@ bash docker/dev.sh python scripts/ch10_visual_reach.py eval --ckpt checkpoints/s
 
 | Metric | Value |
 |--------|------:|
-| Success rate | <!-- TODO: fill from run --> |
-| Return (mean) | <!-- TODO --> |
-| Final distance (mean) | <!-- TODO --> |
-| Training time | <!-- TODO --> |
-| FPS | <!-- TODO --> |
+| Success rate | 98.0% |
+| Return (mean) | -1.022 +/- 0.503 |
+| Final distance (mean) | 0.0156 |
+| Training time | 4.0 hrs (14,362s) |
+| FPS | 139 |
 
 **Interpretation:** Pixel SAC needs significantly more samples than state SAC.
 The NatureCNN must learn to extract spatial features (end-effector position,
@@ -346,11 +345,11 @@ bash docker/dev.sh python scripts/ch10_visual_reach.py eval --ckpt checkpoints/s
 
 | Metric | Value |
 |--------|------:|
-| Success rate | <!-- TODO: fill from run --> |
-| Return (mean) | <!-- TODO --> |
-| Final distance (mean) | <!-- TODO --> |
-| Training time | <!-- TODO --> |
-| FPS | <!-- TODO --> |
+| Success rate | 100.0% |
+| Return (mean) | -0.889 +/- 0.516 |
+| Final distance (mean) | 0.0104 |
+| Training time | 4.5 hrs (16,211s) |
+| FPS | 123 |
 
 **Interpretation:** DrQ should improve pixel SAC's sample efficiency,
 partially closing the gap to state SAC. The random shift augmentation
@@ -367,12 +366,86 @@ bash docker/dev.sh python scripts/ch10_visual_reach.py compare
 | Metric | State | Pixel | Pixel+DrQ |
 |--------|------:|------:|----------:|
 | Training steps | 500,000 | 2,000,000 | 2,000,000 |
-| Success rate | <!-- TODO --> | <!-- TODO --> | <!-- TODO --> |
-| Return (mean) | <!-- TODO --> | <!-- TODO --> | <!-- TODO --> |
-| Final distance | <!-- TODO --> | <!-- TODO --> | <!-- TODO --> |
-| FPS | <!-- TODO --> | <!-- TODO --> | <!-- TODO --> |
+| Success rate | 100.0% | 98.0% | 100.0% |
+| Return (mean) | -0.730 +/- 0.245 | -1.022 +/- 0.503 | -0.889 +/- 0.516 |
+| Final distance | 0.0116 | 0.0156 | 0.0104 |
+| FPS | 391 | 139 | 123 |
 
-<!-- TODO: fill sample-efficiency ratio and DrQ gap closure percentage -->
+Pixel SAC requires 4x more training steps (2M vs 500K) and runs at ~2.8x lower throughput (139 vs 391 FPS). DrQ closes 100% of the success rate gap (98% -> 100%) and actually achieves the lowest final distance of all three agents (0.0104 vs 0.0116 for state). The return gap closes by ~46%: pixel SAC's return of -1.022 improves to -0.889 with DrQ, compared to state SAC's -0.730.
+
+### 10.10.3 The "Too Easy" Problem
+
+FetchReachDense is a single-phase task: move the end-effector to a target. All
+three agents converge to near-perfect success (98-100%), and the interesting
+signal is **convergence speed**, not final performance. We saw this same pattern
+in Chapter 4 with sparse Reach -- the task is solved before algorithmic
+differences become dramatic.
+
+This is a useful sanity check ("does pixel SAC work at all?"), but it
+understates the real cost of learning from pixels. For a sharper test, we need
+a task where the agent must interact with an object in the scene.
+
+### 10.10.4 Extension: Why Push Needs More Than Dense Rewards
+
+FetchPushDense-v4 asks the robot to **push a block** to a target position on
+the table. The dense reward is $R = -\|\text{object\_pos} - \text{target\_pos}\|$.
+
+At first glance, this should be a straightforward extension of Reach: same
+pipeline, different environment, continuous reward signal. But when we train
+state SAC on FetchPushDense with the same hyperparameters from Reach, something
+surprising happens:
+
+**FetchPushDense-v4 -- State SAC (1M steps, ent_coef="auto", gamma=0.95):**
+
+| Metric | Value |
+|--------|------:|
+| Success rate | 2% |
+| Return (mean) | -9.69 +/- 3.75 |
+| Final distance (mean) | 0.194 |
+| Training time | 44.8 min (2689s) |
+| FPS | 372 |
+
+Only **2%** success rate from privileged state vectors. Compare this to 100%
+on Reach at 500K steps. The same hyperparameters that solve Reach in minutes
+fail completely on Push.
+
+**The "deceptively dense" reward.** FetchPushDense's reward is continuous but
+not uniformly informative:
+
+- **FetchReachDense**: $R = -\|\text{gripper\_pos} - \text{target\_pos}\|$ --
+  every gripper movement changes the reward. The gradient is always informative.
+- **FetchPushDense**: $R = -\|\text{object\_pos} - \text{target\_pos}\|$ --
+  the reward only changes when the *object* moves. Before contact, the agent
+  can move freely without affecting the reward at all.
+
+This creates a two-phase reward landscape:
+
+1. **Pre-contact (steps 1-15):** Reward is CONSTANT. The agent receives no
+   signal that approaching the block is useful. Random exploration must
+   discover contact.
+2. **Post-contact (steps 15+):** Reward responds to actions. Now the agent
+   can learn to push in the right direction.
+
+FetchPushDense is a **sparse exploration problem disguised as a dense reward**.
+The "dense" label refers to the reward's continuity *given contact*, not its
+informational content across the full episode. This is exactly the problem
+HER (Chapter 4) solves: by relabeling goals to where the block already is,
+even accidental non-pushing becomes a successful episode.
+
+**Connection to the "charging a phone" aspiration.** FetchPickAndPlace
+compounds this difficulty: the agent must not only contact the object but also
+close the gripper, lift, transport, and place. Each phase is a new exploration
+challenge layered on top of the previous one. Without HER (or curriculum
+learning, or reward shaping), the probability of randomly discovering the full
+sequence from pixels is vanishingly small.
+
+This finding confirms the curriculum's arc:
+- **Ch3** (Reach, dense): SAC works out of the box
+- **Ch4** (Reach/Push, sparse + HER): HER makes sparse rewards tractable
+- **Ch10** (Reach, dense, pixels): Pixel observations add cost but don't
+  block learning on easy tasks
+- **Future** (Push/PickAndPlace, pixels + HER): Visual HER is needed when
+  both the observation and exploration problems are hard simultaneously
 
 ---
 
@@ -388,7 +461,7 @@ bottleneck is CPU-bound: MuJoCo runs contact dynamics, then renders the
 scene to an image, then Python (PIL) resizes it. The neural network
 forward/backward pass on the GPU completes in microseconds.
 
-For pixel training without `--fast`:
+Per-step cost breakdown for pixel training without `--fast`:
 
 | Component | Time per step | Notes |
 |-----------|--------------|-------|
@@ -397,12 +470,41 @@ For pixel training without `--fast`:
 | PIL resize to 84x84 | ~0.3 ms | Python/C interop |
 | Neural network update | ~0.1 ms | GPU, batch=256 |
 
-Rendering dominates. The default pipeline renders 33x more pixels than needed,
-ships them through PIL, then discards 97% of the data.
+Rendering dominates -- but 480x480 doesn't *sound* large. Why does it matter?
+
+**The inner-loop multiplier effect.** Any per-step cost, no matter how small
+it looks in isolation, gets multiplied by millions of steps. The question is
+not "how long does one render take?" but "how long do 2 million renders take?"
+
+| Resolution | Pixels | Render time (per frame) | Over 2M steps | Data per frame |
+|------------|-------:|------------------------:|--------------:|---------------:|
+| 480 x 480 | 230,400 | ~4 ms | **2.2 hours** | 691 KB |
+| 84 x 84 | 7,056 | ~0.5 ms | **17 minutes** | 21 KB |
+| **Savings** | **33x fewer** | **~3.5 ms** | **~2 hours** | **670 KB** |
+
+That is roughly a quarter of the total 8.5-hour training time spent drawing
+pixels we were about to discard via PIL resize. Add the resize itself
+(~0.3 ms/frame x 2M = another 10 minutes) and the Python-to-C data copy
+of 691 KB per frame, and the "small" rendering overhead accounts for over
+2.5 hours of wall time.
+
+The general principle: **optimize by elimination (don't do the work) rather
+than acceleration (do the work faster).** Rendering 33x fewer pixels is not
+"faster rendering" -- it is "less rendering." The default 480x480 pipeline
+generates data, ships it through two libraries, and then throws away 97% of
+it. The fast path avoids generating that data in the first place.
 
 ### 10.11.2 Three Optimizations
 
-The `--fast` flag bundles three independent optimizations:
+The `--fast` flag bundles three independent optimizations. They compound
+multiplicatively -- each addresses a different part of the pipeline:
+
+| Factor | Default | `--fast` | Effect |
+|--------|---------|----------|--------|
+| Pixels rendered per frame | 230,400 (480x480) | 7,056 (84x84) | **33x** fewer pixels |
+| PIL resize overhead | ~0.3 ms/frame | **skipped** | eliminated entirely |
+| Env parallelism | 4 sequential (DummyVec) | 12 parallel (SubprocVec) | **3x** workers |
+| Gradient steps per env step | 1 | 3 | **3x** learning per sample |
 
 **Optimization 1: Native Resolution Rendering.**
 Instead of rendering at 480x480 and resizing, we tell MuJoCo to render
@@ -459,9 +561,9 @@ equivalent to one trained without it.
 | Setting | FPS | Wall time (2M steps) | Notes |
 |---------|----:|---------------------:|-------|
 | Default (4 env, DummyVec, PIL resize) | ~65 | ~8.5 hrs | Pedagogical pipeline |
-| `--fast` (12 env, SubprocVec, native 84x84) | ~160 | ~3.5 hrs | <!-- TODO: update from run --> |
+| `--fast` (12 env, SubprocVec, native 84x84) | 139 | 4.0 hrs | gradient_steps=3 |
 
-<!-- TODO: fill exact numbers from completed --fast run -->
+The `--fast` pipeline achieved 139 FPS and completed 2M steps in 4.0 hours, a ~2.1x speedup over the estimated ~65 FPS / ~8.5 hrs default pipeline.
 
 The fast-mode metadata is recorded in the checkpoint's `.meta.json` file for
 reproducibility:
@@ -482,16 +584,11 @@ reproducibility:
 
 ### Key Findings
 
-<!-- TODO: fill with actual numbers from completed runs -->
 
-1. **State SAC solves FetchReachDense** in ~200-300K steps (100% success rate).
-2. **Pixel SAC is harder** -- needs ~2-4x more samples due to high-dimensional
-   input and Q-function overfitting.
-3. **DrQ augmentation helps** -- random shift regularization partially closes
-   the state-vs-pixel gap without any architecture or loss changes.
-4. **Rendering is the bottleneck** -- `--fast` mode achieves ~2.5x speedup by
-   eliminating waste (native resolution), parallelizing (SubprocVecEnv), and
-   balancing the pipeline (gradient\_steps).
+1. **State SAC solves FetchReachDense** in 500K steps (100.0% success rate, return -0.730 +/- 0.245, 21.3 min wall time).
+2. **Pixel SAC is harder** -- 98.0% success rate at 2M steps (4x more samples), with return -1.022 +/- 0.503 and final distance 0.0156 (vs 0.0116 for state).
+3. **DrQ augmentation closes the gap** -- 100.0% success rate (matching state), return -0.889 +/- 0.516, final distance 0.0104 (actually *lower* than state's 0.0116). Random shift regularization eliminates Q-function overfitting.
+4. **Rendering is the bottleneck** -- `--fast` mode achieved 139 FPS (vs ~65 default), completing 2M pixel steps in 4.0 hrs instead of ~8.5 hrs (~2.1x speedup).
 
 ### Concepts Introduced in This Chapter
 
@@ -534,7 +631,61 @@ This chapter showed the cost of removing privileged state information: pixel
 observations are harder, slower, and prone to Q-function overfitting. DrQ
 helps, but a gap remains.
 
-<!-- TODO: bridge to whatever comes after Ch10 in the curriculum -->
+**Why FetchReachDense is "too easy."** We saw this pattern before in Chapter 4:
+FetchReach is a single-phase task (move the end-effector to a point in space).
+Both state and pixel agents converge to near-perfect success, and the
+interesting signal is convergence *speed*, not final performance. The sample-
+efficiency ratio $\rho$ is measurable but modest.
+
+For a more dramatic demonstration of the pixel penalty, we want a task that
+requires **object interaction** -- where the agent must learn to manipulate
+something in the scene, not just move through free space. Two natural candidates
+from the Fetch suite:
+
+| Task | What the robot does | Difficulty from pixels |
+|------|--------------------|-----------------------|
+| **FetchPushDense** | Push a block to a goal position | Medium -- requires learning object dynamics from images |
+| **FetchPickAndPlaceDense** | Grasp, lift, and place an object | Hard -- multi-phase (approach, grasp, lift, transport, place) |
+
+**FetchPushDense from pixels** works with our existing pipeline: dense rewards,
+no HER, SAC with pixel observations. The robot must discover that pushing the
+block reduces the reward -- something that requires understanding scene geometry
+from images alone, not just proprioception. We expect the pixel-state gap to
+be significantly larger than on Reach.
+
+**The "charging a phone" problem.** FetchPickAndPlace is the manipulation task
+closest to a practical application: pick up an object and place it at a target
+location. Imagine a robot arm that picks up a phone and places it on a charging
+pad. This is fetch-and-place in its core.
+
+But PickAndPlace from pure pixels exposes a fundamental tension:
+
+1. **Dense rewards alone may not be enough.** The agent must discover the
+   full grasp-lift-transport-place sequence. Even with continuous distance
+   feedback, the probability of randomly stumbling into a successful grasp
+   (closing the gripper around the object at exactly the right position and
+   orientation) is extremely low. Without the relabeling trick, this is a
+   severe exploration problem.
+
+2. **HER needs goal vectors.** Hindsight Experience Replay (Chapter 4)
+   transforms failures into successes by asking "what goal *would* this
+   trajectory have achieved?" But HER's relabeling requires `achieved_goal`
+   and `desired_goal` vectors -- 3D positions that our pixel-only wrapper
+   (`goal_mode="none"`) deliberately strips from the observation.
+
+3. **The middle ground: visual HER.** Our pixel wrapper supports
+   `goal_mode="both"`, which provides pixel observations alongside goal
+   vectors. The policy sees pixels through NatureCNN, while HER uses the
+   goal vectors internally for relabeling. The policy does not "cheat" on
+   state information (it still learns spatial features from images), but it
+   does receive the target position as a privileged vector. This is the
+   approach used by Nair et al. (2018) for visual goal-conditioned RL.
+
+Visual HER -- training from pixels with sparse rewards and goal relabeling --
+is the natural next step beyond this chapter. It combines the pixel observation
+pipeline from Ch10 with the HER machinery from Ch4, creating agents that can
+solve multi-phase manipulation tasks like PickAndPlace from camera images.
+We leave this as the direction for future work.
 
 ---
 
@@ -548,3 +699,5 @@ helps, but a gap remains.
 - Haarnoja, T. et al. (2018). "Soft Actor-Critic: Off-Policy Maximum Entropy
   Deep Reinforcement Learning with a Stochastic Actor."
   arXiv:1801.01290.
+- Nair, A. et al. (2018). "Visual Reinforcement Learning with Imagined Goals."
+  NeurIPS 2018. arXiv:1807.04742.

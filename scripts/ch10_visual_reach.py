@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chapter 10: Pixels, No Cheating -- Visual SAC on FetchReachDense
+"""Chapter 10: Pixels, No Cheating -- Visual SAC on Fetch Tasks
 
 Week 10 goals:
 1. Demonstrate state vs pixel observation trade-off on the same task
@@ -29,6 +29,9 @@ Usage:
 
     # Compare results (2-way or 3-way depending on available evals)
     python scripts/ch10_visual_reach.py compare
+
+    # Use a different Fetch environment (e.g., FetchPushDense)
+    python scripts/ch10_visual_reach.py all --seed 0 --env FetchPushDense-v4
 """
 
 from __future__ import annotations
@@ -96,6 +99,7 @@ class Ch10Config:
     learning_rate: float = 3e-4
     gamma: float = 0.95
     tau: float = 0.005
+    ent_coef: str = "auto"  # "auto" or float-as-string (e.g. "0.05")
 
     # Paths
     log_dir: str = "runs"
@@ -159,13 +163,27 @@ def _meta_path(ckpt: Path) -> Path:
     return ckpt.parent / (ckpt.stem + ".meta.json")
 
 
+def _parse_ent_coef(val: str) -> str | float:
+    """Parse ent_coef from config: 'auto' stays as string, numbers become float."""
+    if val == "auto":
+        return "auto"
+    return float(val)
+
+
+def _env_suffix(cfg: Ch10Config) -> str:
+    """Non-empty env suffix for result filenames when using non-default env."""
+    if cfg.env == DEFAULT_CONFIG.env:
+        return ""
+    return f"_{cfg.env}"
+
+
 def _result_path(cfg: Ch10Config, mode: str) -> Path:
     """Generate result JSON path for state or pixel mode."""
-    return _ensure_dir(cfg.results_dir) / f"ch10_{mode}_eval.json"
+    return _ensure_dir(cfg.results_dir) / f"ch10_{mode}{_env_suffix(cfg)}_eval.json"
 
 
 def _comparison_path(cfg: Ch10Config) -> Path:
-    return _ensure_dir(cfg.results_dir) / "ch10_comparison.json"
+    return _ensure_dir(cfg.results_dir) / f"ch10{_env_suffix(cfg)}_comparison.json"
 
 
 # =============================================================================
@@ -214,7 +232,7 @@ def cmd_train_state(cfg: Ch10Config) -> int:
             learning_rate=cfg.learning_rate,
             gamma=cfg.gamma,
             tau=cfg.tau,
-            ent_coef="auto",
+            ent_coef=_parse_ent_coef(cfg.ent_coef),
         )
 
         t0 = time.perf_counter()
@@ -251,7 +269,7 @@ def cmd_train_state(cfg: Ch10Config) -> int:
             "learning_rate": cfg.learning_rate,
             "gamma": cfg.gamma,
             "tau": cfg.tau,
-            "ent_coef": "auto",
+            "ent_coef": cfg.ent_coef,
         },
         "versions": _gather_versions(),
     }
@@ -340,7 +358,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
             learning_rate=cfg.learning_rate,
             gamma=cfg.gamma,
             tau=cfg.tau,
-            ent_coef="auto",
+            ent_coef=_parse_ent_coef(cfg.ent_coef),
             gradient_steps=cfg.gradient_steps,
         )
 
@@ -384,7 +402,7 @@ def cmd_train_pixel(cfg: Ch10Config) -> int:
             "learning_rate": cfg.learning_rate,
             "gamma": cfg.gamma,
             "tau": cfg.tau,
-            "ent_coef": "auto",
+            "ent_coef": cfg.ent_coef,
             "gradient_steps": cfg.gradient_steps,
         },
         "versions": _gather_versions(),
@@ -472,7 +490,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
             learning_rate=cfg.learning_rate,
             gamma=cfg.gamma,
             tau=cfg.tau,
-            ent_coef="auto",
+            ent_coef=_parse_ent_coef(cfg.ent_coef),
             gradient_steps=cfg.gradient_steps,
             replay_buffer_class=DrQDictReplayBuffer,
             replay_buffer_kwargs={
@@ -522,7 +540,7 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
             "learning_rate": cfg.learning_rate,
             "gamma": cfg.gamma,
             "tau": cfg.tau,
-            "ent_coef": "auto",
+            "ent_coef": cfg.ent_coef,
             "gradient_steps": cfg.gradient_steps,
             "drq_pad": cfg.drq_pad,
         },
@@ -978,6 +996,8 @@ def cmd_all(cfg: Ch10Config) -> int:
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
     """Add arguments shared by multiple subcommands."""
+    parser.add_argument("--env", default=DEFAULT_CONFIG.env,
+                        help="Gymnasium environment ID (default: %(default)s)")
     parser.add_argument("--seed", type=int, default=DEFAULT_CONFIG.seed,
                         help="Random seed")
     parser.add_argument("--device", default=DEFAULT_CONFIG.device,
@@ -1002,6 +1022,8 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
                         help="Discount factor")
     parser.add_argument("--tau", type=float, default=DEFAULT_CONFIG.tau,
                         help="Soft update coefficient")
+    parser.add_argument("--ent-coef", default=DEFAULT_CONFIG.ent_coef,
+                        help="SAC entropy coefficient: 'auto' or float (e.g. 0.05)")
 
 
 def _add_fast_args(parser: argparse.ArgumentParser) -> None:
@@ -1056,7 +1078,7 @@ def _config_from_args(args: argparse.Namespace) -> Ch10Config:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Chapter 10: Pixels, No Cheating -- Visual SAC on FetchReachDense",
+        description="Chapter 10: Pixels, No Cheating -- Visual SAC on Fetch Tasks",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

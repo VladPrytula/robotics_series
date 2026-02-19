@@ -322,6 +322,13 @@ Ch7: degradation curve, critical sigma (sigma*), degradation slope,
      cross-seed aggregation, NoiseSweepResult, run_noise_sweep,
      aggregate_across_seeds, compute_degradation_summary,
      noise-augmented training, clean-vs-robust tradeoff
+
+Ch10: pixel observation wrapper, goal mode (none/desired/both),
+      render_and_resize, NatureCNN encoder (Mnih et al. 2015),
+      sample-efficiency ratio (rho), DrQ (random shift augmentation),
+      replicate padding, DrQ replay buffer, uint8 pixel storage,
+      native resolution rendering, SubprocVecEnv (parallel envs),
+      replay ratio / gradient steps, deceptively dense reward
 ```
 
 ### Canonical References
@@ -346,6 +353,9 @@ references do not have to mentally translate.
 | TD3 (original paper) | Fujimoto et al. (2018) | ICML 2018 |
 | HER (original paper) | Andrychowicz et al. (2017) | arXiv:1707.01495 |
 | Reproducibility in RL | Henderson et al. (2018) | AAAI 2018 |
+| DrQ (data augmentation) | Kostrikov et al. (2020) | arXiv:2004.13649, Section 3.1 |
+| NatureCNN | Mnih et al. (2015) | Nature 518(7540), 529-533 |
+| Visual goal-conditioned RL | Nair et al. (2018) | NeurIPS 2018, arXiv:1807.04742 |
 | Fetch environments | Plappert et al. (2018) | arXiv:1802.09464 |
 | Neural network basics | Goodfellow et al. (2016) | Ch6-8 |
 | Information theory | Cover & Thomas (2006) | Ch2 (entropy) |
