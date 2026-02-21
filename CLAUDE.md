@@ -321,14 +321,20 @@ Ch7: degradation curve, critical sigma (sigma*), degradation slope,
      (eval-time wrapper), observation noise model, action noise model,
      cross-seed aggregation, NoiseSweepResult, run_noise_sweep,
      aggregate_across_seeds, compute_degradation_summary,
-     noise-augmented training, clean-vs-robust tradeoff
+     noise-augmented training, clean-vs-robust tradeoff,
+     experiment card (formalized .meta.json pattern)
 
-Ch10: pixel observation wrapper, goal mode (none/desired/both),
-      render_and_resize, NatureCNN encoder (Mnih et al. 2015),
-      sample-efficiency ratio (rho), DrQ (random shift augmentation),
-      replicate padding, DrQ replay buffer, uint8 pixel storage,
-      native resolution rendering, SubprocVecEnv (parallel envs),
-      replay ratio / gradient steps, deceptively dense reward
+Ch9: pixel observation wrapper, goal mode (none/desired/both),
+     render_and_resize, NatureCNN encoder (Mnih et al. 2015),
+     sample-efficiency ratio (rho), DrQ (random shift augmentation),
+     replicate padding, DrQ replay buffer, uint8 pixel storage,
+     native resolution rendering, SubprocVecEnv (parallel envs),
+     replay ratio / gradient steps, deceptively dense reward,
+     HerDrQDictReplayBuffer, visual HER synthesis,
+     information asymmetry (policy sees pixels, HER sees vectors),
+     value wavefront (Bellman diffusion through goal space),
+     hockey-stick learning curve (geometric phase transition + positive feedback),
+     critical competence radius, effective horizon k* (Laidlaw et al. 2024)
 ```
 
 ### Canonical References
@@ -360,6 +366,11 @@ references do not have to mentally translate.
 | Neural network basics | Goodfellow et al. (2016) | Ch6-8 |
 | Information theory | Cover & Thomas (2006) | Ch2 (entropy) |
 | RL algorithms survey | Spinning Up in Deep RL | spinningup.openai.com |
+| Effective horizon | Laidlaw et al. (2024) | ICLR 2024 Spotlight, arXiv:2312.08369 |
+| Quasimetric Q-functions | Wang & Isola (2022) | ICLR 2022, arXiv:2206.15478 |
+| Difficulty spectrum dynamics | Huang et al. (2025) | arXiv:2602.14872, Section 4 |
+| Contrastive goal-conditioned RL | Eysenbach et al. (2022) | NeurIPS 2022, arXiv:2206.07568 |
+| HER as implicit curriculum | Ren et al. (2019) | NeurIPS 2019, arXiv:1906.04279 |
 
 **Notation convention:** We follow Sutton & Barto (2018) notation throughout:
 - Policy: $\pi(a|s)$ or $\pi_\theta(a|s)$ when parameterized

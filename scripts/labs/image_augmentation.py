@@ -176,6 +176,79 @@ class DrQDictReplayBuffer(DictReplayBuffer):
 
 
 # =============================================================================
+# HER + DrQ Replay Buffer
+# =============================================================================
+
+# --8<-- [start:her_drq_replay_buffer]
+try:
+    from stable_baselines3 import HerReplayBuffer
+except ImportError:
+    HerReplayBuffer = None  # type: ignore[assignment,misc]
+
+
+class HerDrQDictReplayBuffer(HerReplayBuffer):  # type: ignore[misc]
+    """HerReplayBuffer subclass that applies DrQ augmentation at sample time.
+
+    HerReplayBuffer.sample() internally splits the batch into real and
+    virtual (relabeled) transitions, recomputes rewards for the virtual
+    portion, then concatenates them into a single DictReplayBufferSamples.
+    Crucially, it does NOT call _get_samples() -- it calls
+    _get_real_samples() + _get_virtual_samples() and merges.
+
+    We therefore override sample(), not _get_samples(). After HER produces
+    its merged batch (real + relabeled), we apply pixel augmentation to
+    both observations and next_observations uniformly. Goals are untouched.
+
+    Usage with SB3's SAC::
+
+        model = SAC(
+            "MultiInputPolicy", env,
+            replay_buffer_class=HerDrQDictReplayBuffer,
+            replay_buffer_kwargs={
+                "aug_fn": RandomShiftAug(pad=4),
+                "image_key": "pixels",
+                "n_sampled_goal": 4,
+                "goal_selection_strategy": "future",
+            },
+        )
+
+    Args:
+        aug_fn: An nn.Module that takes (B, C, H, W) and returns the same shape.
+            If None, no augmentation is applied (behaves like HerReplayBuffer).
+        image_key: The key in the observation dict that contains pixel data.
+            Default "pixels" (matching our PixelObservationWrapper).
+    """
+
+    def __init__(self, *args: Any, aug_fn: nn.Module | None = None,
+                 image_key: str = "pixels", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.aug_fn = aug_fn
+        self.image_key = image_key
+
+    def sample(self, batch_size, env=None):
+        """Sample a batch with HER relabeling, then apply pixel augmentation."""
+        samples = super().sample(batch_size, env)
+        if self.aug_fn is not None and self.image_key in samples.observations:
+            aug_obs = dict(samples.observations)
+            aug_next = dict(samples.next_observations)
+            aug_obs[self.image_key] = self.aug_fn(
+                samples.observations[self.image_key]
+            )
+            aug_next[self.image_key] = self.aug_fn(
+                samples.next_observations[self.image_key]
+            )
+            return DictReplayBufferSamples(
+                observations=aug_obs,
+                actions=samples.actions,
+                next_observations=aug_next,
+                dones=samples.dones,
+                rewards=samples.rewards,
+            )
+        return samples
+# --8<-- [end:her_drq_replay_buffer]
+
+
+# =============================================================================
 # Verification
 # =============================================================================
 
@@ -491,6 +564,86 @@ def verify_augmentation_invariance():
     print("  [PASS] Augmentation invariance OK (only pixels changed)")
 
 
+def verify_her_drq_buffer():
+    """Verify HerDrQDictReplayBuffer works with SB3's SAC + HER on pixel envs."""
+    print("Verifying HerDrQDictReplayBuffer integration...")
+
+    if HerReplayBuffer is None:
+        print("  [SKIP] SB3 HerReplayBuffer not available")
+        return
+
+    import gymnasium as gym
+    import gymnasium_robotics  # noqa: F401
+    from stable_baselines3 import SAC
+
+    from scripts.labs.pixel_wrapper import PixelObservationWrapper
+
+    # Create pixel env with goal_mode="both" -- the key configuration
+    # for HER + pixels: policy sees pixels, HER sees goal vectors
+    env = gym.make("FetchReach-v4", render_mode="rgb_array")
+    env = PixelObservationWrapper(env, image_size=(84, 84), goal_mode="both")
+
+    aug_fn = RandomShiftAug(pad=4)
+
+    # Verify observation space has both pixels and goal vectors
+    obs_keys = set(env.observation_space.spaces.keys())
+    assert "pixels" in obs_keys, f"Missing 'pixels' in obs: {obs_keys}"
+    assert "desired_goal" in obs_keys, f"Missing 'desired_goal' in obs: {obs_keys}"
+    assert "achieved_goal" in obs_keys, f"Missing 'achieved_goal' in obs: {obs_keys}"
+    print(f"  Obs space keys: {sorted(obs_keys)}")
+
+    # Create SAC with HerDrQDictReplayBuffer -- this is the exact wiring
+    # used in the training script
+    model = SAC(
+        "MultiInputPolicy",
+        env,
+        verbose=0,
+        device="cpu",
+        buffer_size=200,
+        learning_starts=50,
+        batch_size=16,
+        replay_buffer_class=HerDrQDictReplayBuffer,
+        replay_buffer_kwargs={
+            "aug_fn": aug_fn,
+            "image_key": "pixels",
+            "n_sampled_goal": 4,
+            "goal_selection_strategy": "future",
+        },
+    )
+
+    # Verify buffer type
+    buf = model.replay_buffer
+    assert isinstance(buf, HerDrQDictReplayBuffer), (
+        f"Expected HerDrQDictReplayBuffer, got {type(buf).__name__}"
+    )
+    assert isinstance(buf, HerReplayBuffer), (
+        "HerDrQDictReplayBuffer should be a HerReplayBuffer subclass"
+    )
+    print(f"  Buffer type: {type(buf).__name__}")
+    print(f"  Buffer inherits HerReplayBuffer: True")
+
+    # Train for a tiny number of steps to verify no crashes
+    model.learn(total_timesteps=100)
+    print("  100-step training completed without crashes")
+
+    # Sample from buffer and verify augmentation works
+    if buf.size() > 16:
+        samples = buf.sample(16, env=model._vec_normalize_env)
+        assert "pixels" in samples.observations, "Missing pixels in sampled obs"
+        assert "desired_goal" in samples.observations, "Missing goals in sampled obs"
+
+        px = samples.observations["pixels"]
+        goals = samples.observations["desired_goal"]
+        assert px.ndim == 4, f"Expected 4D pixel tensor, got {px.ndim}D"
+        assert torch.isfinite(px).all(), "Pixels contain NaN/Inf"
+        assert torch.isfinite(goals).all(), "Goals contain NaN/Inf"
+        print(f"  Sampled pixels shape: {px.shape}")
+        print(f"  Sampled goals shape: {goals.shape}")
+
+    env.close()
+    print("  [PASS] HerDrQDictReplayBuffer integration OK")
+
+
 def run_verification():
     """Run all verification checks."""
     print("=" * 60)
@@ -508,6 +661,8 @@ def run_verification():
     verify_drq_buffer_integration()
     print()
     verify_augmentation_invariance()
+    print()
+    verify_her_drq_buffer()
 
     print()
     print("=" * 60)

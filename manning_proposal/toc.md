@@ -58,35 +58,24 @@ Part 4 -- Engineering-Grade Robotics RL
 8.1 Why videos are not evidence
 8.2 Observation noise, action noise, and controlled perturbations
 8.3 Degradation curves with confidence bands across seeds
-8.4 Summary
-
-9. Evidence-driven tuning: ablations and sweeps
-9.1 What "reproducible" means in practice (tolerances, hardware classes)
-9.2 Minimal ablations that answer "what mattered?"
-9.3 Reporting: experiment cards and comparable JSON metrics
-9.4 Summary
+8.4 Experiment cards: formalizing the .meta.json pattern
+8.5 Summary
 
 Part 5 -- Pixels and the Reality Gap
-10. Pixels, no cheating: visual Reach in the same task family
-10.1 What changes when you remove privileged state
-10.2 Rendering wrappers and observation design
-10.3 A practical CNN encoder for RL
-10.4 Measuring the sample-efficiency gap
+9. Pixels, no cheating: from Reach to Push
+9.1 What changes when you remove privileged state
+9.2 Rendering wrappers and observation design (goal modes)
+9.3 A practical CNN encoder for RL (NatureCNN)
+9.4 Measuring the pixel penalty on Reach (state vs pixel vs DrQ)
+9.5 Why Reach is too easy (and Push is "deceptively dense")
+9.6 The bridge: HER + pixels with goal_mode="both"
+9.7 Push from pixels: combining HER, DrQ, and visual observations
+9.8 Making it fast: rendering as the bottleneck
+9.9 Summary
+
+10. The reality gap: stress tests before hardware
+10.1 Domain randomization: what to randomize and how to measure it
+10.2 Visual robustness: augmentation ablations (DrQ vs crop vs jitter)
+10.3 Sim-to-sim system identification as a controlled rehearsal
+10.4 A deployment-readiness checklist backed by tests
 10.5 Summary
-
-11. Visual robustness that matters: augmentation as a tool
-11.1 Visual brittleness and why it appears
-11.2 Practical augmentations (random crop, color jitter) and why they help
-11.3 Ablations: what helps, what hurts
-11.4 Summary
-
-12. Visual goals (optional advanced): "make it look like this"
-12.1 Goals as images: promise and pitfalls
-12.2 Evaluation protocols for high-dimensional goals
-12.3 Summary
-
-13. A reality-gap playbook: stress tests before hardware
-13.1 Domain randomization: what to randomize and how to measure it
-13.2 Sim-to-sim system identification as a controlled rehearsal
-13.3 A deployment-readiness checklist backed by tests
-13.4 Summary

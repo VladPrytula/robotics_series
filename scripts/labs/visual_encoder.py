@@ -36,6 +36,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
 
+import gymnasium as gym
+from gymnasium import spaces
+from stable_baselines3.common.torch_layers import (
+    BaseFeaturesExtractor,
+    NatureCNN as SB3NatureCNN,
+)
+from stable_baselines3.common.preprocessing import is_image_space
+
 
 # =============================================================================
 # NatureCNN Encoder
@@ -103,6 +111,77 @@ class NatureCNN(nn.Module):
         """
         return self.fc(self.conv(pixels))
 # --8<-- [end:nature_cnn]
+
+
+# =============================================================================
+# Normalized Combined Extractor (DrQ-v2 trunk pattern)
+# =============================================================================
+
+# --8<-- [start:normalized_combined_extractor]
+class NormalizedCombinedExtractor(BaseFeaturesExtractor):
+    """CombinedExtractor with LayerNorm + Tanh on CNN features.
+
+    When mixing high-dimensional CNN features with low-dimensional goal vectors,
+    the CNN outputs dominate during early training (random, unbounded magnitude)
+    and drown the clean goal signal. This extractor applies the DrQ-v2 trunk
+    pattern -- LayerNorm followed by Tanh -- to bound CNN features to [-1, 1]
+    before concatenation.
+
+    Architecture per observation key:
+        image key  -> NatureCNN(cnn_output_dim) -> LayerNorm -> Tanh
+        vector key -> Flatten (identity)
+    All outputs concatenated -> features
+
+    With cnn_output_dim=50 and two 3D goal vectors:
+        50 CNN features (bounded [-1, 1]) + 3 achieved_goal + 3 desired_goal = 56D
+        Goal vectors are 10.7% of input (vs 2.3% with default 256D CNN).
+
+    Reference:
+        Yarats et al. (2021), "Mastering Visual Continuous Control: Improved
+        Data-Augmented Reinforcement Learning", arXiv:2107.09645.
+
+    Args:
+        observation_space: Dict space with image and vector keys.
+        cnn_output_dim: Output dimension of NatureCNN (default: 50,
+            matching DrQ-v2). SB3's default CombinedExtractor uses 256.
+        normalized_image: Whether images are already normalized to [0, 1].
+    """
+
+    def __init__(
+        self,
+        observation_space: spaces.Dict,
+        cnn_output_dim: int = 50,
+        normalized_image: bool = False,
+    ):
+        # Placeholder features_dim -- updated after computing total size
+        super().__init__(observation_space, features_dim=1)
+
+        extractors: dict[str, nn.Module] = {}
+        total_concat_size = 0
+
+        for key, subspace in observation_space.spaces.items():
+            if is_image_space(subspace, normalized_image=normalized_image):
+                cnn = SB3NatureCNN(
+                    subspace, features_dim=cnn_output_dim,
+                    normalized_image=normalized_image,
+                )
+                extractors[key] = nn.Sequential(
+                    cnn,
+                    nn.LayerNorm(cnn_output_dim),
+                    nn.Tanh(),
+                )
+                total_concat_size += cnn_output_dim
+            else:
+                extractors[key] = nn.Flatten()
+                total_concat_size += gym.spaces.utils.flatdim(subspace)
+
+        self.extractors = nn.ModuleDict(extractors)
+        self._features_dim = total_concat_size
+
+    def forward(self, observations: dict[str, torch.Tensor]) -> torch.Tensor:
+        encoded = [ext(observations[k]) for k, ext in self.extractors.items()]
+        return torch.cat(encoded, dim=1)
+# --8<-- [end:normalized_combined_extractor]
 
 
 # =============================================================================

@@ -25,6 +25,7 @@ Key regions exported for tutorials:
 from __future__ import annotations
 
 import argparse
+import collections
 from typing import Any
 
 import gymnasium as gym
@@ -106,6 +107,21 @@ class PixelObservationWrapper(gym.ObservationWrapper):
     (for example, goal vectors) are flattened and concatenated; the
     policy/value MLP comes after concatenation. No custom policy_kwargs needed.
 
+    Frame stacking (optional):
+        When frame_stack > 1, the wrapper maintains a deque of the last N
+        frames and concatenates them along the channel dimension. This
+        provides temporal information (velocity can be inferred from
+        consecutive frame differences) that is absent from a single frame.
+        Only the "pixels" key is stacked; goal vectors remain instantaneous.
+
+        With frame_stack=4 and 84x84 RGB images:
+            "pixels" shape: (12, 84, 84) instead of (3, 84, 84)
+
+        On reset, the deque is filled with copies of the first frame.
+
+        Reference: Mnih et al. (2015) used 4 stacked frames for all Atari
+        games. DrQ and DrQ-v2 also use frame stacking.
+
     Args:
         env: A goal-conditioned Gymnasium environment with render_mode="rgb_array".
         image_size: Target (height, width) for rendered images. Default (84, 84)
@@ -114,6 +130,9 @@ class PixelObservationWrapper(gym.ObservationWrapper):
             goal vectors are exposed in the observation dict. Even when goals
             are not exposed, the wrapper stores the last raw goal dict on
             `last_raw_obs` for evaluation/debugging (not used by the policy).
+        frame_stack: Number of frames to stack along the channel dimension.
+            Default 1 (no stacking, single frame). Set to 4 for standard
+            Atari-style frame stacking.
     """
 
     def __init__(
@@ -121,9 +140,12 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         env: gym.Env,
         image_size: tuple[int, int] = (84, 84),
         goal_mode: str = "both",
+        frame_stack: int = 1,
     ):
         if goal_mode not in {"none", "desired", "both"}:
             raise ValueError(f"Invalid goal_mode={goal_mode!r}, expected one of: none, desired, both")
+        if frame_stack < 1:
+            raise ValueError(f"frame_stack must be >= 1, got {frame_stack}")
 
         # Validate render mode before wrapping
         assert env.render_mode == "rgb_array", (
@@ -134,17 +156,21 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         super().__init__(env)
         self._image_size = image_size
         self._goal_mode = goal_mode
+        self._frame_stack = frame_stack
+        self._frames: collections.deque[np.ndarray] = collections.deque(maxlen=frame_stack)
         self.last_raw_obs: dict[str, np.ndarray] | None = None
 
         # Build new observation space: pixels + goal vectors
         # The original dict space has observation, achieved_goal, desired_goal
         old_spaces = env.observation_space.spaces
 
+        # Channels = 3 (RGB) * frame_stack
+        n_channels = 3 * frame_stack
         new_spaces: dict[str, gym.Space] = {
             "pixels": gym.spaces.Box(
                 low=0,
                 high=255,
-                shape=(3, image_size[0], image_size[1]),
+                shape=(n_channels, image_size[0], image_size[1]),
                 dtype=np.uint8,
             ),
         }
@@ -154,6 +180,12 @@ class PixelObservationWrapper(gym.ObservationWrapper):
             new_spaces["achieved_goal"] = old_spaces["achieved_goal"]
 
         self.observation_space = gym.spaces.Dict(new_spaces)
+
+    def _get_stacked_pixels(self, pixels: np.ndarray) -> np.ndarray:
+        """Add frame to deque and return stacked observation."""
+        self._frames.append(pixels)
+        # Concatenate along channel dim: (3, H, W) * N -> (3*N, H, W)
+        return np.concatenate(list(self._frames), axis=0)
 
     def observation(self, observation: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """Transform observation: replace flat state with pixels.
@@ -166,12 +198,37 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         self.last_raw_obs = observation
         pixels = render_and_resize(self.env, self._image_size)
 
+        if self._frame_stack > 1:
+            pixels = self._get_stacked_pixels(pixels)
+
         out: dict[str, np.ndarray] = {"pixels": pixels}
         if self._goal_mode in {"desired", "both"}:
             out["desired_goal"] = observation["desired_goal"]
         if self._goal_mode == "both":
             out["achieved_goal"] = observation["achieved_goal"]
         return out
+
+    def reset(self, **kwargs):
+        """Reset and fill frame stack with copies of first frame."""
+        obs, info = self.env.reset(**kwargs)
+
+        # Render the first frame
+        self.last_raw_obs = obs
+        pixels = render_and_resize(self.env, self._image_size)
+
+        # Fill the deque with copies of the first frame
+        if self._frame_stack > 1:
+            self._frames.clear()
+            for _ in range(self._frame_stack):
+                self._frames.append(pixels)
+            pixels = np.concatenate(list(self._frames), axis=0)
+
+        out: dict[str, np.ndarray] = {"pixels": pixels}
+        if self._goal_mode in {"desired", "both"}:
+            out["desired_goal"] = obs["desired_goal"]
+        if self._goal_mode == "both":
+            out["achieved_goal"] = obs["achieved_goal"]
+        return out, info
 # --8<-- [end:pixel_obs_wrapper]
 
 

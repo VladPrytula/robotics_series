@@ -1,37 +1,30 @@
 #!/usr/bin/env python3
-"""Chapter 10: Pixels, No Cheating -- Visual SAC on Fetch Tasks
+"""Chapter 9/10: Pixels, No Cheating -- Visual SAC from Reach to Push
 
-Week 10 goals:
-1. Demonstrate state vs pixel observation trade-off on the same task
-2. Train SAC on FetchReachDense with privileged state (baseline from Ch3)
-3. Train SAC on FetchReachDense from pixels only (no goal vectors in obs)
-4. Measure the sample-efficiency gap quantitatively
-5. Train SAC with DrQ augmentation (Kostrikov et al. 2020) to close the gap
-6. Three-way comparison: state vs pixel vs pixel+DrQ
+Three-act narrative:
+  Act 1 (Reach): Measure the pixel penalty -- state vs pixel vs pixel+DrQ
+  Act 2 (Push diagnostic): Show Push from state (no HER) fails (~2% success)
+  Act 3 (Push synthesis): HER + pixels + DrQ solve Push from raw images
 
 Usage:
-    # Full pipeline: state + pixel + pixel+DrQ training + comparison
+    # --- Reach experiments (Act 1) ---
     python scripts/ch10_visual_reach.py all --seed 0
-
-    # Train state-based SAC (baseline)
     python scripts/ch10_visual_reach.py train-state --seed 0
-
-    # Train pixel-based SAC
     python scripts/ch10_visual_reach.py train-pixel --seed 0
-
-    # Train pixel-based SAC with DrQ augmentation
     python scripts/ch10_visual_reach.py train-pixel-drq --seed 0
-
-    # Evaluate a checkpoint (use --pixel for pixel checkpoints)
-    python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_state_FetchReachDense-v4_seed0.zip
-    python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_pixel_FetchReachDense-v4_seed0.zip --pixel
-    python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_drq_FetchReachDense-v4_seed0.zip --pixel
-
-    # Compare results (2-way or 3-way depending on available evals)
     python scripts/ch10_visual_reach.py compare
 
-    # Use a different Fetch environment (e.g., FetchPushDense)
-    python scripts/ch10_visual_reach.py all --seed 0 --env FetchPushDense-v4
+    # --- Push experiments (Acts 2-3) ---
+    python scripts/ch10_visual_reach.py push-all --seed 0
+    python scripts/ch10_visual_reach.py train-push-state --seed 0
+    python scripts/ch10_visual_reach.py train-push-her --seed 0
+    python scripts/ch10_visual_reach.py train-push-pixel-her --seed 0
+    python scripts/ch10_visual_reach.py train-push-pixel-her-drq --seed 0
+    python scripts/ch10_visual_reach.py push-compare
+
+    # --- Evaluation ---
+    python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_state_FetchReachDense-v4_seed0.zip
+    python scripts/ch10_visual_reach.py eval --ckpt checkpoints/sac_pixel_FetchReachDense-v4_seed0.zip --pixel
 """
 
 from __future__ import annotations
@@ -86,6 +79,22 @@ class Ch10Config:
     # DrQ (pixel + augmentation)
     drq_pad: int = 4
     drq_total_steps: int = 2_000_000
+
+    # Push experiments
+    push_env: str = "FetchPush-v4"             # Sparse Push (HER target)
+    push_dense_env: str = "FetchPushDense-v4"  # Dense Push (no-HER diagnostic)
+    push_state_total_steps: int = 1_000_000
+    push_her_total_steps: int = 2_000_000
+    push_pixel_total_steps: int = 4_000_000
+    push_pixel_buffer_size: int = 200_000
+    push_her_n_sampled_goal: int = 4
+    push_her_goal_strategy: str = "future"
+    push_ent_coef: str = "0.05"  # Fixed for sparse Push (auto-tuning collapses)
+
+    # Feature normalization (DrQ-v2 trunk pattern)
+    norm: bool = False           # --norm: use NormalizedCombinedExtractor
+    cnn_dim: int = 50            # CNN output dim (50 = DrQ-v2 default, SB3 default = 256)
+    frame_stack: int = 1         # Number of frames to stack (1 = no stacking, 4 = standard)
 
     # Fast mode -- bundles all speed optimizations
     fast: bool = False           # --fast: enable native render + SubprocVecEnv + more envs
@@ -550,6 +559,776 @@ def cmd_train_pixel_drq(cfg: Ch10Config) -> int:
     print(f"[ch10] Wrote metadata: {_meta_path(ckpt)}")
 
     return 0
+
+
+# =============================================================================
+# Push Commands (Act 2-3: the real test)
+# =============================================================================
+
+def cmd_train_push_state(cfg: Ch10Config) -> int:
+    """Train SAC on FetchPushDense with state observations, NO HER.
+
+    This is the diagnostic baseline: dense reward + state obs + no HER.
+    Expected result: ~2% success. The "deceptively dense" reward provides
+    distance-to-goal signal, but Push requires object contact first --
+    before contact, the reward landscape is nearly flat (the gripper can
+    approach the goal, but the object stays put).
+    """
+    import gymnasium_robotics  # noqa: F401
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
+
+    device = _resolve_device(cfg.device)
+    set_random_seed(cfg.seed)
+
+    env_id = cfg.push_dense_env
+    print(f"[ch10] Training PUSH STATE (no HER) on {env_id}")
+    print(f"[ch10] seed={cfg.seed}, n_envs={cfg.state_n_envs}, "
+          f"total_steps={cfg.push_state_total_steps}, device={device}")
+
+    env = make_vec_env(env_id, n_envs=cfg.state_n_envs, seed=cfg.seed)
+
+    log_dir = _ensure_dir(cfg.log_dir)
+    run_id = f"sac_push_state/{env_id}/seed{cfg.seed}"
+
+    try:
+        model = SAC(
+            "MultiInputPolicy",
+            env,
+            verbose=1,
+            device=device,
+            tensorboard_log=str(log_dir),
+            batch_size=cfg.batch_size,
+            buffer_size=cfg.state_buffer_size,
+            learning_starts=cfg.learning_starts,
+            learning_rate=cfg.learning_rate,
+            gamma=cfg.gamma,
+            tau=cfg.tau,
+            ent_coef=_parse_ent_coef(cfg.ent_coef),
+        )
+
+        t0 = time.perf_counter()
+        model.learn(total_timesteps=cfg.push_state_total_steps, tb_log_name=run_id)
+        elapsed = time.perf_counter() - t0
+        fps = cfg.push_state_total_steps / elapsed
+
+        ckpt = _ensure_dir(cfg.checkpoints_dir) / f"sac_push_state_{env_id}_seed{cfg.seed}.zip"
+        model.save(str(ckpt))
+        print(f"[ch10] Saved: {ckpt}")
+        print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
+
+    finally:
+        env.close()
+
+    meta = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "chapter": 10,
+        "mode": "push_state",
+        "algo": "sac",
+        "env_id": env_id,
+        "seed": cfg.seed,
+        "device": device,
+        "n_envs": cfg.state_n_envs,
+        "total_steps": cfg.push_state_total_steps,
+        "training_time_sec": elapsed,
+        "steps_per_sec": fps,
+        "her": False,
+        "checkpoint": str(ckpt),
+        "hyperparams": {
+            "batch_size": cfg.batch_size,
+            "buffer_size": cfg.state_buffer_size,
+            "learning_starts": cfg.learning_starts,
+            "learning_rate": cfg.learning_rate,
+            "gamma": cfg.gamma,
+            "tau": cfg.tau,
+            "ent_coef": cfg.ent_coef,
+        },
+        "versions": _gather_versions(),
+    }
+    _meta_path(ckpt).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"[ch10] Wrote metadata: {_meta_path(ckpt)}")
+
+    return 0
+
+
+def cmd_train_push_her(cfg: Ch10Config) -> int:
+    """Train SAC + HER on FetchPush (sparse) with state observations.
+
+    This demonstrates that HER solves Push from state -- the baseline before
+    we attempt pixels. Uses fixed ent_coef=0.05 (from Ch5: auto-tuning
+    collapses on sparse Push because the entropy target is calibrated for
+    the initial near-zero reward regime).
+    """
+    import gymnasium_robotics  # noqa: F401
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
+
+    try:
+        from stable_baselines3 import HerReplayBuffer
+    except ImportError:
+        from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
+
+    device = _resolve_device(cfg.device)
+    set_random_seed(cfg.seed)
+
+    env_id = cfg.push_env
+    print(f"[ch10] Training PUSH STATE + HER on {env_id}")
+    print(f"[ch10] seed={cfg.seed}, n_envs={cfg.state_n_envs}, "
+          f"total_steps={cfg.push_her_total_steps}, device={device}")
+    print(f"[ch10] HER: strategy={cfg.push_her_goal_strategy}, "
+          f"n_sampled_goal={cfg.push_her_n_sampled_goal}, "
+          f"ent_coef={cfg.push_ent_coef}")
+
+    env = make_vec_env(env_id, n_envs=cfg.state_n_envs, seed=cfg.seed)
+
+    log_dir = _ensure_dir(cfg.log_dir)
+    run_id = f"sac_push_her/{env_id}/seed{cfg.seed}"
+
+    try:
+        model = SAC(
+            "MultiInputPolicy",
+            env,
+            verbose=1,
+            device=device,
+            tensorboard_log=str(log_dir),
+            batch_size=cfg.batch_size,
+            buffer_size=cfg.state_buffer_size,
+            learning_starts=cfg.learning_starts,
+            learning_rate=cfg.learning_rate,
+            gamma=cfg.gamma,
+            tau=cfg.tau,
+            ent_coef=_parse_ent_coef(cfg.push_ent_coef),
+            replay_buffer_class=HerReplayBuffer,
+            replay_buffer_kwargs={
+                "n_sampled_goal": cfg.push_her_n_sampled_goal,
+                "goal_selection_strategy": cfg.push_her_goal_strategy,
+            },
+        )
+
+        t0 = time.perf_counter()
+        model.learn(total_timesteps=cfg.push_her_total_steps, tb_log_name=run_id)
+        elapsed = time.perf_counter() - t0
+        fps = cfg.push_her_total_steps / elapsed
+
+        ckpt = _ensure_dir(cfg.checkpoints_dir) / f"sac_push_her_{env_id}_seed{cfg.seed}.zip"
+        model.save(str(ckpt))
+        print(f"[ch10] Saved: {ckpt}")
+        print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
+
+    finally:
+        env.close()
+
+    meta = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "chapter": 10,
+        "mode": "push_her",
+        "algo": "sac",
+        "env_id": env_id,
+        "seed": cfg.seed,
+        "device": device,
+        "n_envs": cfg.state_n_envs,
+        "total_steps": cfg.push_her_total_steps,
+        "training_time_sec": elapsed,
+        "steps_per_sec": fps,
+        "her": True,
+        "her_n_sampled_goal": cfg.push_her_n_sampled_goal,
+        "her_goal_strategy": cfg.push_her_goal_strategy,
+        "checkpoint": str(ckpt),
+        "hyperparams": {
+            "batch_size": cfg.batch_size,
+            "buffer_size": cfg.state_buffer_size,
+            "learning_starts": cfg.learning_starts,
+            "learning_rate": cfg.learning_rate,
+            "gamma": cfg.gamma,
+            "tau": cfg.tau,
+            "ent_coef": cfg.push_ent_coef,
+        },
+        "versions": _gather_versions(),
+    }
+    _meta_path(ckpt).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"[ch10] Wrote metadata: {_meta_path(ckpt)}")
+
+    return 0
+
+
+def cmd_train_push_pixel_her(cfg: Ch10Config) -> int:
+    """Train SAC + HER on FetchPush (sparse) with pixel observations.
+
+    Uses goal_mode="both": the policy sees pixels (honest visual learning)
+    while HER sees goal vectors (for relabeling). This is the bridge
+    between visual learning and goal-conditioned exploration.
+    """
+    import gymnasium as gym
+    import gymnasium_robotics  # noqa: F401
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
+
+    try:
+        from stable_baselines3 import HerReplayBuffer
+    except ImportError:
+        from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
+
+    device = _resolve_device(cfg.device)
+    set_random_seed(cfg.seed)
+
+    env_id = cfg.push_env
+    print(f"[ch10] Training PUSH PIXEL + HER on {env_id}")
+    print(f"[ch10] seed={cfg.seed}, n_envs={cfg.pixel_n_envs}, "
+          f"total_steps={cfg.push_pixel_total_steps}, device={device}")
+    print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
+          f"goal_mode=both (policy=pixels, HER=vectors)")
+    print(f"[ch10] HER: strategy={cfg.push_her_goal_strategy}, "
+          f"n_sampled_goal={cfg.push_her_n_sampled_goal}, "
+          f"ent_coef={cfg.push_ent_coef}")
+    if cfg.norm:
+        print(f"[ch10] NORM MODE: NormalizedCombinedExtractor, cnn_dim={cfg.cnn_dim}, "
+              f"lr={cfg.learning_rate}")
+    if cfg.frame_stack > 1:
+        print(f"[ch10] FRAME STACK: {cfg.frame_stack} frames "
+              f"({3 * cfg.frame_stack} channels)")
+    if cfg.fast:
+        print(f"[ch10] FAST MODE: native_render={cfg.native_render}, "
+              f"use_subproc={cfg.use_subproc}, gradient_steps={cfg.gradient_steps}")
+
+    img_sz = cfg.image_size
+    fstack = cfg.frame_stack
+
+    def make_pixel_env():
+        import gymnasium_robotics  # noqa: F401
+        from scripts.labs.pixel_wrapper import PixelObservationWrapper as _Wrapper
+
+        make_kwargs: dict[str, Any] = {"render_mode": "rgb_array"}
+        if cfg.native_render:
+            make_kwargs["width"] = img_sz
+            make_kwargs["height"] = img_sz
+        env = gym.make(env_id, **make_kwargs)
+        return _Wrapper(env, image_size=(img_sz, img_sz), goal_mode="both",
+                        frame_stack=fstack)
+
+    vec_env_kwargs: dict[str, Any] = {}
+    if cfg.use_subproc:
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+        vec_env_kwargs["vec_env_cls"] = SubprocVecEnv
+
+    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed,
+                       **vec_env_kwargs)
+
+    log_dir = _ensure_dir(cfg.log_dir)
+    run_id = f"sac_push_pixel_her/{env_id}/seed{cfg.seed}"
+
+    policy_kwargs: dict[str, Any] = {}
+    if cfg.norm:
+        from scripts.labs.visual_encoder import NormalizedCombinedExtractor
+        policy_kwargs["features_extractor_class"] = NormalizedCombinedExtractor
+        policy_kwargs["features_extractor_kwargs"] = {"cnn_output_dim": cfg.cnn_dim}
+
+    try:
+        model = SAC(
+            "MultiInputPolicy",
+            env,
+            verbose=1,
+            device=device,
+            tensorboard_log=str(log_dir),
+            batch_size=cfg.batch_size,
+            buffer_size=cfg.push_pixel_buffer_size,
+            learning_starts=cfg.learning_starts,
+            learning_rate=cfg.learning_rate,
+            gamma=cfg.gamma,
+            tau=cfg.tau,
+            ent_coef=_parse_ent_coef(cfg.push_ent_coef),
+            gradient_steps=cfg.gradient_steps,
+            policy_kwargs=policy_kwargs if policy_kwargs else None,
+            replay_buffer_class=HerReplayBuffer,
+            replay_buffer_kwargs={
+                "n_sampled_goal": cfg.push_her_n_sampled_goal,
+                "goal_selection_strategy": cfg.push_her_goal_strategy,
+            },
+        )
+
+        t0 = time.perf_counter()
+        model.learn(total_timesteps=cfg.push_pixel_total_steps, tb_log_name=run_id)
+        elapsed = time.perf_counter() - t0
+        fps = cfg.push_pixel_total_steps / elapsed
+
+        ckpt = _ensure_dir(cfg.checkpoints_dir) / f"sac_push_pixel_her_{env_id}_seed{cfg.seed}.zip"
+        model.save(str(ckpt))
+        print(f"[ch10] Saved: {ckpt}")
+        print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
+
+    finally:
+        env.close()
+
+    meta = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "chapter": 10,
+        "mode": "push_pixel_her",
+        "algo": "sac",
+        "env_id": env_id,
+        "seed": cfg.seed,
+        "device": device,
+        "n_envs": cfg.pixel_n_envs,
+        "total_steps": cfg.push_pixel_total_steps,
+        "training_time_sec": elapsed,
+        "steps_per_sec": fps,
+        "her": True,
+        "her_n_sampled_goal": cfg.push_her_n_sampled_goal,
+        "her_goal_strategy": cfg.push_her_goal_strategy,
+        "image_size": cfg.image_size,
+        "pixel_goal_mode": "both",
+        "drq": False,
+        "norm": cfg.norm,
+        "cnn_dim": cfg.cnn_dim if cfg.norm else 256,
+        "frame_stack": cfg.frame_stack,
+        "fast_mode": cfg.fast,
+        "checkpoint": str(ckpt),
+        "hyperparams": {
+            "batch_size": cfg.batch_size,
+            "buffer_size": cfg.push_pixel_buffer_size,
+            "learning_starts": cfg.learning_starts,
+            "learning_rate": cfg.learning_rate,
+            "gamma": cfg.gamma,
+            "tau": cfg.tau,
+            "ent_coef": cfg.push_ent_coef,
+            "gradient_steps": cfg.gradient_steps,
+        },
+        "versions": _gather_versions(),
+    }
+    _meta_path(ckpt).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"[ch10] Wrote metadata: {_meta_path(ckpt)}")
+
+    return 0
+
+
+def cmd_train_push_pixel_her_drq(cfg: Ch10Config) -> int:
+    """Train SAC + HER + DrQ on FetchPush (sparse) with pixel observations.
+
+    The synthesis: pixel wrapper (goal_mode="both") + HER relabeling +
+    DrQ augmentation. Uses HerDrQDictReplayBuffer which applies random
+    shift augmentation AFTER HER's relabeling merge.
+
+    This is the chapter's resolution: three techniques from three chapters
+    combine to solve a problem none could solve alone.
+    """
+    import gymnasium as gym
+    import gymnasium_robotics  # noqa: F401
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
+
+    from scripts.labs.image_augmentation import HerDrQDictReplayBuffer, RandomShiftAug
+
+    device = _resolve_device(cfg.device)
+    set_random_seed(cfg.seed)
+
+    env_id = cfg.push_env
+    print(f"[ch10] Training PUSH PIXEL + HER + DrQ on {env_id}")
+    print(f"[ch10] seed={cfg.seed}, n_envs={cfg.pixel_n_envs}, "
+          f"total_steps={cfg.push_pixel_total_steps}, device={device}")
+    print(f"[ch10] image_size={cfg.image_size}x{cfg.image_size}, "
+          f"drq_pad={cfg.drq_pad}, goal_mode=both")
+    print(f"[ch10] HER: strategy={cfg.push_her_goal_strategy}, "
+          f"n_sampled_goal={cfg.push_her_n_sampled_goal}, "
+          f"ent_coef={cfg.push_ent_coef}")
+    if cfg.norm:
+        print(f"[ch10] NORM MODE: NormalizedCombinedExtractor, cnn_dim={cfg.cnn_dim}, "
+              f"lr={cfg.learning_rate}")
+    if cfg.frame_stack > 1:
+        print(f"[ch10] FRAME STACK: {cfg.frame_stack} frames "
+              f"({3 * cfg.frame_stack} channels)")
+    if cfg.fast:
+        print(f"[ch10] FAST MODE: native_render={cfg.native_render}, "
+              f"use_subproc={cfg.use_subproc}, gradient_steps={cfg.gradient_steps}")
+
+    img_sz = cfg.image_size
+    fstack = cfg.frame_stack
+
+    def make_pixel_env():
+        import gymnasium_robotics  # noqa: F401
+        from scripts.labs.pixel_wrapper import PixelObservationWrapper as _Wrapper
+
+        make_kwargs: dict[str, Any] = {"render_mode": "rgb_array"}
+        if cfg.native_render:
+            make_kwargs["width"] = img_sz
+            make_kwargs["height"] = img_sz
+        env = gym.make(env_id, **make_kwargs)
+        return _Wrapper(env, image_size=(img_sz, img_sz), goal_mode="both",
+                        frame_stack=fstack)
+
+    vec_env_kwargs: dict[str, Any] = {}
+    if cfg.use_subproc:
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+        vec_env_kwargs["vec_env_cls"] = SubprocVecEnv
+
+    env = make_vec_env(make_pixel_env, n_envs=cfg.pixel_n_envs, seed=cfg.seed,
+                       **vec_env_kwargs)
+
+    log_dir = _ensure_dir(cfg.log_dir)
+    run_id = f"sac_push_pixel_her_drq/{env_id}/seed{cfg.seed}"
+
+    policy_kwargs: dict[str, Any] = {}
+    if cfg.norm:
+        from scripts.labs.visual_encoder import NormalizedCombinedExtractor
+        policy_kwargs["features_extractor_class"] = NormalizedCombinedExtractor
+        policy_kwargs["features_extractor_kwargs"] = {"cnn_output_dim": cfg.cnn_dim}
+
+    try:
+        model = SAC(
+            "MultiInputPolicy",
+            env,
+            verbose=1,
+            device=device,
+            tensorboard_log=str(log_dir),
+            batch_size=cfg.batch_size,
+            buffer_size=cfg.push_pixel_buffer_size,
+            learning_starts=cfg.learning_starts,
+            learning_rate=cfg.learning_rate,
+            gamma=cfg.gamma,
+            tau=cfg.tau,
+            ent_coef=_parse_ent_coef(cfg.push_ent_coef),
+            gradient_steps=cfg.gradient_steps,
+            policy_kwargs=policy_kwargs if policy_kwargs else None,
+            replay_buffer_class=HerDrQDictReplayBuffer,
+            replay_buffer_kwargs={
+                "aug_fn": RandomShiftAug(pad=cfg.drq_pad),
+                "image_key": "pixels",
+                "n_sampled_goal": cfg.push_her_n_sampled_goal,
+                "goal_selection_strategy": cfg.push_her_goal_strategy,
+            },
+        )
+
+        t0 = time.perf_counter()
+        model.learn(total_timesteps=cfg.push_pixel_total_steps, tb_log_name=run_id)
+        elapsed = time.perf_counter() - t0
+        fps = cfg.push_pixel_total_steps / elapsed
+
+        ckpt = _ensure_dir(cfg.checkpoints_dir) / f"sac_push_pixel_her_drq_{env_id}_seed{cfg.seed}.zip"
+        model.save(str(ckpt))
+        print(f"[ch10] Saved: {ckpt}")
+        print(f"[ch10] Training time: {elapsed:.1f}s ({fps:.0f} steps/sec)")
+
+    finally:
+        env.close()
+
+    meta = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "chapter": 10,
+        "mode": "push_pixel_her_drq",
+        "algo": "sac",
+        "env_id": env_id,
+        "seed": cfg.seed,
+        "device": device,
+        "n_envs": cfg.pixel_n_envs,
+        "total_steps": cfg.push_pixel_total_steps,
+        "training_time_sec": elapsed,
+        "steps_per_sec": fps,
+        "her": True,
+        "her_n_sampled_goal": cfg.push_her_n_sampled_goal,
+        "her_goal_strategy": cfg.push_her_goal_strategy,
+        "image_size": cfg.image_size,
+        "pixel_goal_mode": "both",
+        "drq": True,
+        "drq_pad": cfg.drq_pad,
+        "norm": cfg.norm,
+        "cnn_dim": cfg.cnn_dim if cfg.norm else 256,
+        "frame_stack": cfg.frame_stack,
+        "fast_mode": cfg.fast,
+        "checkpoint": str(ckpt),
+        "hyperparams": {
+            "batch_size": cfg.batch_size,
+            "buffer_size": cfg.push_pixel_buffer_size,
+            "learning_starts": cfg.learning_starts,
+            "learning_rate": cfg.learning_rate,
+            "gamma": cfg.gamma,
+            "tau": cfg.tau,
+            "ent_coef": cfg.push_ent_coef,
+            "gradient_steps": cfg.gradient_steps,
+            "drq_pad": cfg.drq_pad,
+        },
+        "versions": _gather_versions(),
+    }
+    _meta_path(ckpt).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"[ch10] Wrote metadata: {_meta_path(ckpt)}")
+
+    return 0
+
+
+def _push_ckpt_path(cfg: Ch10Config, mode: str) -> Path:
+    """Generate checkpoint path for Push experiments."""
+    env_id = cfg.push_env if "her" in mode else cfg.push_dense_env
+    return _ensure_dir(cfg.checkpoints_dir) / f"sac_{mode}_{env_id}_seed{cfg.seed}.zip"
+
+
+def _push_result_path(cfg: Ch10Config, mode: str) -> Path:
+    """Generate result JSON path for Push experiments."""
+    return _ensure_dir(cfg.results_dir) / f"ch10_{mode}_eval.json"
+
+
+def _eval_push_state(cfg: Ch10Config, mode: str) -> int:
+    """Evaluate a Push state-based checkpoint."""
+    ckpt = _push_ckpt_path(cfg, mode)
+    if not ckpt.exists():
+        print(f"[ch10] Checkpoint not found: {ckpt}")
+        return 1
+
+    env_id = cfg.push_env if "her" in mode else cfg.push_dense_env
+    json_out = str(_push_result_path(cfg, mode))
+    Path(json_out).parent.mkdir(parents=True, exist_ok=True)
+
+    seeds_arg = f"0-{cfg.n_eval_episodes - 1}"
+    cmd = [
+        sys.executable, "eval.py",
+        "--ckpt", str(ckpt),
+        "--env", env_id,
+        "--algo", "sac",
+        "--device", _resolve_device(cfg.device),
+        "--n-episodes", str(cfg.n_eval_episodes),
+        "--seeds", seeds_arg,
+        "--json-out", json_out,
+    ]
+    if cfg.eval_deterministic:
+        cmd.append("--deterministic")
+
+    print(f"[ch10] Evaluating Push {mode}: {ckpt}")
+    result = subprocess.run(cmd, cwd=Path(__file__).parent.parent)
+
+    if result.returncode == 0:
+        print(f"[ch10] Push {mode} evaluation saved: {json_out}")
+    return result.returncode
+
+
+def _eval_push_pixel(cfg: Ch10Config, mode: str) -> int:
+    """Evaluate a Push pixel-based checkpoint with goal_mode=both."""
+    import gymnasium as gym
+    import gymnasium_robotics  # noqa: F401
+    import numpy as np
+    from stable_baselines3 import SAC
+
+    from scripts.labs.pixel_wrapper import PixelObservationWrapper
+
+    ckpt = _push_ckpt_path(cfg, mode)
+    if not ckpt.exists():
+        print(f"[ch10] Checkpoint not found: {ckpt}")
+        return 1
+
+    env_id = cfg.push_env
+    json_out = str(_push_result_path(cfg, mode))
+    Path(json_out).parent.mkdir(parents=True, exist_ok=True)
+
+    device = _resolve_device(cfg.device)
+    print(f"[ch10] Evaluating Push {mode}: {ckpt}")
+    print(f"[ch10] device={device}, n_episodes={cfg.n_eval_episodes}")
+
+    model = SAC.load(str(ckpt), device=device)
+
+    make_kwargs: dict[str, Any] = {"render_mode": "rgb_array"}
+    if cfg.native_render:
+        make_kwargs["width"] = cfg.image_size
+        make_kwargs["height"] = cfg.image_size
+    base_env = gym.make(env_id, **make_kwargs)
+    env = PixelObservationWrapper(
+        base_env, image_size=(cfg.image_size, cfg.image_size), goal_mode="both",
+    )
+
+    episode_returns = []
+    episode_successes = []
+    episode_lengths = []
+    final_distances = []
+
+    for ep in range(cfg.n_eval_episodes):
+        obs, info = env.reset(seed=ep)
+        done = False
+        ep_return = 0.0
+        ep_len = 0
+
+        while not done:
+            action, _ = model.predict(obs, deterministic=cfg.eval_deterministic)
+            obs, reward, term, trunc, info = env.step(action)
+            ep_return += reward
+            ep_len += 1
+            done = term or trunc
+
+        episode_returns.append(ep_return)
+        episode_lengths.append(ep_len)
+        episode_successes.append(float(info.get("is_success", False)))
+
+        achieved = obs["achieved_goal"]
+        desired = obs["desired_goal"]
+        dist = np.linalg.norm(achieved - desired)
+        final_distances.append(float(dist))
+
+    env.close()
+
+    success_rate = float(np.mean(episode_successes))
+    return_mean = float(np.mean(episode_returns))
+    return_std = float(np.std(episode_returns))
+    distance_mean = float(np.mean(final_distances))
+    distance_std = float(np.std(final_distances))
+    length_mean = float(np.mean(episode_lengths))
+
+    print(f"[ch10] Push {mode} eval: success_rate={success_rate:.1%}, "
+          f"return={return_mean:.3f} +/- {return_std:.3f}, "
+          f"final_dist={distance_mean:.4f}")
+
+    report = {
+        "checkpoint": str(ckpt),
+        "env_id": env_id,
+        "mode": mode,
+        "image_size": cfg.image_size,
+        "pixel_goal_mode": "both",
+        "n_episodes": cfg.n_eval_episodes,
+        "deterministic": cfg.eval_deterministic,
+        "aggregate": {
+            "success_rate": success_rate,
+            "return_mean": return_mean,
+            "return_std": return_std,
+            "final_distance_mean": distance_mean,
+            "final_distance_std": distance_std,
+            "ep_len_mean": length_mean,
+        },
+        "per_episode": [
+            {
+                "seed": ep,
+                "return": episode_returns[ep],
+                "success": int(episode_successes[ep]),
+                "final_distance": final_distances[ep],
+                "length": episode_lengths[ep],
+            }
+            for ep in range(cfg.n_eval_episodes)
+        ],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "versions": _gather_versions(),
+    }
+
+    Path(json_out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"[ch10] Push {mode} evaluation saved: {json_out}")
+
+    return 0
+
+
+def cmd_push_compare(cfg: Ch10Config) -> int:
+    """Compare Push experiments across all available configurations.
+
+    Prints a table showing the progression:
+    state no-HER (~2%) < state+HER (~95%) < pixel+HER (~80%) < pixel+HER+DrQ (~90%+)
+    """
+    modes = [
+        ("push_state", "State (no HER)"),
+        ("push_her", "State + HER"),
+        ("push_pixel_her", "Pixel + HER"),
+        ("push_pixel_her_drq", "Pixel+HER+DrQ"),
+    ]
+
+    results = {}
+    for mode, label in modes:
+        path = _push_result_path(cfg, mode)
+        if path.exists():
+            with open(path) as f:
+                results[mode] = json.load(f)
+
+    if not results:
+        print("[ch10] No Push evaluation results found.")
+        print("[ch10] Run push-all first, or individual train + eval commands.")
+        return 1
+
+    print()
+    print("=" * 100)
+    print("Chapter 10: Push Experiment Comparison")
+    print("=" * 100)
+
+    # Header
+    cols = [(mode, label) for mode, label in modes if mode in results]
+    header = f"{'Metric':<25}"
+    for _, label in cols:
+        header += f" | {label:>18}"
+    print(f"\n{header}")
+    print("-" * (26 + 21 * len(cols)))
+
+    # Rows
+    def row(metric_name, key, fmt=".1%"):
+        line = f"{metric_name:<25}"
+        for mode, _ in cols:
+            val = results[mode]["aggregate"].get(key)
+            if val is not None:
+                line += f" | {val:>18{fmt}}"
+            else:
+                line += f" | {'N/A':>18}"
+        print(line)
+
+    row("Success rate", "success_rate", ".1%")
+    row("Return (mean)", "return_mean", ".3f")
+    row("Return (std)", "return_std", ".3f")
+    row("Final distance", "final_distance_mean", ".4f")
+    row("Episode length", "ep_len_mean", ".1f")
+
+    print("-" * (26 + 21 * len(cols)))
+
+    # Summary interpretation
+    print()
+    if "push_state" in results and "push_her" in results:
+        sr_state = results["push_state"]["aggregate"]["success_rate"]
+        sr_her = results["push_her"]["aggregate"]["success_rate"]
+        print(f"HER effect: {sr_state:.1%} -> {sr_her:.1%} "
+              f"(+{sr_her - sr_state:.1%} from goal relabeling)")
+
+    if "push_her" in results and "push_pixel_her_drq" in results:
+        sr_state_her = results["push_her"]["aggregate"]["success_rate"]
+        sr_pixel_drq = results["push_pixel_her_drq"]["aggregate"]["success_rate"]
+        pixel_penalty = sr_state_her - sr_pixel_drq
+        print(f"Pixel penalty (with DrQ): {sr_state_her:.1%} -> {sr_pixel_drq:.1%} "
+              f"({pixel_penalty:+.1%})")
+
+    if "push_pixel_her" in results and "push_pixel_her_drq" in results:
+        sr_no_drq = results["push_pixel_her"]["aggregate"]["success_rate"]
+        sr_drq = results["push_pixel_her_drq"]["aggregate"]["success_rate"]
+        print(f"DrQ augmentation effect: {sr_no_drq:.1%} -> {sr_drq:.1%} "
+              f"({sr_drq - sr_no_drq:+.1%})")
+
+    # Save comparison report
+    report = {
+        "experiment": "push_comparison",
+        "seed": cfg.seed,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    for mode, _ in cols:
+        report[mode] = results[mode]["aggregate"]
+
+    comp_path = _ensure_dir(cfg.results_dir) / "ch10_push_comparison.json"
+    comp_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"\n[ch10] Push comparison saved: {comp_path}")
+
+    return 0
+
+
+def cmd_push_all(cfg: Ch10Config) -> int:
+    """Full Push pipeline: 4 training configs + eval + comparison."""
+    print("=" * 72)
+    print("Chapter 10: Push Pipeline -- State vs HER vs Pixel+HER vs Pixel+HER+DrQ")
+    print(f"Seed={cfg.seed}")
+    print("=" * 72)
+
+    steps = [
+        ("1/8", "Push state (no HER)", lambda: cmd_train_push_state(cfg)),
+        ("2/8", "Eval push state", lambda: _eval_push_state(cfg, "push_state")),
+        ("3/8", "Push state + HER", lambda: cmd_train_push_her(cfg)),
+        ("4/8", "Eval push HER", lambda: _eval_push_state(cfg, "push_her")),
+        ("5/8", "Push pixel + HER", lambda: cmd_train_push_pixel_her(cfg)),
+        ("6/8", "Eval push pixel+HER", lambda: _eval_push_pixel(cfg, "push_pixel_her")),
+        ("7/8", "Push pixel + HER + DrQ", lambda: cmd_train_push_pixel_her_drq(cfg)),
+        ("8/8", "Eval push pixel+HER+DrQ", lambda: _eval_push_pixel(cfg, "push_pixel_her_drq")),
+    ]
+
+    for step_id, desc, fn in steps:
+        print(f"\n[{step_id}] {desc}...")
+        ret = fn()
+        if ret != 0:
+            print(f"[ch10] {desc} failed (exit code {ret})")
+            return ret
+
+    print("\n[9/9] Comparing Push results...")
+    return cmd_push_compare(cfg)
 
 
 def cmd_eval(cfg: Ch10Config, ckpt: str, pixel: bool = False, json_out: str | None = None) -> int:
@@ -1035,6 +1814,37 @@ def _add_fast_args(parser: argparse.ArgumentParser) -> None:
                         help="SAC gradient steps per env step (default: 1, fast: 3)")
 
 
+def _add_norm_args(parser: argparse.ArgumentParser) -> None:
+    """Add feature normalization and frame stacking arguments."""
+    parser.add_argument("--norm", action="store_true", default=False,
+                        help="Use NormalizedCombinedExtractor (LayerNorm+Tanh on CNN output)")
+    parser.add_argument("--cnn-dim", type=int, default=None,
+                        help="CNN output dimension (default: 50 with --norm, 256 without)")
+    parser.add_argument("--frame-stack", type=int, default=1,
+                        help="Number of frames to stack (1=none, 4=standard Atari-style)")
+
+
+def _add_push_args(parser: argparse.ArgumentParser) -> None:
+    """Add Push-specific arguments."""
+    parser.add_argument("--push-state-total-steps", type=int,
+                        default=DEFAULT_CONFIG.push_state_total_steps,
+                        help="Total training steps for Push state (no HER)")
+    parser.add_argument("--push-her-total-steps", type=int,
+                        default=DEFAULT_CONFIG.push_her_total_steps,
+                        help="Total training steps for Push state + HER")
+    parser.add_argument("--push-pixel-total-steps", type=int,
+                        default=DEFAULT_CONFIG.push_pixel_total_steps,
+                        help="Total training steps for Push pixel + HER")
+    parser.add_argument("--push-pixel-buffer-size", type=int,
+                        default=DEFAULT_CONFIG.push_pixel_buffer_size,
+                        help="Replay buffer size for Push pixel modes")
+    parser.add_argument("--push-her-n-sampled-goal", type=int,
+                        default=DEFAULT_CONFIG.push_her_n_sampled_goal,
+                        help="HER n_sampled_goal for Push")
+    parser.add_argument("--push-ent-coef", default=DEFAULT_CONFIG.push_ent_coef,
+                        help="SAC entropy coef for sparse Push (default: 0.05 fixed)")
+
+
 def _config_from_args(args: argparse.Namespace) -> Ch10Config:
     """Build Ch10Config from parsed args.
 
@@ -1072,6 +1882,16 @@ def _config_from_args(args: argparse.Namespace) -> Ch10Config:
     elif fast:
         cfg.gradient_steps = 3
     # else: keep dataclass default (1)
+
+    # Resolve --norm and --cnn-dim
+    norm = getattr(args, "norm", False)
+    if norm:
+        cfg.norm = True
+    cnn_dim = getattr(args, "cnn_dim", None)
+    if cnn_dim is not None:
+        cfg.cnn_dim = cnn_dim
+    elif norm:
+        cfg.cnn_dim = 50  # DrQ-v2 default
 
     return cfg
 
@@ -1229,12 +2049,86 @@ Examples:
     )
     _add_fast_args(p_all)
 
+    # --- Push subcommands ---
+
+    # train-push-state
+    p_push_state = sub.add_parser("train-push-state",
+                                   help="Train SAC on FetchPushDense (no HER, diagnostic baseline)",
+                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_push_state)
+    _add_train_args(p_push_state)
+    _add_push_args(p_push_state)
+    p_push_state.add_argument("--state-n-envs", type=int, default=DEFAULT_CONFIG.state_n_envs)
+    p_push_state.add_argument("--state-buffer-size", type=int, default=DEFAULT_CONFIG.state_buffer_size)
+
+    # train-push-her
+    p_push_her = sub.add_parser("train-push-her",
+                                 help="Train SAC+HER on FetchPush (sparse, state obs)",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_push_her)
+    _add_train_args(p_push_her)
+    _add_push_args(p_push_her)
+    p_push_her.add_argument("--state-n-envs", type=int, default=DEFAULT_CONFIG.state_n_envs)
+    p_push_her.add_argument("--state-buffer-size", type=int, default=DEFAULT_CONFIG.state_buffer_size)
+
+    # train-push-pixel-her
+    p_push_pixel = sub.add_parser("train-push-pixel-her",
+                                   help="Train SAC+HER on FetchPush from pixels (goal_mode=both)",
+                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_push_pixel)
+    _add_train_args(p_push_pixel)
+    _add_push_args(p_push_pixel)
+    p_push_pixel.add_argument("--pixel-n-envs", type=int, default=DEFAULT_CONFIG.pixel_n_envs)
+    p_push_pixel.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size)
+    _add_norm_args(p_push_pixel)
+    _add_fast_args(p_push_pixel)
+
+    # train-push-pixel-her-drq
+    p_push_drq = sub.add_parser("train-push-pixel-her-drq",
+                                 help="Train SAC+HER+DrQ on FetchPush from pixels (the synthesis)",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_push_drq)
+    _add_train_args(p_push_drq)
+    _add_push_args(p_push_drq)
+    p_push_drq.add_argument("--pixel-n-envs", type=int, default=DEFAULT_CONFIG.pixel_n_envs)
+    p_push_drq.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size)
+    p_push_drq.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad)
+    _add_norm_args(p_push_drq)
+    _add_fast_args(p_push_drq)
+
+    # push-compare
+    p_push_cmp = sub.add_parser("push-compare",
+                                 help="Compare Push experiments",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_push_cmp)
+    p_push_cmp.add_argument("--n-eval-episodes", type=int, default=DEFAULT_CONFIG.n_eval_episodes)
+
+    # push-all
+    p_push_all = sub.add_parser("push-all",
+                                 help="Full Push pipeline: 4 configs + eval + compare",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    _add_common_args(p_push_all)
+    _add_train_args(p_push_all)
+    _add_push_args(p_push_all)
+    p_push_all.add_argument("--state-n-envs", type=int, default=DEFAULT_CONFIG.state_n_envs)
+    p_push_all.add_argument("--state-buffer-size", type=int, default=DEFAULT_CONFIG.state_buffer_size)
+    p_push_all.add_argument("--pixel-n-envs", type=int, default=DEFAULT_CONFIG.pixel_n_envs)
+    p_push_all.add_argument("--image-size", type=int, default=DEFAULT_CONFIG.image_size)
+    p_push_all.add_argument("--drq-pad", type=int, default=DEFAULT_CONFIG.drq_pad)
+    p_push_all.add_argument("--n-eval-episodes", type=int, default=DEFAULT_CONFIG.n_eval_episodes)
+    _add_norm_args(p_push_all)
+    _add_fast_args(p_push_all)
+
     args = parser.parse_args()
 
     # Set MUJOCO_GL
+    pixel_cmds = {
+        "train-pixel", "train-pixel-drq", "all",
+        "train-push-pixel-her", "train-push-pixel-her-drq", "push-all",
+    }
     if args.mujoco_gl is not None:
         os.environ["MUJOCO_GL"] = args.mujoco_gl
-    elif args.cmd in ("train-pixel", "train-pixel-drq", "all"):
+    elif args.cmd in pixel_cmds:
         # Pixel training needs rendering
         os.environ.setdefault("MUJOCO_GL", "egl")
     elif args.cmd == "eval" and getattr(args, "pixel", False):
@@ -1256,6 +2150,18 @@ Examples:
         return cmd_compare(cfg)
     elif args.cmd == "all":
         return cmd_all(cfg)
+    elif args.cmd == "train-push-state":
+        return cmd_train_push_state(cfg)
+    elif args.cmd == "train-push-her":
+        return cmd_train_push_her(cfg)
+    elif args.cmd == "train-push-pixel-her":
+        return cmd_train_push_pixel_her(cfg)
+    elif args.cmd == "train-push-pixel-her-drq":
+        return cmd_train_push_pixel_her_drq(cfg)
+    elif args.cmd == "push-compare":
+        return cmd_push_compare(cfg)
+    elif args.cmd == "push-all":
+        return cmd_push_all(cfg)
     else:
         parser.print_help()
         return 1

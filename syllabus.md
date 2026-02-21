@@ -18,7 +18,8 @@ By Week 10, you will have trained a robotic arm to **pick up objects and place t
 | 2-3 | PPO and SAC baselines | On-policy vs off-policy, replay buffers, entropy |
 | 4-5 | **HER unlocks sparse rewards** | Why failures teach success |
 | 6-7 | Policies as controllers | Action smoothness, robustness, noise injection |
-| 8-10 | Capstone | PickAndPlace with stress testing |
+| 8-9 | **Pixels, no cheating** | Visual SAC, DrQ, HER+pixels synthesis on Push |
+| 10 | Reality gap | Domain randomization, deployment readiness |
 
 Each week includes runnable commands and "done when" criteria -- concrete checkpoints that help verify progress. We find this structure useful because RL can be frustrating: code runs without errors but the agent learns nothing. Having a target success rate makes it clear when something is working.
 
@@ -404,59 +405,49 @@ Done when
 - Noise-augmented policy shows improved critical sigma and robustness AUC.
 - Clean-vs-robust tradeoff is quantified with numbers.
 
-### Week 8 — Second suite adapter (robosuite OR Meta-World)
-Goal: avoid overfitting intuition to Fetch.
-
-Steps (pick one suite)
-- [ ] Implement an adapter to the same train/eval contract.
-- [ ] Solve 1–2 simple tasks.
-- [ ] If using robosuite, compare controller modes (this is where “torque vs OSC vs position” becomes real).
-
-Done when
-- You can train/eval in a second ecosystem with minimal harness changes.
-
-### Week 9 — Engineering-grade RL: sweeps, ablations, seed discipline
-Goal: turn tinkering into evidence.
+### Week 8-9 — Pixels, no cheating: from Reach to Push (Ch9)
+Goal: train visual SAC from raw pixels, measure the pixel penalty, then overcome it on Push with HER + DrQ.
 
 Steps
-- [ ] Seed discipline: 5 seeds per config; report mean±std + CI for success.
-- [ ] Minimum ablation grid:
-  - normalization method A vs B
-  - HER `n_sampled_goal ∈ {2,4,8}`
-  - SAC entropy: auto vs fixed target entropy
-- [ ] Add a launcher:
-  - YAML grid spec
-  - Spark DGX job launcher script (scheduler or local parallel runner)
-  - auto-collect results into a single report
+- [ ] Train state SAC on FetchReachDense (baseline ceiling):
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py train-state --seed 0`
+- [ ] Train pixel SAC on FetchReachDense (no augmentation):
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py train-pixel --seed 0`
+- [ ] Train pixel+DrQ SAC on FetchReachDense:
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py train-pixel-drq --seed 0`
+- [ ] Three-way Reach comparison (compute sample-efficiency ratio rho):
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py compare`
+- [ ] Diagnose why Push from state (no HER) fails (~2% success):
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py train-push-state --seed 0`
+- [ ] Train Push from state + HER (baseline: ~95%+):
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py train-push-her --seed 0`
+- [ ] Train Push from pixels + HER + DrQ (the synthesis):
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py train-pixel-her-drq --seed 0 --env FetchPush-v4`
+- [ ] Full Push comparison table:
+  - `bash docker/dev.sh python scripts/ch10_visual_reach.py push-compare`
 
 Done when
-- You can answer “what mattered?” with plots + statistics.
-- A run is reproducible from scratch given commit+lock+config.
+- Reach comparison shows clear pixel penalty (rho > 4x) with DrQ closing part of the gap.
+- Push pixel+HER+DrQ achieves >80% success (target: >90%).
+- You can explain why goal_mode="both" is not cheating (policy sees pixels, HER sees vectors).
 
-### Week 10 — Capstone: sparse PickAndPlace + robustness targets
-Goal: one deliverable-grade model + eval protocol + write-up.
+### Week 10 — The reality gap: stress tests before hardware (Ch10)
+Goal: domain randomization, visual robustness ablations, and a deployment-readiness checklist.
 
-Capstone spec
-- Environment: sparse PickAndPlace (`FetchPickAndPlace-*`) + HER
-- Training: Spark DGX, vectorized envs, periodic checkpoints
-- Evaluation:
-  - standard test distribution
-  - stress test (wider init positions + mild noise/randomization)
-  - report success-rate, time-to-success, smoothness metrics
+Steps
+- [ ] Domain randomization sweep: what to randomize and how to measure it
+- [ ] Visual robustness ablations: DrQ vs crop vs jitter (using Push from pixels model)
+- [ ] Sim-to-sim system identification: controlled rehearsal with perturbed dynamics
+- [ ] Write deployment-readiness checklist backed by quantitative tests
 
 Deliverables
-- model checkpoint(s) + normalization stats
-- `eval.py` outputs one JSON with metrics + provenance (commit hash, versions, seeds, episode count)
-- short experiment card:
-  - observation handling + normalization
-  - action filtering/scaling
-  - hyperparams that mattered (from ablations)
-  - what failed and how you debugged it
+- Trained pixel Push model with robustness evaluation
+- Augmentation ablation table with success rates across perturbation types
+- Deployment-readiness checklist as a reusable protocol
 
-Stretch (only after capstone is stable)
-- Vision (RGB) will spike sample complexity
-- Demonstrations + BC warm-start can help manipulation
-- CS285 robotics-adjacent assignments as structured extensions
+Done when
+- You can answer "will this transfer to a real robot?" with quantitative evidence.
+- Augmentation ablation shows which augmentation strategy matters for each perturbation type.
 
 ---
 
