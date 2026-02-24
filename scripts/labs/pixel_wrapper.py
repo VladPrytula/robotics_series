@@ -122,6 +122,29 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         Reference: Mnih et al. (2015) used 4 stacked frames for all Atari
         games. DrQ and DrQ-v2 also use frame stacking.
 
+    Proprioception passthrough (optional):
+        When proprio_indices is provided, the wrapper extracts specified
+        indices from the raw ``obs["observation"]`` vector into a new
+        ``"proprioception"`` key. This implements the sensor separation
+        principle: joint encoders provide the robot's self-state (gripper
+        position, velocity, finger widths) while the camera provides
+        world-state (object positions). The CNN only needs to learn about
+        the world, not about the robot itself.
+
+        For FetchPush-v4 (25D observation vector)::
+
+            [0:3]   grip_pos        -> proprio (robot self-state)
+            [3:6]   object_pos      -> CNN territory (= achieved_goal)
+            [6:9]   object_rel_pos  -> CNN territory
+            [9:11]  gripper_state   -> proprio (robot self-state)
+            [11:14] object_rot      -> CNN territory
+            [14:17] object_velp     -> CNN territory
+            [17:20] object_velr     -> CNN territory
+            [20:23] grip_velp       -> proprio (robot self-state)
+            [23:25] gripper_vel     -> proprio (robot self-state)
+
+        Default proprio_indices for Push: [0,1,2,9,10,20,21,22,23,24] -> 10D.
+
     Args:
         env: A goal-conditioned Gymnasium environment with render_mode="rgb_array".
         image_size: Target (height, width) for rendered images. Default (84, 84)
@@ -133,6 +156,9 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         frame_stack: Number of frames to stack along the channel dimension.
             Default 1 (no stacking, single frame). Set to 4 for standard
             Atari-style frame stacking.
+        proprio_indices: List of indices into the raw ``obs["observation"]``
+            vector to extract as proprioception. When None (default), no
+            proprioception key is added (backward-compatible).
     """
 
     def __init__(
@@ -141,6 +167,7 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         image_size: tuple[int, int] = (84, 84),
         goal_mode: str = "both",
         frame_stack: int = 1,
+        proprio_indices: list[int] | None = None,
     ):
         if goal_mode not in {"none", "desired", "both"}:
             raise ValueError(f"Invalid goal_mode={goal_mode!r}, expected one of: none, desired, both")
@@ -158,11 +185,21 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         self._goal_mode = goal_mode
         self._frame_stack = frame_stack
         self._frames: collections.deque[np.ndarray] = collections.deque(maxlen=frame_stack)
+        self._proprio_indices = proprio_indices
         self.last_raw_obs: dict[str, np.ndarray] | None = None
 
-        # Build new observation space: pixels + goal vectors
+        # Build new observation space: pixels + goal vectors + optional proprioception
         # The original dict space has observation, achieved_goal, desired_goal
         old_spaces = env.observation_space.spaces
+
+        # Validate proprio_indices against the observation space
+        if proprio_indices is not None:
+            obs_dim = old_spaces["observation"].shape[0]
+            for idx in proprio_indices:
+                if idx < 0 or idx >= obs_dim:
+                    raise ValueError(
+                        f"proprio_indices contains {idx}, but observation dim is {obs_dim}"
+                    )
 
         # Channels = 3 (RGB) * frame_stack
         n_channels = 3 * frame_stack
@@ -174,6 +211,13 @@ class PixelObservationWrapper(gym.ObservationWrapper):
                 dtype=np.uint8,
             ),
         }
+        if proprio_indices is not None:
+            obs_space = old_spaces["observation"]
+            low = obs_space.low[proprio_indices]
+            high = obs_space.high[proprio_indices]
+            new_spaces["proprioception"] = gym.spaces.Box(
+                low=low, high=high, dtype=np.float64,
+            )
         if self._goal_mode in {"desired", "both"}:
             new_spaces["desired_goal"] = old_spaces["desired_goal"]
         if self._goal_mode == "both":
@@ -202,6 +246,8 @@ class PixelObservationWrapper(gym.ObservationWrapper):
             pixels = self._get_stacked_pixels(pixels)
 
         out: dict[str, np.ndarray] = {"pixels": pixels}
+        if self._proprio_indices is not None:
+            out["proprioception"] = observation["observation"][self._proprio_indices]
         if self._goal_mode in {"desired", "both"}:
             out["desired_goal"] = observation["desired_goal"]
         if self._goal_mode == "both":
@@ -224,6 +270,8 @@ class PixelObservationWrapper(gym.ObservationWrapper):
             pixels = np.concatenate(list(self._frames), axis=0)
 
         out: dict[str, np.ndarray] = {"pixels": pixels}
+        if self._proprio_indices is not None:
+            out["proprioception"] = obs["observation"][self._proprio_indices]
         if self._goal_mode in {"desired", "both"}:
             out["desired_goal"] = obs["desired_goal"]
         if self._goal_mode == "both":
@@ -577,6 +625,66 @@ def verify_wrap_around():
     print("  [PASS] Wrap-around OK")
 
 
+def verify_proprioception():
+    """Verify proprioception passthrough extracts correct indices."""
+    import gymnasium_robotics  # noqa: F401
+
+    print("Verifying proprioception passthrough...")
+
+    # FetchPush proprio indices: grip_pos(0:3), gripper_state(9:11),
+    # grip_velp(20:23), gripper_vel(23:25) -> 10D
+    push_proprio = [0, 1, 2, 9, 10, 20, 21, 22, 23, 24]
+
+    env = gym.make("FetchPush-v4", render_mode="rgb_array")
+    wrapped = PixelObservationWrapper(
+        env, image_size=(84, 84), goal_mode="both",
+        proprio_indices=push_proprio,
+    )
+
+    # Check observation space
+    space = wrapped.observation_space
+    assert "proprioception" in space.spaces, "Missing 'proprioception' key"
+    assert space["proprioception"].shape == (10,), (
+        f"Expected (10,), got {space['proprioception'].shape}"
+    )
+    assert "pixels" in space.spaces, "Missing 'pixels' key"
+    assert "achieved_goal" in space.spaces, "Missing 'achieved_goal' key"
+    assert "desired_goal" in space.spaces, "Missing 'desired_goal' key"
+
+    # Check values match raw observation
+    obs, _ = wrapped.reset()
+    raw_obs = wrapped.last_raw_obs["observation"]
+    proprio = obs["proprioception"]
+
+    assert proprio.shape == (10,), f"Expected (10,), got {proprio.shape}"
+    expected = raw_obs[push_proprio]
+    assert np.allclose(proprio, expected), (
+        f"Proprioception mismatch:\n  got:      {proprio}\n  expected: {expected}"
+    )
+
+    # Check after step
+    action = wrapped.action_space.sample()
+    obs2, _, _, _, _ = wrapped.step(action)
+    raw_obs2 = wrapped.last_raw_obs["observation"]
+    proprio2 = obs2["proprioception"]
+    expected2 = raw_obs2[push_proprio]
+    assert np.allclose(proprio2, expected2), "Proprioception mismatch after step"
+
+    # Check backward compatibility: no proprio_indices -> no key
+    env2 = gym.make("FetchPush-v4", render_mode="rgb_array")
+    wrapped2 = PixelObservationWrapper(env2, image_size=(84, 84), goal_mode="both")
+    assert "proprioception" not in wrapped2.observation_space.spaces, (
+        "Proprioception should not appear when proprio_indices is None"
+    )
+
+    wrapped.close()
+    wrapped2.close()
+    print(f"  Proprio shape: {proprio.shape}")
+    print(f"  Proprio values: {proprio[:3]} ... (grip_pos)")
+    print(f"  Obs space keys: {sorted(space.spaces.keys())}")
+    print("  [PASS] Proprioception passthrough OK")
+
+
 def run_verification():
     """Run all verification checks."""
     print("=" * 60)
@@ -590,6 +698,8 @@ def run_verification():
     verify_goal_preservation()
     print()
     verify_sb3_compatibility()
+    print()
+    verify_proprioception()
     print()
     verify_replay_buffer()
     print()

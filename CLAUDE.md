@@ -73,6 +73,10 @@ bash docker/dev.sh python eval.py --ckpt checkpoints/...zip --env FetchReachDens
 - **`scripts/`**: Versioned experiment scripts (`chNN_<topic>.py`). Tutorials only call these—no inline code blocks.
 - **`tutorials/`**: Textbook-style chapters (`chNN_<topic>.md`) following WHY-HOW-WHAT structure.
 - **`syllabus.md`**: 10-week executable curriculum with "done when" criteria.
+- **`tasks/`**: Working documents -- plans, research notes, and lessons learned. NOT checked into git.
+  - `lessons.md`: Patterns, root causes, and prevention rules discovered during development. Reviewed at session start.
+  - `pixel_push_encoder_research.md`: Comprehensive research on CNN architectures for pixel-based manipulation (NatureCNN limitations, DrQ-v2 encoder, spatial softmax, proprioception, literature gap analysis).
+  - `toc_revision_plan.md`: Book restructuring plan (13 -> 10 chapters).
 
 ## Key Conventions
 
@@ -663,6 +667,12 @@ Patterns we try to avoid:
 - Write rules that prevent the same mistake (e.g., "always check reward type before choosing algorithm")
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review `tasks/lessons.md` at session start for relevant project context
+- Current lessons (as of Ch9 pixel Push debugging):
+  1. **Sensor Separation Principle**: Always pass proprioception alongside pixels -- CNN should learn world-state, not self-state
+  2. **NatureCNN is wrong for manipulation**: 8x8 stride-4 destroys small objects; use 3x3 stride-2 (DrQ-v2 style)
+  3. **TensorBoard log contamination**: Back up AND delete old TB dirs before relaunching with same run_id
+  4. **Two kinds of Visual HER**: goal_mode="both" (our approach, vector goals) vs full image-goal HER (Nair 2018, VAE required)
+  5. **Normalization fixes gradients, not features**: Clean bounded noise is still noise -- look at encoder architecture, not output normalization
 
 ### 4. Verification Before Done
 
