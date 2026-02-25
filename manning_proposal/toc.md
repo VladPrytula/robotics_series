@@ -79,3 +79,62 @@ Part 5 -- Pixels and the Reality Gap
 10.3 Sim-to-sim system identification as a controlled rehearsal
 10.4 A deployment-readiness checklist backed by tests
 10.5 Summary
+
+Part 6 -- Bonus Material (Online, Optional)
+These are optional appendices. Goal: cover modern "frontier" ideas without
+requiring lab-scale compute. Each appendix should have:
+- a fast path (<= 500k env steps), and
+- a checkpoint track (evaluate a provided model without training).
+
+Appendix A -- Automated curriculum learning you can verify (PickAndPlace)
+The point is not "a schedule" but a measurable shift in performance on hard
+cases (stratified eval bins), under a fixed evaluation protocol.
+A.1 The problem: manual curricula are tedious and brittle
+A.2 Define a difficulty axis (table vs air goals, goal range, noise)
+A.3 Two low-compute baselines: linear vs success-gated schedules
+A.4 Optional: prioritized goal sampling (PLR-inspired, lightweight)
+A.5 Deliverables: curriculum config in metadata + stratified results JSON
+A.6 Summary
+
+Appendix B -- Empowerment and unsupervised skill discovery (DIAYN-first)
+HER is transformative, but it needs "meaningful interaction" to relabel. When
+the agent never touches the object, we need objectives that create behavior
+before the task reward is informative.
+B.1 The limits of HER and random exploration
+B.2 Skill discovery via mutual information (DIAYN: skills -> distinguishable states)
+B.3 Low-compute hands-on: FetchReachDense (state-only) skill atlas (200k-500k steps)
+B.4 Optional: zero-shot / low-shot downstream (sparse Reach fine-tune, 100k-200k)
+B.5 Alternative (short): intrinsic curiosity (ICM) + coverage metrics
+B.6 Summary
+
+Appendix C -- Beyond MuJoCo: port the contract to PyBullet (PandaGym)
+This appendix exists to fight simulator monotony and to prove a claim: the
+experiment contract (train/eval/artifacts) is more portable than any single
+engine. We keep it state-based to stay low-compute.
+C.1 The invariant: goal-conditioned obs + recomputable rewards + success metrics
+C.2 Setup: install a PyBullet goal-conditioned suite (e.g., PandaGym)
+C.3 Dense baseline: Reach in PyBullet (prove the pipeline still learns)
+C.4 Sparse + HER: Push/Pick in PyBullet (show the same HER separation)
+C.5 Deliverables: same JSON reports, same .meta.json provenance, same plots
+C.6 Summary
+
+Appendix D -- World models and latent imagination (bonus-bonus)
+This is intentionally scoped: a minimal demo plus a clear boundary. Full
+Dreamer-style training loops are powerful but would require a second stack.
+D.1 The rendering bottleneck (why pixels are FPS-limited)
+D.2 Minimal demo: collect frames -> train a small VAE (latent compression)
+D.3 Scope boundary: pointers to Dreamer/DayDreamer-style methods
+D.4 Summary
+
+Appendix E -- Peg-in-hole insertion in Isaac (GPU-only optional)
+This appendix exists to add variety (not another Fetch arm task) and to cover a
+contact-rich regime where "close enough" is not success. It is optional because
+Isaac stacks typically require an NVIDIA GPU. Readers without that hardware can
+still use the checkpoint track to run evaluation and inspect the metrics.
+E.1 Why insertion is qualitatively different: tolerances, contact, jamming
+E.2 Scope boundary: GPU requirement, and why we stay state-based (not pixels)
+E.3 Define success and shaping: alignment + insertion depth + penalties
+E.4 Curriculum knobs: hole tolerance, initial offset/rotation, friction, noise
+E.5 Fast path: easy tolerance run (<= 500k steps) + "did it learn" checks
+E.6 Deliverables: success vs tolerance curve, time-to-insert, stability metrics
+E.7 Summary

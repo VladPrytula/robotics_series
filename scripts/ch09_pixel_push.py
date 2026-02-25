@@ -29,6 +29,11 @@ Usage:
     # Full-state control (validate pipeline, should match Ch4 results)
     python scripts/ch09_pixel_push.py train --seed 0 --full-state --total-steps 2000000
 
+    # Resume training from checkpoint (--total-steps = new target total)
+    python scripts/ch09_pixel_push.py train --seed 0 --critic-encoder --no-drq \
+        --resume checkpoints/ch09_manip_noDrQ_criticEnc_FetchPush-v4_seed0.zip \
+        --total-steps 8000000
+
     # Ablation runs (test which interventions matter)
     python scripts/ch09_pixel_push.py train --seed 0 --no-spatial-softmax
     python scripts/ch09_pixel_push.py train --seed 0 --no-proprio
@@ -118,6 +123,9 @@ class Ch09Config:
     log_dir: str = "runs"
     checkpoints_dir: str = "checkpoints"
     results_dir: str = "results"
+
+    # Resume
+    resume: str = ""  # Path to checkpoint .zip to resume training from
 
     # Evaluation
     n_eval_episodes: int = 100
@@ -605,29 +613,71 @@ def cmd_train(cfg: Ch09Config) -> int:
         }
 
     try:
-        model = SAC(
-            policy_class,
-            env,
-            verbose=1,
-            device=device,
-            tensorboard_log=str(log_dir),
-            batch_size=cfg.batch_size,
-            buffer_size=cfg.buffer_size,
-            learning_starts=cfg.learning_starts,
-            learning_rate=cfg.learning_rate,
-            gamma=cfg.gamma,
-            tau=cfg.tau,
-            ent_coef=_parse_ent_coef(cfg.ent_coef),
-            gradient_steps=cfg.gradient_steps,
-            policy_kwargs=policy_kwargs,
-            replay_buffer_class=replay_cls,
-            replay_buffer_kwargs=replay_kwargs,
-        )
+        if cfg.resume:
+            # Resume from checkpoint -- load trained weights, fresh buffer
+            load_kwargs: dict[str, Any] = {}
+            if cfg.critic_encoder:
+                from scripts.labs.drqv2_sac_policy import DrQv2SACPolicy
+                load_kwargs["custom_objects"] = {"policy_class": DrQv2SACPolicy}
 
-        t0 = time.perf_counter()
-        model.learn(total_timesteps=cfg.total_steps, tb_log_name=run_id)
-        elapsed = time.perf_counter() - t0
-        fps = cfg.total_steps / elapsed
+            model = SAC.load(
+                cfg.resume, env=env, device=device,
+                tensorboard_log=str(log_dir),
+                **load_kwargs,
+            )
+
+            start_steps = model.num_timesteps
+            remaining = cfg.total_steps - start_steps
+            if remaining <= 0:
+                print(f"[ch09] Checkpoint already at {start_steps:,} steps, "
+                      f"target is {cfg.total_steps:,}. Nothing to do.")
+                return 0
+
+            # Fresh buffer needs warm-up: shift learning_starts past current
+            # num_timesteps so SB3 collects transitions before training.
+            # HER requires at least one complete episode (50 steps × n_envs).
+            model.learning_starts = start_steps + cfg.learning_starts
+
+            print(f"[ch09] Resuming from {start_steps:,} steps")
+            print(f"[ch09] Target: {cfg.total_steps:,} ({remaining:,} remaining)")
+            print(f"[ch09] Buffer warm-up: {cfg.learning_starts:,} steps before training")
+            print()
+
+            t0 = time.perf_counter()
+            model.learn(
+                total_timesteps=remaining,
+                tb_log_name=run_id,
+                reset_num_timesteps=False,
+            )
+            elapsed = time.perf_counter() - t0
+            trained_steps = model.num_timesteps - start_steps
+            fps = trained_steps / elapsed if elapsed > 0 else 0
+
+        else:
+            model = SAC(
+                policy_class,
+                env,
+                verbose=1,
+                device=device,
+                tensorboard_log=str(log_dir),
+                batch_size=cfg.batch_size,
+                buffer_size=cfg.buffer_size,
+                learning_starts=cfg.learning_starts,
+                learning_rate=cfg.learning_rate,
+                gamma=cfg.gamma,
+                tau=cfg.tau,
+                ent_coef=_parse_ent_coef(cfg.ent_coef),
+                gradient_steps=cfg.gradient_steps,
+                policy_kwargs=policy_kwargs,
+                replay_buffer_class=replay_cls,
+                replay_buffer_kwargs=replay_kwargs,
+            )
+
+            t0 = time.perf_counter()
+            model.learn(total_timesteps=cfg.total_steps, tb_log_name=run_id)
+            elapsed = time.perf_counter() - t0
+            trained_steps = cfg.total_steps
+            fps = trained_steps / elapsed if elapsed > 0 else 0
 
         ckpt = _ckpt_path(cfg)
         model.save(str(ckpt))
@@ -647,7 +697,8 @@ def cmd_train(cfg: Ch09Config) -> int:
         "seed": cfg.seed,
         "device": device,
         "n_envs": cfg.n_envs,
-        "total_steps": cfg.total_steps,
+        "total_steps": model.num_timesteps,
+        "resumed_from": cfg.resume if cfg.resume else None,
         "training_time_sec": elapsed,
         "steps_per_sec": fps,
         "architecture": {
@@ -883,6 +934,8 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--her-n-sampled-goal", type=int,
                         default=DEFAULT_CONFIG.her_n_sampled_goal,
                         help="HER n_sampled_goal (default: %(default)s)")
+    parser.add_argument("--resume", type=str, default="",
+                        help="Resume training from checkpoint .zip (--total-steps = target total)")
 
 
 def _config_from_args(args: argparse.Namespace) -> Ch09Config:
@@ -894,7 +947,7 @@ def _config_from_args(args: argparse.Namespace) -> Ch09Config:
                  "total_steps", "n_envs", "buffer_size", "batch_size",
                  "learning_rate", "gamma", "ent_coef", "gradient_steps",
                  "her_n_sampled_goal", "checkpoints_dir", "results_dir", "log_dir",
-                 "native_render"]:
+                 "native_render", "resume"]:
         arg_name = attr.replace("-", "_")
         if hasattr(args, arg_name):
             val = getattr(args, arg_name)

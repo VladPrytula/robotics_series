@@ -212,7 +212,10 @@ tmux attach -t rl
 
 ### GPU utilization note
 
-Low GPU utilization (~5-10%) during RL training is **expected**. The bottleneck is CPU-bound MuJoCo simulation, not GPU-bound neural network operations. With small batch sizes (256) and simple MLPs, GPU operations complete in microseconds while the CPU runs physics. Typical throughput: ~600 fps. This is not a problem to solve--it's the nature of RL with physics simulators.
+GPU utilization depends on the observation modality:
+
+- **State-based RL (Ch1-8):** Low GPU utilization (~5-10%) is expected. Small MLPs (256x256) on 25D vectors complete forward+backward passes in microseconds. The bottleneck is CPU-bound MuJoCo simulation. Typical throughput: ~600 fps.
+- **Pixel-based RL (Ch9+):** GPU utilization of 40-60% is normal. ManipulationCNN processes batches of 84x84x12 images (4-frame stack) through 4 conv layers for both obs and next_obs per training step. The CPU (MuJoCo physics for n_envs) and GPU (CNN forward/backward) form a balanced pipeline. Typical throughput: 30-50 fps with n_envs=4.
 
 ## Prerequisite and Concept Architecture
 
