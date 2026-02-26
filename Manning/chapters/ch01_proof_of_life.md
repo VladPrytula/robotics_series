@@ -62,16 +62,43 @@ The experiments in this book use the Fetch family of environments from Gymnasium
 
 What makes these tasks interesting for learning is that they are *goal-conditioned*: the robot receives a desired goal (where to move, where to push the object) that changes every episode. The policy must generalize across goals, not just memorize a single target. This is a step toward real-world utility -- a robot that can only reach one fixed position is not very useful.
 
-The Fetch environments form a natural difficulty ladder that we will climb throughout the book:
+### Why this environment family
 
-| Environment | Task | Difficulty | Book chapters |
-|-------------|------|------------|---------------|
-| `FetchReachDense-v4` | Move end-effector to target | Easiest | Ch1-4 |
-| `FetchReach-v4` | Same, but sparse reward | Moderate | Ch5 |
-| `FetchPush-v4` | Push block to target position | Hard | Ch5 |
-| `FetchPickAndPlace-v4` | Pick up block, place at target | Hardest | Ch6 |
+A reasonable question at this point: why build an entire book around one robot in one simulator? Most RL textbooks rotate between CartPole, Atari, and MuJoCo locomotion -- a different environment each chapter. We take the opposite approach, and we want to be explicit about why.
 
-All four environments share the same interface, the same observation structure, and the same action space. What changes is the task complexity: reaching requires only arm control, pushing adds object interaction, and pick-and-place adds the coordination of grasping and releasing. By keeping the interface constant and increasing the task difficulty, we isolate what matters: the algorithm's ability to learn, not the plumbing.
+We chose Fetch for three reasons:
+
+1. **Goal conditioning enables the algorithms we care about.** The central challenge of this book is learning manipulation from sparse binary rewards -- "did you succeed or not?" -- rather than hand-designed distance signals. Solving this requires Hindsight Experience Replay (HER, Chapter 5), which needs an environment that separates `achieved_goal` from `desired_goal` so that failed trajectories can be relabeled as successes for different goals. Fetch environments provide this interface natively. Many popular RL benchmarks (CartPole, Ant, HalfCheetah) do not, which would force us to retrofit goal conditioning rather than teach it.
+
+2. **The difficulty ladder lives inside one family.** Fetch provides five qualitatively different challenges without changing the API:
+
+   - Reaching a target (arm control only, continuous feedback)
+   - Reaching with sparse reward (same task, binary signal -- the HER motivation)
+   - Pushing an object (contact physics, multi-phase control)
+   - Picking and placing (grasp coordination, goals in the air)
+   - Pushing from camera images (same task, but raw pixels instead of state vectors)
+
+   Each step adds exactly one new difficulty. When HER improves sparse Push from 0% to 99% success, you know the improvement comes from the algorithm, not from switching to an easier environment. This controlled progression is hard to achieve when hopping between unrelated benchmarks.
+
+3. **Research comparability.** Fetch environments are widely used in the goal-conditioned RL literature (Plappert et al., 2018; Andrychowicz et al., 2017). Our results are directly comparable to published work. When we report 95% success on FetchPush-v4 with SAC+HER, a reader can check that number against the original HER paper and know we are in the right ballpark.
+
+### Depth over breadth
+
+This is a deliberate pedagogical choice: we believe you learn more from understanding one task deeply than from running many tasks superficially. The cost is real -- you will not see locomotion, multi-agent coordination, or real hardware in the main text. We address portability in the appendices (Appendix C ports the methodology to PyBullet's PandaGym; Appendix E demonstrates it on NVIDIA Isaac). But the core curriculum stays with Fetch because depth enables something breadth cannot: *controlled variable elimination*.
+
+When a training run fails in Chapter 5 (sparse rewards), is the problem the algorithm, the reward, the exploration, or the environment? Because you already solved the same environment with dense rewards in Chapters 3-4, you can rule out the environment. When pixel-based training struggles in Chapter 9, you already solved the same task from state vectors -- so you know the task is solvable, and the problem must be in the visual pipeline. With a new environment each chapter, every failure has five possible causes. With one environment family, you isolate variables the way a lab scientist would.
+
+The Fetch environments form a natural difficulty ladder that we will climb throughout the book. Notice that the rightmost column spans all ten chapters -- same robot, same simulator, increasing challenge:
+
+| Environment | Task | What changes | Book chapters |
+|-------------|------|--------------|---------------|
+| `FetchReachDense-v4` | Move end-effector to target | Baseline: dense reward, state vectors | Ch1-4 |
+| `FetchReach-v4` | Same task, sparse reward | Reward signal: continuous -> binary | Ch5 |
+| `FetchPush-v4` | Push block to target position | Task complexity: contact, multi-phase | Ch5-6 |
+| `FetchPickAndPlace-v4` | Pick up block, place at target | Coordination: grasp + lift + place | Ch6 |
+| `FetchPush-v4` (pixels) | Push block, from camera images | Observation: 25D vectors -> 84x84 images | Ch9 |
+
+All five rows share the same robot, the same action space, and (except for pixels) the same observation structure. The "What changes" column is the key: each row adds exactly one new challenge. By keeping everything else constant, we isolate what matters -- when sparse-reward training fails, the culprit is the reward signal, not a new environment's quirks. When pixel training is slower, the culprit is the observation modality, not different dynamics.
 
 **Observations.** Every Fetch environment returns a dictionary with three keys:
 

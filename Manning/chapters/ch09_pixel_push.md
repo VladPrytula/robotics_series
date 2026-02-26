@@ -171,26 +171,42 @@ The key insight: store as uint8 (1 byte per value), convert to float32 only at s
 class PixelReplayBuffer:
     def __init__(self, img_shape, goal_dim, act_dim, capacity):
         # uint8 storage: 1 byte/pixel (not 4 bytes for float32)
-        self.pixels = np.zeros(
-            (capacity, *img_shape), dtype=np.uint8
-        )
-        self.next_pixels = np.zeros(
-            (capacity, *img_shape), dtype=np.uint8
-        )
-        # ... goals, actions, rewards as float32 (small) ...
+        self.pixels = np.zeros((capacity, *img_shape), dtype=np.uint8)
+        self.next_pixels = np.zeros((capacity, *img_shape), dtype=np.uint8)
+        # Goals, actions, rewards are small -- float32 is fine
+        self.goals = np.zeros((capacity, goal_dim), dtype=np.float32)
+        self.achieved = np.zeros((capacity, goal_dim), dtype=np.float32)
+        self.actions = np.zeros((capacity, act_dim), dtype=np.float32)
+        self.rewards = np.zeros((capacity, 1), dtype=np.float32)
+        self.dones = np.zeros((capacity, 1), dtype=np.float32)
+        self.capacity, self.size, self.pos = capacity, 0, 0
+
+    def add(self, obs_pixels, next_pixels, achieved, goal, action, reward, done):
+        self.pixels[self.pos] = obs_pixels          # store uint8 directly
+        self.next_pixels[self.pos] = next_pixels
+        self.goals[self.pos] = goal
+        self.achieved[self.pos] = achieved
+        self.actions[self.pos] = action
+        self.rewards[self.pos] = reward
+        self.dones[self.pos] = done
+        self.pos = (self.pos + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
     def sample(self, batch_size):
         idx = np.random.randint(0, self.size, size=batch_size)
         return {
             # Convert to float32 [0, 1] at sample time only
             "pixels": self.pixels[idx].astype(np.float32) / 255.0,
-            "next_pixels": self.next_pixels[idx].astype(np.float32)
-                           / 255.0,
-            # ... goals, actions, rewards unchanged ...
+            "next_pixels": self.next_pixels[idx].astype(np.float32) / 255.0,
+            "achieved_goal": self.achieved[idx],
+            "desired_goal": self.goals[idx],
+            "actions": self.actions[idx],
+            "rewards": self.rewards[idx],
+            "dones": self.dones[idx],
         }
 ```
 
-This illustrates the principle. SB3's `DictReplayBuffer` implements the same uint8 storage pattern automatically when the observation space dtype is `np.uint8` -- you do not need this class directly. The concept (store cheap, convert at sample time) is what matters.
+This is the complete from-scratch implementation. The core insight is in the dtype asymmetry: `__init__` allocates `uint8` for pixels (1 byte each), while `sample` converts to `float32` (4 bytes each). The conversion cost is negligible for a 256-sample batch but would quadruple memory if applied to the full 500K-transition buffer. SB3's `DictReplayBuffer` implements this same pattern automatically when the observation space dtype is `np.uint8`. In Run It, we use SB3's production buffer for its integration with vectorized environments and HER -- but the storage principle is identical to what you see here.
 
 > **Checkpoint:** Create a buffer with `capacity=100`, add 50 transitions, sample a batch of 16. The internal `.pixels` array should have dtype `uint8`; the sampled batch should have dtype `float32` with values in `[0, 1]`.
 
@@ -338,7 +354,7 @@ SB3 needs a `BaseFeaturesExtractor` subclass that takes a dict observation space
 ```python
 class ManipulationExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, spatial_softmax=True,
-                 num_filters=32):
+                 num_filters=32, flat_features_dim=50):
         super().__init__(observation_space, features_dim=1)
         extractors, total = {}, 0
         for key, subspace in observation_space.spaces.items():
@@ -353,7 +369,15 @@ class ManipulationExtractor(BaseFeaturesExtractor):
                         nn.LayerNorm(2 * C), nn.Tanh(),
                     )
                     total += 2 * C  # 64 for 32 filters
-                # ... flatten mode omitted for brevity ...
+                else:
+                    # Flatten + learned projection (DrQ-v2 trunk pattern)
+                    flat_size = C * H * W
+                    extractors[key] = nn.Sequential(
+                        cnn, nn.Flatten(),
+                        nn.Linear(flat_size, flat_features_dim),
+                        nn.LayerNorm(flat_features_dim), nn.Tanh(),
+                    )
+                    total += flat_features_dim
             else:
                 extractors[key] = nn.Flatten()
                 total += gym.spaces.utils.flatdim(subspace)
@@ -568,7 +592,17 @@ class DrQv2SACPolicy(SACPolicy):
 
 The identity-based filtering (`id(p) not in encoder_ids`) avoids fragility if parameter naming conventions change across SB3 versions -- we match on Python object identity, not parameter name strings. The target critic gets its own separate encoder that is updated via Polyak averaging ($\tau = 0.005$), as in standard SAC. This is important: the target encoder must NOT be the same object as the online encoder, or Polyak averaging would be a no-op.
 
-One subtle point: during the actor's forward pass, the critic's Q-networks are called to compute the actor loss ($L_\text{actor} = \alpha \log \pi(a|s) - Q(s, a)$). The critic uses the shared encoder to compute features for $Q(s, a)$, which means gradients from the actor loss *could* flow through the encoder via the critic path. Our `CriticEncoderActor` prevents this by detaching features before the policy MLP, but the critic path during actor loss computation does NOT detach -- this is intentional. The actor optimizer does not contain encoder parameters, so even though gradients flow through the encoder during the actor loss backward pass, no optimizer step updates the encoder from those gradients.
+One subtle point deserves careful attention, because getting it wrong silently breaks visual RL:
+
+1. **Forward pass:** Computing the actor loss requires calling the critic's Q-networks: $L_\text{actor} = \alpha \log \pi(a|s) - Q(s, a)$. The critic uses the shared encoder to compute features for $Q(s, a)$.
+
+2. **Backward pass:** When PyTorch runs `actor_loss.backward()`, it computes gradients for *every* parameter on the computational graph -- including the shared encoder, because the encoder sits between the pixels and the Q-value.
+
+3. **Why no update happens:** PyTorch's `optimizer.step()` only updates parameters that are in `optimizer.param_groups`. The actor optimizer does not contain encoder parameters (we filtered them out). So even though `.backward()` writes gradients into the encoder's `.grad` tensors, `actor_optimizer.step()` ignores them entirely. The encoder is only updated when `critic_optimizer.step()` runs.
+
+4. **The `CriticEncoderActor` detach:** Our actor wrapper detaches features before the policy MLP as a safety measure -- it prevents encoder gradients from being *computed* during the actor loss backward pass. This is a belt-and-suspenders approach: the optimizer filtering (step 3) is sufficient, but the detach avoids wasting compute on gradients that would be ignored anyway.
+
+The net effect: the encoder learns from Bellman error (critic loss) only, not from the actor's policy gradient. This is the DrQ-v2 design -- the encoder should learn *state features* from TD error, not learn to *fool the critic* via the actor.
 
 > **Checkpoint:** Run `bash docker/dev.sh python scripts/labs/drqv2_sac_policy.py --verify`. Expected: `[ALL PASS] DrQ-v2 SAC policy verified`. Key checks:
 >
