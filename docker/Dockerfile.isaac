@@ -1,0 +1,22 @@
+# Isaac Lab environment for Appendix E (peg-in-hole insertion).
+# Thin layer on NGC -- only adds frame-saving deps.
+# Build: bash docker/build.sh isaac
+FROM nvcr.io/nvidia/isaac-lab:2.3.2
+
+# NGC image embeds Python inside Kit SDK; use full path for pip.
+# - imageio: --no-deps because numpy is bundled via PYTHONPATH at runtime
+# - Pillow pinned to match NGC image's isaaclab requirement (==11.3.0)
+RUN /isaac-sim/kit/python/bin/python3 -m pip install --no-cache-dir \
+    --no-deps imageio "Pillow==11.3.0"
+
+# Make Kit Python discoverable as "python3" and "python".
+ENV PATH="/isaac-sim/kit/python/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    ACCEPT_EULA=Y \
+    PRIVACY_CONSENT=Y \
+    OMNI_KIT_ALLOW_ROOT=1
+
+# NGC entrypoint (/isaac-sim/runheadless.sh) drops $@ on aarch64 -- override it.
+ENTRYPOINT []
+
+WORKDIR /workspace/isaaclab

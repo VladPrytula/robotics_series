@@ -1,0 +1,30 @@
+{
+  "created_at": "2026-02-26T09:09:00.697443+00:00",
+  "env": {
+    "env_id": "Isaac-Reach-Franka-v0",
+    "obs_shape": "{'policy': (1, 32)}",
+    "action_shape": "(1, 7)",
+    "status": "ok"
+  },
+  "render": {
+    "status": "ok",
+    "path": "results/isaac_proof_of_life.png",
+    "shape": [
+      720,
+      1280,
+      3
+    ]
+  },
+  "versions": {
+    "python": "3.11.13",
+    "torch": "2.9.0+cu130",
+    "cuda_runtime": "13.0",
+    "gpu": "NVIDIA GB10",
+    "gpu_count": 1,
+    "isaaclab": "0.54.2",
+    "isaacsim": "unknown",
+    "numpy": "1.26.0",
+    "gymnasium": "1.2.1",
+    "stable_baselines3": "2.7.1"
+  }
+}

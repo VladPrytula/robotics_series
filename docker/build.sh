@@ -3,6 +3,13 @@ set -euo pipefail
 
 # Platform-aware Docker image build.
 # Automatically selects the correct Dockerfile for Mac M4 vs DGX/NVIDIA.
+# Pass "isaac" or "robotics-rl:isaac" to build the Isaac Lab image instead.
+
+# Isaac Lab target (separate image, separate Dockerfile)
+if [ "${1:-}" = "isaac" ] || [ "${1:-}" = "robotics-rl:isaac" ]; then
+    docker build -t "robotics-rl:isaac" -f docker/Dockerfile.isaac .
+    exit 0
+fi
 
 # Platform detection
 os="$(uname -s)"
