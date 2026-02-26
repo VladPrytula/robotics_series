@@ -124,7 +124,8 @@ class Ch09Config:
     checkpoints_dir: str = "checkpoints"
     results_dir: str = "results"
 
-    # Resume
+    # Checkpointing
+    checkpoint_freq: int = 500_000   # Save checkpoint every N steps (0 = end only)
     resume: str = ""  # Path to checkpoint .zip to resume training from
 
     # Evaluation
@@ -612,6 +613,21 @@ def cmd_train(cfg: Ch09Config) -> int:
             "goal_selection_strategy": cfg.her_goal_strategy,
         }
 
+    # Periodic checkpointing -- prevents losing hours of training to OOM/SIGKILL
+    callbacks = []
+    if cfg.checkpoint_freq > 0:
+        from stable_baselines3.common.callbacks import CheckpointCallback
+        ckpt_dir = _ensure_dir(cfg.checkpoints_dir)
+        callbacks.append(CheckpointCallback(
+            save_freq=max(1, cfg.checkpoint_freq // cfg.n_envs),  # SB3 counts per env
+            save_path=str(ckpt_dir),
+            name_prefix=f"{tag}_{cfg.env}_seed{cfg.seed}",
+            save_replay_buffer=False,  # Too large for pixel buffers
+            save_vecnormalize=False,
+        ))
+        print(f"  Checkpoint every {cfg.checkpoint_freq:,} steps -> {ckpt_dir}/")
+        print()
+
     try:
         if cfg.resume:
             # Resume from checkpoint -- load trained weights, fresh buffer
@@ -648,6 +664,7 @@ def cmd_train(cfg: Ch09Config) -> int:
                 total_timesteps=remaining,
                 tb_log_name=run_id,
                 reset_num_timesteps=False,
+                callback=callbacks if callbacks else None,
             )
             elapsed = time.perf_counter() - t0
             trained_steps = model.num_timesteps - start_steps
@@ -674,7 +691,11 @@ def cmd_train(cfg: Ch09Config) -> int:
             )
 
             t0 = time.perf_counter()
-            model.learn(total_timesteps=cfg.total_steps, tb_log_name=run_id)
+            model.learn(
+                total_timesteps=cfg.total_steps,
+                tb_log_name=run_id,
+                callback=callbacks if callbacks else None,
+            )
             elapsed = time.perf_counter() - t0
             trained_steps = cfg.total_steps
             fps = trained_steps / elapsed if elapsed > 0 else 0
@@ -934,6 +955,8 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--her-n-sampled-goal", type=int,
                         default=DEFAULT_CONFIG.her_n_sampled_goal,
                         help="HER n_sampled_goal (default: %(default)s)")
+    parser.add_argument("--checkpoint-freq", type=int, default=DEFAULT_CONFIG.checkpoint_freq,
+                        help="Save checkpoint every N steps; 0 = end only (default: %(default)s)")
     parser.add_argument("--resume", type=str, default="",
                         help="Resume training from checkpoint .zip (--total-steps = target total)")
 
@@ -947,7 +970,7 @@ def _config_from_args(args: argparse.Namespace) -> Ch09Config:
                  "total_steps", "n_envs", "buffer_size", "batch_size",
                  "learning_rate", "gamma", "ent_coef", "gradient_steps",
                  "her_n_sampled_goal", "checkpoints_dir", "results_dir", "log_dir",
-                 "native_render", "resume"]:
+                 "native_render", "checkpoint_freq", "resume"]:
         arg_name = attr.replace("-", "_")
         if hasattr(args, arg_name):
             val = getattr(args, arg_name)

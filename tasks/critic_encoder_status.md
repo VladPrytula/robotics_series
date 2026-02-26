@@ -422,25 +422,25 @@ Success rate trajectory (extension, sampled every ~2K steps):
   2.44M: 25-34% (peak: 34%)
 ```
 
-**Loss signature -- rising losses confirm healthy learning (see Lesson 9):**
+**Loss signature -- three phases (see Lesson 9 for full analysis):**
 
-| Metric | Failure regime (0-2M, flat 6%) | Hockey-stick (2.4M, 25-34%) |
-|--------|-------------------------------|----------------------------|
-| success_rate | 3-11%, flat | 25-34%, climbing |
-| critic_loss | 0.07 declining (trivially easy: predict Q=-18.5 everywhere) | 0.3-0.7 rising (learning heterogeneous value landscape) |
-| actor_loss | ~0 (no gradient signal from critic) | 0.8-1.6 (real signal: some actions clearly better) |
-| reward | -48 to -50 | -35 to -38 |
+| Metric | Phase 1: Failure (0-2.2M) | Phase 2: Hockey-stick (2.2-3.5M) | Phase 3: Convergence (3.5M+) |
+|--------|--------------------------|----------------------------------|------------------------------|
+| success_rate | Flat 3-7% | Rising 10% -> 90% | Saturating 95%+ |
+| critic_loss | 0.07 declining (RED: memorizing constant Q=-18.5) | 0.3-0.8 RISING (GREEN: learning value structure) | 0.15-0.35 declining (GREEN: value function accurate) |
+| actor_loss | ~0 (no gradient signal) | 0.5-1.3 RISING (real signal) | -0.2 to -0.7 NEGATIVE (policy converged, Q high) |
+| reward | -48 to -50 | -40 -> -10 | Near 0 |
 
-The rising losses are NOT a sign of instability -- they are the hockey-stick
-signal. When the agent was failing uniformly (6%), the critic had an easy job
-(predict constant failure). Now that 30% of trajectories succeed, the critic
-must learn to distinguish good from bad states. This is harder (higher loss)
-but produces meaningful gradients for the actor.
+Key insight: losses go through a non-monotonic trajectory (decline -> rise ->
+decline). Both the Phase 1 and Phase 3 declines look similar on a loss curve,
+but mean opposite things. **Always read loss curves alongside success rate.**
+Phase 1 declining = critic memorizing failure (bad). Phase 3 declining = critic
+converged to truth (good). The success rate disambiguates.
 
-**Positive feedback loop now active:**
-Critic learns value structure -> actor gets real gradients -> better policy ->
-more successes -> more diverse Bellman targets -> critic learns more ->
-HER amplifies (8 relabeled transitions per success) -> exponential growth.
+Actor loss turning negative in Phase 3 is the SAC-specific convergence signal:
+`actor_loss = alpha * log(pi) - Q(s, a)`. When Q is high (near 0 = "success
+likely"), Q dominates the entropy penalty, making the loss negative. This means
+the policy is confidently selecting high-value actions.
 
 **Memory:** Container at 64 GB (buffer 78% full at 393K/500K transitions).
 At capacity (~2.5M steps): ~90 GB. System has 119 GB, safe.
@@ -591,14 +591,37 @@ recipe. Each step eliminates a hypothesis and reveals the next:
    averaged away), DrQ may help. Cell C ablation (DrQ ON, SpatialSoftmax OFF)
    would test this hypothesis.
 
-### What remains for the ablation narrative
+### What remains: multi-seed first, ablations later
+
+**Priority 1: Multi-seed reproducibility (required for book)**
+
+The book commits to 3+ seeds. One 95% result could be a lucky seed. Three
+seeds proving 90%+ is a publishable, credible result.
+
+| Run | Config | Status | Purpose |
+|-----|--------|--------|---------|
+| Seed 0 | --no-drq, SS ON, critic-encoder, buf=500K, HER-8 | **RUNNING** (95%+ at 4.2M) | Primary result |
+| Seed 1 | Same config, `--seed 1` | **Queued** | Reproducibility |
+| Seed 2 | Same config, `--seed 2` | **Queued** | Reproducibility |
+
+Each run: ~5M steps, ~40h at 30 fps. Total: ~80h for seeds 1+2.
+
+**Priority 2: Ablation cells (deferred, for completeness)**
+
+These are scientifically interesting but not required for the chapter narrative.
+Can run later when compute is free, or assign as reader exercises.
 
 | Cell | Config | Status | Purpose |
 |------|--------|--------|---------|
-| A (ext) | --no-drq, SS ON | **RUNNING** (70% at 2.73M) | Winner: proves the approach works |
-| B | --no-drq, SS OFF | **Queued** (buffer=500K) | Does SpatialSoftmax matter when DrQ is off? |
-| C | DrQ ON, SS OFF | **Queued** (buffer=500K) | Does DrQ help with flat features? |
-| D | DrQ ON, SS ON | **Done** (3% at 1.54M) | Baseline failure: both DrQ and SS together |
+| A (ext) | --no-drq, SS ON | **RUNNING** (95%+ at 4.2M) | Winner: proves the approach works |
+| B | --no-drq, SS OFF | **Deferred** | Does SpatialSoftmax matter when DrQ is off? |
+| C | DrQ ON, SS OFF | **Deferred** | Does DrQ help with flat features? |
+| D | DrQ ON, SS ON | **Done** (3% at 1.54M) | Baseline failure: DrQ + SS together |
+| D (long) | DrQ ON, SS ON, 5M+ | **Deferred** | Does DrQ+SS work with enough patience? |
+
+Cell D (long) would test: "Was the original Cell D terminated too early? Would
+DrQ+SS also hockey-stick given 5M+ steps?" If yes, the message changes from
+"DrQ is harmful" to "DrQ is slower." Worth testing eventually.
 
 If Cell C shows DrQ helps with flat features, the narrative becomes:
 *"DrQ and SpatialSoftmax are both good ideas separately, but combining them

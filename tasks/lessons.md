@@ -229,14 +229,19 @@ began climbing at ~2.15M. By 2.44M steps, success rate reached 25-34%.
 Simultaneously, critic_loss rose from 0.07 to 0.3-0.7 and actor_loss rose
 from ~0 to 0.8-1.6.
 
-**Pattern:** In SAC+HER with sparse rewards, the hockey-stick inflection
-manifests as RISING losses, not declining ones. This is counterintuitive --
-in supervised learning, training progress means loss goes DOWN. In RL with
-sparse rewards, the opposite happens at the inflection point.
+**Pattern:** In SAC+HER with sparse rewards, losses go through THREE
+distinct regimes. This is counterintuitive -- in supervised learning,
+training progress means loss goes DOWN monotonically. In RL with sparse
+rewards, losses first decline (bad), then rise (good), then decline again
+(convergence).
 
-**Root cause -- two regimes of critic loss:**
+**Root cause -- three regimes of critic and actor loss:**
 
-*Failure regime (flat at 6%, critic_loss declining to 0.07):*
+*Phase 1: Failure regime (0-2.2M steps, success flat at 6%):*
+
+- critic_loss: declining to 0.07
+- actor_loss: near 0
+
 The critic's job is trivially easy. With the agent almost always failing,
 Q converges to a uniform ~-18.5 everywhere (sum of gamma^t * (-1) for 50
 steps with gamma=0.95). TD error is tiny because the Q-landscape is
@@ -244,7 +249,16 @@ uniformly wrong -- predicting failure everywhere and being "right" because
 the agent always fails. The critic is memorizing a constant, not learning
 structure. A declining critic_loss here is a RED flag, not a green one.
 
-*Hockey-stick regime (climbing through 30%, critic_loss rising to 0.3+):*
+The actor receives no useful gradient. SAC's actor loss is approximately
+alpha * log(pi) - Q(s, a_sampled). When Q is the same for all actions,
+the gradient is zero. Actor_loss near 0 means "the critic sees no
+difference between actions" -- the actor is rudderless.
+
+*Phase 2: Hockey-stick regime (2.2M-3.5M steps, success climbing 10-90%):*
+
+- critic_loss: RISING to 0.3-0.8
+- actor_loss: RISING to 0.5-1.3
+
 Now some trajectories succeed (reward=0 on success steps) and others fail
 (reward=-1). The Q-landscape becomes HETEROGENEOUS: Q(s,a) near 0 for
 good state-action pairs, near -18.5 for bad ones. The Bellman targets have
@@ -253,14 +267,12 @@ is reachable and states where it is not. This is HARDER -- hence higher
 loss. Rising critic_loss means the critic is learning meaningful value
 structure.
 
-**Actor loss follows the same logic:**
-SAC's actor loss is approximately alpha * log(pi) - Q(s, a_sampled).
-When actor_loss was ~0, the critic gave no useful gradient -- all actions
-looked equally bad. At actor_loss ~1.0, the critic now says "this action
-leads to Q=-2 but that action leads to Q=-15" -- real signal. The actor
-is being pulled toward high-Q actions with meaningful force.
+The actor now gets real gradient signal. At actor_loss ~1.0, the critic
+says "this action leads to Q=-2 but that action leads to Q=-15" -- real
+signal. The actor is being pulled toward high-Q actions with meaningful
+force.
 
-**The positive feedback loop (geometric phase transition):**
+The positive feedback loop activates here:
 1. Critic learns value structure -> actor gets real gradients -> better policy
 2. Better policy -> more successes -> more diverse Bellman targets -> critic
    learns more fine-grained structure
@@ -268,14 +280,44 @@ is being pulled toward high-Q actions with meaningful force.
    seeding new value wavefronts
 4. This self-amplifying loop is why the curve goes exponential
 
+*Phase 3: Convergence regime (3.5M+ steps, success saturating at 95%+):*
+
+- critic_loss: declining again to 0.15-0.35
+- actor_loss: turning NEGATIVE (-0.2 to -0.7)
+
+The critic's value function is now mostly accurate. Most trajectories
+succeed (Q near 0 for most states), so the Q-landscape is becoming
+uniform again -- but uniform SUCCESS instead of uniform failure. TD errors
+shrink because the critic's predictions match reality. Declining critic_loss
+is now a GREEN flag: the value function has converged to the true Q.
+
+The actor_loss turning negative means alpha * log(pi) < Q(s, a_sampled).
+The Q-values are high (near 0, meaning "success is likely from here"),
+dominating the small entropy penalty. Negative actor_loss = the policy is
+confidently taking good actions with high expected value. This is the
+SAC-specific signal that the policy has converged.
+
+**Concrete numbers from Cell A extension (seed 0):**
+
+```
+Phase 1 (failure):     0-2.2M   success=6%    actor=~0       critic=0.07 declining
+Phase 2 (hockey-stick): 2.2-3.5M success=30-90% actor=0.5-1.3 critic=0.4-0.8 RISING
+Phase 3 (convergence):  3.5M+    success=95%+   actor=-0.2--0.7 critic=0.15-0.35 declining
+```
+
 **Rule for monitoring pixel-based goal-conditioned RL:**
 
-| Metric | Failure Regime | Hockey-Stick Regime |
-|--------|---------------|---------------------|
-| success_rate | Flat 3-7% | Rising 10%+ |
-| critic_loss | Declining to < 0.1 (too easy) | Rising to 0.3+ (learning structure) |
-| actor_loss | Near 0 (no signal) | Rising to 1+ (real gradient) |
-| reward | Flat at -48 to -50 | Rising toward -40, -30... |
+| Metric | Phase 1: Failure | Phase 2: Hockey-Stick | Phase 3: Convergence |
+|--------|-----------------|----------------------|---------------------|
+| success_rate | Flat 3-7% | Rising 10% -> 90% | Saturating 90%+ |
+| critic_loss | Declining < 0.1 (RED) | Rising 0.3-0.8 (GREEN) | Declining 0.15-0.35 (GREEN) |
+| actor_loss | Near 0 (no signal) | Rising 0.5-1.3 (real signal) | Negative -0.2--0.7 (converged) |
+| reward | Flat -48 to -50 | Rising -40 -> -10 | Near 0 |
+
+**How to distinguish Phase 1 declining from Phase 3 declining:**
+- Phase 1: critic_loss declining AND success flat. Critic memorizing failure.
+- Phase 3: critic_loss declining AND success high. Critic converged to truth.
+The success rate is the disambiguator. Never read loss curves in isolation.
 
 **If critic_loss is declining AND success_rate is flat, the critic is NOT
 learning useful representations -- it has converged to predicting uniform

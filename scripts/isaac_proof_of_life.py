@@ -316,11 +316,13 @@ def cmd_all(extra_args: list[str]) -> int:
             if env_result["status"] != "ok":
                 return 1
 
-            # Render (reuses same env)
+            # Render (reuses same env).
+            # Vulkan headless rendering can fail under memory pressure or if
+            # the GPU driver doesn't expose ray-tracing capabilities.  We treat
+            # render failure as non-fatal: the env-step already proves the
+            # Isaac Lab pipeline works end-to-end.
             png_path = RESULTS_DIR / "isaac_proof_of_life.png"
             render_result = _do_render(env, png_path)
-            if render_result["status"] != "ok":
-                return 1
         finally:
             env.close()
 
@@ -330,7 +332,7 @@ def cmd_all(extra_args: list[str]) -> int:
         for k, v in sorted(versions.items()):
             print(f"  {k}: {v}")
 
-        # Save JSON artifact
+        # Save JSON artifact (always, even if render failed)
         json_path = RESULTS_DIR / "isaac_proof_of_life.json"
         json_path.parent.mkdir(parents=True, exist_ok=True)
         report = {
@@ -344,6 +346,14 @@ def cmd_all(extra_args: list[str]) -> int:
             encoding="utf-8",
         )
         print(f"OK: wrote {json_path}")
+
+        # Exit 0 if env worked; render failure is a warning, not a hard error.
+        if render_result["status"] != "ok":
+            print("\nWARNING: rendering failed (env-step OK). "
+                  "This is usually caused by low system RAM or missing "
+                  "Vulkan ray-tracing support. Try again when the system "
+                  "is less loaded.")
+            return 1
         return 0
     finally:
         sim_app.close()
