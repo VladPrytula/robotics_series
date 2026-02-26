@@ -42,6 +42,9 @@ in `manning_proposal/chapter_production_protocol.md`.
 2. Lab Engineer agent  -->  scripts/labs/*.py (--verify, --demo, --bridge)
    Book Writer agent   -->  Manning/chapters/chNN_<topic>.md
           |                   (can run in parallel if lab regions exist)
+          |                   NOTE: if scaffold estimates > 6,000 words,
+          |                   the Writer phase splits into sequential spans
+          |                   (see chapter_production_protocol.md "Writer Span Protocol")
           |
 3. Reviewer agent  -->  Manning/reviews/chNN_review.md
           |

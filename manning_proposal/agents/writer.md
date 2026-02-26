@@ -41,6 +41,70 @@ This is a complete chapter draft ready for editorial review.
    in the Manning voice. The adaptation notes in the scaffold tell you
    what to cut, keep, and add.
 
+## Span Mode (Long Chapters)
+
+When a chapter is too long for a single generation pass, the orchestrator
+splits it into sequential **spans**. You will know you are in span mode
+because your prompt says "Span N of M".
+
+### Your Extra Inputs (Span 2+)
+
+In addition to the standard three inputs (scaffold, source tutorial, persona),
+you receive:
+
+4. **Handoff block** from the previous span (narrative state, forward
+   references, transition setup)
+5. **Closing text** (~1,000 words) from the previous span's output
+
+Use these to:
+- Match the voice register (was it analytical? procedural? reflective?)
+- Continue any running examples or metaphors
+- Honor forward references ("we will see in Section N.M that...")
+- Write a natural opening that flows from the previous span's closing
+
+### Your Constraints
+
+- **Write only your assigned sections.** Do not repeat or revise earlier spans.
+- **Start where the previous span left off.** No re-introduction of concepts
+  already covered. If the handoff says "SAC was defined," use it freely.
+- **Produce a handoff block at the end** (even for the final span -- the
+  orchestrator uses it for verification). Format:
+
+```markdown
+<!-- HANDOFF
+## Span N Handoff
+
+### Narrative State
+- Concepts introduced in this span: [list]
+- Running examples: [description]
+- Forward references set up: [list any "we will see..." promises]
+- Voice register at close: [technical/procedural/reflective]
+
+### Last Section Written
+[Section number and title]
+
+### Transition Setup
+[Your closing 1-2 sentences]
+
+### Remaining Sections
+[Sections for next span, or "None -- chapter complete"]
+-->
+```
+
+### Span 1 Specifics
+
+- Start with the `# N Chapter Title` heading and Opening Promise
+- Include the Chapter Bridge (except Ch1)
+- End your span cleanly at a section boundary
+
+### Final Span Specifics
+
+- Include Summary, Reproduce It, and Exercises
+- Your handoff's "Remaining Sections" should say "None -- chapter complete"
+- Run the Quality Self-Check (from the main instructions) against ALL sections
+  you can see (your span + the closing text from the previous span, for
+  transition quality)
+
 ## Voice Rules (Summary -- Full Details in Persona)
 
 **Register:** Experienced colleague at a whiteboard, not professor at podium.

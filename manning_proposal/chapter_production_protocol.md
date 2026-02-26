@@ -281,6 +281,75 @@ screenshot per task introduced.
 Write sections in this order. Each section has a target length and a
 completion check.
 
+### Writer Span Protocol (Long Chapters)
+
+Some chapters exceed the output capacity of a single writer agent. The
+scaffold's **Estimated Length** table (Phase 1) tells you in advance.
+
+**Rule:** If the scaffold's total estimated word count exceeds **6,000 words**,
+split the chapter into sequential **spans** -- each assigned to a separate
+writer agent instance.
+
+**How to split:**
+
+1. Read the scaffold's Estimated Length table.
+2. Accumulate sections top-to-bottom until the running total approaches
+   5,000-6,000 words. That is the end of Span 1.
+3. The remaining sections form Span 2 (and Span 3 if needed, though most
+   chapters fit in 2 spans).
+4. Never split inside a section. The smallest unit is one `##` section.
+5. If the final span would be under 2,000 words, merge it into the previous
+   span.
+
+**Split point guidelines:**
+
+| Preferred split points | Why |
+|----------------------|-----|
+| Between last Build It section and Bridge section | Natural shift from implementation to verification |
+| Between Bridge section and Run It | Shift from conceptual to procedural |
+| After WHY, before first Build It | Shift from motivation to implementation |
+
+**How to spawn span agents:**
+
+Spans run **sequentially** (Span 2 depends on Span 1's output). For each span:
+
+```
+Task(subagent_type="general-purpose", prompt="""
+Read manning_proposal/agents/writer.md for your instructions.
+
+You are writing **Span N of M** for Chapter NN.
+
+Your assigned sections: [list sections with estimated word counts]
+
+[If Span 1:]
+No previous context -- start fresh with Opening Promise.
+
+[If Span 2+:]
+Previous span's handoff context:
+--- HANDOFF FROM SPAN N-1 ---
+[paste the previous span's HANDOFF block]
+---
+Previous span's closing text (last ~1000 words):
+--- CLOSING TEXT ---
+[paste last ~1000 words of previous span's output]
+---
+
+Write ONLY your assigned sections. End with a <!-- HANDOFF --> block
+(see writer.md Span Mode for format).
+
+Scaffold: Manning/scaffolds/chNN_scaffold.md
+Source tutorial: tutorials/chNN_<topic>.md
+""")
+```
+
+**Assembly:**
+
+After all spans complete:
+1. Strip the `<!-- HANDOFF ... -->` block from each span's output.
+2. Concatenate the cleaned spans in order.
+3. Write the result to `Manning/chapters/chNN_<topic>.md`.
+4. Verify the assembled chapter has all sections from the scaffold.
+
 ### Step 7: Opening Promise
 
 **Write:**
