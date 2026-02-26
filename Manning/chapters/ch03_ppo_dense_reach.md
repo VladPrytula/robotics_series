@@ -14,7 +14,7 @@ But understanding the environment is necessary and not sufficient. A random poli
 
 This chapter introduces PPO (Proximal Policy Optimization), an on-policy algorithm that learns by clipping likelihood ratios to prevent destructive updates. You will derive the PPO objective, implement it from scratch (actor-critic network, GAE, clipped loss, value loss), verify each component, bridge to SB3, and train a policy that reaches 100% success on FetchReachDense-v4 (see Figure 3.1). This validates your entire training pipeline.
 
-One note before we begin: PPO works here because dense rewards provide continuous gradient signal. But PPO is on-policy -- it discards all data after each update, wasting expensive simulation time. Chapter 4 introduces SAC, an off-policy algorithm that stores and reuses experience in a replay buffer. That off-policy machinery is what Chapter 5 (HER) requires when we tackle sparse rewards.
+One note before we begin: PPO works here because dense rewards provide continuous gradient signal. But PPO is on-policy -- it discards all data after each update, wasting expensive simulation time. Chapter 4 introduces SAC, an off-policy algorithm that stores and reuses experience in a replay buffer. That off-policy machinery is what Chapter 5 (Hindsight Experience Replay) requires when we tackle sparse rewards.
 
 ![Annotated screenshot of FetchReachDense-v4 showing the Fetch robot arm reaching toward a red target sphere, with the end-effector and goal positions labeled](figures/fetch_reach_setup.png)
 
