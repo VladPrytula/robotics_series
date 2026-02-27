@@ -10,11 +10,11 @@
 
 In Chapter 3, you derived the PPO clipped surrogate objective, implemented it from scratch, bridged to SB3, and trained a policy to 100% success on FetchReachDense-v4. The entire pipeline -- environment, network, training loop, evaluation -- is validated and working.
 
-But PPO has a structural limitation that matters for what comes next. PPO is on-policy: every transition is used for a handful of gradient steps, then discarded. For FetchReachDense, where dense rewards provide continuous feedback at every timestep, this wastefulness is tolerable -- PPO still reaches 100% success in about 5 minutes. But each MuJoCo simulation step costs real CPU time. PPO achieves roughly 1,300 steps per second yet uses each frame only once. For harder tasks with sparser signal (coming in Chapter 5), throwing away data is catastrophic.
+But PPO has a structural limitation that matters for what comes next. PPO is on-policy: every transition is used for a handful of gradient steps, then discarded. For FetchReachDense, where dense rewards provide continuous feedback at every timestep, this wastefulness is tolerable -- PPO still reaches 100% success in about 5 minutes. But each MuJoCo simulation step costs real CPU time. PPO achieves roughly 1,300 steps per second yet uses each frame only once. For harder tasks with sparser signal (coming in Chapter 5), reusing data becomes essential.
 
 This chapter introduces SAC (Soft Actor-Critic), an off-policy algorithm that stores every transition in a replay buffer and reuses it across many updates. SAC adds a maximum entropy bonus that keeps the policy exploratory early in training and lets it become deterministic as it converges. You will derive the maximum entropy objective, implement SAC from scratch (replay buffer, twin Q-networks, squashed Gaussian policy, automatic temperature tuning), verify each component, bridge to SB3, and match PPO's 100% success on FetchReachDense-v4 -- validating the off-policy stack.
 
-One note on why this matters beyond sample efficiency: SAC's replay buffer is not just about reusing data. Chapter 5 introduces HER (Hindsight Experience Replay), which relabels failed transitions with alternative goals -- manufacturing success signal from failure. HER requires off-policy learning because relabeled data did not come from the current policy. The off-policy machinery you build in this chapter is the foundation HER needs.
+One note on why this matters beyond sample efficiency: SAC's replay buffer also enables a technique we will need in Chapter 5. HER (Hindsight Experience Replay) relabels failed transitions with alternative goals -- manufacturing success signal from failure. HER requires off-policy learning because relabeled data did not come from the current policy. The off-policy machinery you build in this chapter is the foundation HER needs.
 
 
 ## 4.1 WHY: The sample efficiency problem
@@ -33,7 +33,7 @@ In theory, a deterministic optimal policy is fine. In practice, it causes three 
 
 **Problem 1: exploration dies.** A deterministic policy exploits what it knows. If the current best action gets reward -0.1, the policy commits to it. But what if there is an action that would get reward -0.01 which the policy has never tried because it stopped exploring? With continuous action spaces (4D in Fetch), the chance of stumbling onto a good action by noise alone is small. The policy gets stuck in a local optimum.
 
-**Problem 2: brittleness.** A policy that commits fully to one action per state is fragile. Small perturbations -- observation noise, model mismatch between simulation and hardware -- can push it into unfamiliar states where it has no idea what to do. In robotics, this is not hypothetical. A policy that works perfectly in simulation but fails on real hardware is useless.
+**Problem 2: brittleness.** A policy that commits fully to one action per state is fragile. Small perturbations -- observation noise, model mismatch between simulation and hardware -- can push it into unfamiliar states where it has no idea what to do. In robotics, sim-to-real transfer regularly exposes this failure mode: a policy that works perfectly in simulation often fails on real hardware.
 
 **Problem 3: training instability.** When the policy is nearly deterministic, small changes in value estimates cause large behavioral changes (the "winning" action flips). This amplifies noise in the training process and can lead to oscillating or diverging training curves.
 
@@ -88,7 +88,7 @@ This difference drives the entire chapter. Off-policy learning is:
 
 ### Automatic temperature tuning
 
-Choosing $\alpha$ manually is tricky. Too low and the policy stops exploring early, converging to a suboptimal solution. Too high and the policy wastes time exploring randomly instead of exploiting what it has learned. The right value depends on the task, the training stage, and the action dimensionality.
+Choosing $\alpha$ manually requires care. Too low and the policy stops exploring early, settling on a suboptimal solution. Too high and the policy spends time exploring randomly instead of exploiting what it has learned. The right value depends on the task, the training stage, and the action dimensionality.
 
 SAC can learn $\alpha$ automatically by targeting a desired entropy level. The idea: define a **target entropy** $\bar{\mathcal{H}}$ (how stochastic you want the policy to be), and adjust $\alpha$ to keep the policy's actual entropy near that target.
 
@@ -107,7 +107,7 @@ In practice, SAC learns $\log \alpha$ rather than $\alpha$ directly, ensuring $\
 
 ### Why this matters for robotics
 
-In robotics, brittleness kills. A policy that works in simulation but fails with real sensor noise is useless. The maximum entropy objective helps in three specific ways:
+In robotics, robustness matters as much as performance. A policy needs to handle real sensor noise, not just clean simulation. The maximum entropy objective helps in three specific ways:
 
 1. **Diverse training data.** The policy explores many actions, seeing more of the state space during training. This produces a critic with better coverage -- it has seen more state-action combinations, so its value estimates are more reliable.
 
@@ -441,14 +441,14 @@ def compute_actor_loss(
 
 Notice that actions are sampled fresh from the current policy (not taken from the replay buffer). The Q-networks evaluate these new actions using their current weights. This is different from the critic update, which evaluated the actions that were actually taken when the transition was collected. The actor asks: "given this state, what action would I take NOW, and how good would it be?"
 
-The entropy diagnostic `H = -E[log pi]` tracks how stochastic the policy is. At initialization, entropy is high (the policy has not learned any preferences). As training proceeds and $\alpha$ decreases, entropy drops and the policy becomes more deterministic. If entropy drops to near zero too early, the policy may have collapsed -- see What Can Go Wrong.
+The entropy diagnostic `H = -E[log pi]` tracks how stochastic the policy is. At initialization, entropy is high (the policy has not learned any preferences). As training proceeds and $\alpha$ decreases, entropy drops and the policy becomes more deterministic. If entropy drops to near zero too early, that is worth investigating -- see What Can Go Wrong for diagnostics.
 
 > **Checkpoint.** Compute the actor loss on random observations with `alpha=0.2`. You should see: `actor_loss` finite and positive at initialization (the policy has not learned to select high-Q actions yet), `entropy` positive (the random-initialized policy is stochastic), and `log_prob_mean` negative (probabilities are less than 1). If `actor_loss` is NaN, check that the squashed Gaussian log-prob computation in Section 4.5 is numerically stable.
 
 
 ## 4.8 Build It: Automatic temperature tuning
 
-The actor loss in Section 4.7 uses a fixed $\alpha = 0.2$. That works for a single verification step, but in real training you do not know the right value ahead of time. Too low and exploration dies early. Too high and the policy wastes time on random actions. The right $\alpha$ depends on the task, the training stage, and the action dimensionality -- it is not a constant.
+The actor loss in Section 4.7 uses a fixed $\alpha = 0.2$. That works for a single verification step, but in real training the right value is hard to choose ahead of time. Too low and exploration dies early. Too high and the policy wastes time on random actions. The right $\alpha$ depends on the task, the training stage, and the action dimensionality -- it changes as training progresses.
 
 SAC solves this by learning $\alpha$ alongside the policy and critics. The idea (introduced in Section 4.1): define a target entropy $\bar{\mathcal{H}} = -\dim(\mathcal{A})$ -- for Fetch's 4D action space, $\bar{\mathcal{H}} = -4$ -- and adjust $\alpha$ to keep the policy's actual entropy near that target.
 
@@ -559,7 +559,7 @@ After the three gradient steps, the target networks blend in the new critic weig
     return {**q_info, **actor_info, **alpha_info}
 ```
 
-This is not a gradient step -- it is a weighted blend of parameters. It runs in `torch.no_grad()` and takes negligible time. The target network inherits 0.5% of the main network's weights per update ($\tau = 0.005$), providing the stable optimization targets that the critic loss (Section 4.6) depends on.
+This is a direct weighted blend of parameters, not a gradient step. It runs in `torch.no_grad()` and takes negligible time. The target network inherits 0.5% of the main network's weights per update ($\tau = 0.005$), providing the stable optimization targets that the critic loss (Section 4.6) depends on.
 
 > **Checkpoint.** Initialize all networks, create three Adam optimizers, and run 20 updates on a random batch. You should see: `alpha` has changed from 1.0 (it may go up or down depending on the random policy's entropy relative to the target), `q1_loss` is finite, `actor_loss` is finite, and all values in the info dictionary are finite. If any value is NaN after 20 updates, check that each optimizer is attached to the correct parameters and that no gradients flow where they should not (target computation, temperature log-probs).
 
@@ -671,7 +671,7 @@ When you train with SB3 and open TensorBoard, the logged metrics correspond dire
 | `rollout/ep_rew_mean` | (environment) | Mean episode return |
 | `rollout/success_rate` | (environment) | Fraction of episodes where goal is reached |
 
-This mapping is important. When you see `replay/ent_coef = 0.08` in TensorBoard, you know exactly what that means -- $\alpha = 0.08$, the output of the same `log_alpha.exp()` you implemented in Section 4.8. When you see `train/critic_loss = 0.34`, that is the MSE Bellman error from the same `compute_q_loss` function you wrote in Section 4.6. You are not reading opaque metrics from a black box; you are reading quantities you have implemented and verified.
+We find this mapping useful for debugging. When you see `replay/ent_coef = 0.08` in TensorBoard, that is $\alpha = 0.08$ -- the output of the same `log_alpha.exp()` from Section 4.8. When you see `train/critic_loss = 0.34`, that is the MSE Bellman error from `compute_q_loss` in Section 4.6. Having built each component yourself, you can trace any TensorBoard metric back to the exact computation that produced it.
 
 
 ## 4.11 Run It: Training SAC on FetchReachDense-v4
@@ -763,7 +763,7 @@ Then open http://localhost:6006 in your browser. Here is what healthy training l
 | `train/actor_loss` | Fluctuates, generally decreases | NaN means numerical instability |
 | `train/critic_loss` | Starts high, decreases and stabilizes | Tracks learning progress |
 
-Remember, these are the same quantities you implemented in the Build It sections. `replay/ent_coef` is the output of your `log_alpha.exp()`. `train/critic_loss` is the MSE from your `compute_q_loss`. `replay/q_min_mean` is `torch.min(q1, q2)` from your twin Q-network. You know exactly what these numbers mean because you have computed them yourself.
+These are the same quantities from the Build It sections: `replay/ent_coef` maps to `log_alpha.exp()`, `train/critic_loss` maps to `compute_q_loss`, and `replay/q_min_mean` maps to `torch.min(q1, q2)`. The TensorBoard metric mapping table in Section 4.10 has the full correspondence.
 
 > **Tip.** Low GPU utilization (~5-10%) is expected. The bottleneck is CPU-bound MuJoCo simulation, not neural network operations. With small networks (two 256-unit hidden layers) and batch sizes (256), GPU operations complete in microseconds while the CPU runs physics. This is normal for state-based RL -- pixel-based policies in later chapters will use the GPU much more heavily.
 
@@ -782,7 +782,7 @@ Both algorithms solve FetchReachDense-v4, but with different tradeoffs. Figure 4
 
 Both achieve 100% success -- the off-policy stack is validated. SAC has a higher final distance (18.6mm vs 4.6mm) but still well within the 50mm threshold. SAC is slower in wall-clock time because it updates more networks per step (actor + two critics + two targets versus PPO's single shared network). SAC's slightly rougher actions (smoothness 1.68 vs 1.40) reflect the entropy bonus encouraging a spread of actions during training.
 
-The key comparison is not which algorithm "wins" on this task -- both solve it completely. The key comparison is structural: PPO used each transition once and discarded it. SAC stored every transition and reused it across many updates. On FetchReachDense, where signal is plentiful, this difference is a mild efficiency trade. On sparse-reward tasks (Chapter 5), the replay buffer is what makes learning possible at all.
+Both algorithms solve this task completely, so the interesting comparison is structural: PPO used each transition once and discarded it, while SAC stored every transition and reused it across many updates. On FetchReachDense, where signal is plentiful, this difference is a mild efficiency trade. On sparse-reward tasks (Chapter 5), the replay buffer becomes the key enabler for learning.
 
 ![Learning curve comparison: PPO and SAC success rate over timesteps on FetchReachDense-v4, both reaching 100% but PPO reaching it somewhat earlier in wall-clock time while SAC has a different convergence profile](figures/ppo_vs_sac_learning_curves.png)
 

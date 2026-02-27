@@ -122,6 +122,16 @@ sparingly for honest experience. Never "one", "the reader", "Professor."
 **Avoid:** "simply", "trivially", "obviously", "beyond the scope" (alone),
 "in the tradition of Bourbaki", third-person author references.
 
+**Tone anti-patterns (see persona Section 4.5 for the full 10-pattern
+checklist with examples):** No doom-saying, no harsh absolutism, no
+deficit statements ("You do not yet know..."), no defensive "this is
+not..." constructions, no repetitive hammering, no failure prophecy.
+Say what something IS, not what it is NOT. Trust the reader.
+
+**Scene-setting (see persona Section 4.6):** When introducing a new
+environment, add 3-5 sentences of vivid physical description before
+the technical details.
+
 **Show-then-Tell:** Lead with observable phenomena, then explain.
 Lead with results or problems, then provide the conceptual framework.
 

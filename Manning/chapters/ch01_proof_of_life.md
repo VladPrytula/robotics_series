@@ -10,7 +10,7 @@
 
 Reinforcement learning for robotics has an uncomfortable failure mode: everything runs, nothing learns. There are no compiler errors, no stack traces, no red text. The training loop finishes, the checkpoint saves, and when you evaluate the policy, the robot sits still -- or flails -- or does something that looks vaguely intelligent but succeeds 3% of the time.
 
-This chapter makes sure that does not happen to you silently. By the end, you will have a working environment that you *trust* -- not because it "seems fine," but because you have concrete evidence: a rendered frame proving the physics engine works, a saved checkpoint proving the training loop completes, and a set of diagnostic habits that will serve you for the rest of the book.
+This chapter helps you catch that failure mode early. By the end, you will have a working environment you can trust -- not because it "seems fine," but because you have concrete evidence: a rendered frame proving the physics engine works, a saved checkpoint proving the training loop completes, and a set of diagnostic habits that will serve you for the rest of the book.
 
 We call this a "proof of life" -- borrowed from hostage negotiations, where it means evidence that someone is still alive. Here, it means evidence that the computational environment is alive: capable of producing valid, reproducible results.
 
@@ -27,7 +27,7 @@ You train a policy for eight hours. The training loop runs without errors. You e
 
 The answer could be any of a dozen things: a rendering backend that silently fails, a CUDA driver mismatch that forces CPU training without telling you, a package version incompatibility that changes the observation format, a reward function that returns the wrong sign. The code *ran*. It just did not *work*.
 
-This is qualitatively different from traditional software bugs. A web server that crashes is easier to fix than a web server that serves wrong answers. A compiler error is easier to fix than silent data corruption. In RL, the equivalent of silent data corruption is a flat reward curve -- and it can waste days of compute before you notice.
+This is harder to debug than a typical software bug. A web server that crashes is easier to fix than a web server that serves wrong answers. A compiler error is easier to fix than silent data corruption. In RL, the equivalent of silent data corruption is a flat reward curve -- and it can waste days of compute before you notice.
 
 The problem gets worse with robotics. Physics simulators like MuJoCo have system-level dependencies (shared libraries, GPU drivers, rendering backends) that can fail in platform-specific ways. A setup that works on your laptop may break on a remote server. A setup that works today may break after a system update. And because RL training is stochastic by nature -- different random seeds produce different trajectories, different gradient updates, different final policies -- it can be genuinely hard to tell whether a bad result is caused by a software bug, a configuration error, or just bad luck.
 
@@ -37,13 +37,13 @@ To make this concrete: in our experience developing the code for this book, we e
 
 Henderson et al. (2018) documented a reproducibility crisis in deep RL that goes beyond individual bugs: many published results could not be replicated, even by the original authors, because the experimental conditions were underspecified. Their paper showed that seemingly minor details -- random seed, network initialization, even the number of parallel environments -- could change the outcome from "learns successfully" to "fails completely."
 
-The practical consequence for you: unless you can *verify* that your environment, your rendering stack, your training loop, and your evaluation protocol all work correctly, you have no way to tell whether a training failure means "the algorithm can't solve this" or "something is broken in my setup."
+In our experience, the single most useful thing you can do before training is verify that your environment, rendering stack, training loop, and evaluation protocol all work correctly. Once you have that confidence, a training failure tells you something interesting -- the problem lies in the algorithm, the hyperparameters, or the task itself, not in a broken setup.
 
-This chapter systematically eliminates the second possibility. When a training run fails after completing this chapter, you will know that the *infrastructure* is sound and the problem lies in the algorithm, the hyperparameters, or the task itself -- which are the interesting problems.
+This chapter gives you that confidence systematically. By the end, you will have verified the full stack, so you can focus on the interesting problems.
 
 ### Three questions before you train
 
-Before running any experiment in this book, we find it useful to ask three questions. These come from the mathematician Hadamard, who studied when problems have reliable solutions -- but you do not need the math background. They translate directly to engineering:
+Before running any experiment in this book, we find it useful to ask three questions. These come from the mathematician Hadamard, who studied when problems have reliable solutions. The math is not important here -- they translate directly to engineering:
 
 1. **Can this be solved?** Is there a policy that could achieve the goal, given the observation and action spaces? For some tasks, the answer is genuinely uncertain. A policy with no access to the object's position cannot learn to push it. A 2-layer MLP may not have enough capacity for a high-dimensional visual task.
 2. **Is the solution reliable?** Will different random seeds give similar results, or is success a fluke? If you train five times and succeed once, you probably got lucky -- the algorithm is not reliably solving the task.
@@ -60,7 +60,9 @@ We will use these three questions as a lightweight checklist at the start of eve
 
 The experiments in this book use the Fetch family of environments from Gymnasium-Robotics. These are simulated robotic manipulation tasks built on the MuJoCo physics engine -- a high-fidelity rigid-body dynamics simulator originally developed at the University of Washington and now maintained by Google DeepMind. A 7-degree-of-freedom (7-DOF) Fetch robotic arm sits on a table and must achieve goals: reaching a target position, pushing an object to a location, or picking up an object and placing it elsewhere.
 
-What makes these tasks interesting for learning is that they are *goal-conditioned*: the robot receives a desired goal (where to move, where to push the object) that changes every episode. The policy must generalize across goals, not just memorize a single target. This is a step toward real-world utility -- a robot that can only reach one fixed position is not very useful.
+Let's get a feel for what we are working with. The Fetch arm is a silver industrial manipulator about a meter tall, with seven visible joints connecting chunky links that taper down to a parallel-jaw gripper with rubber finger pads. It sits behind a low table, and its reachable workspace -- the volume where it can operate -- spans roughly 60 x 70 x 20 cm on and above the table surface. When the arm moves, it traces smooth, deliberate arcs; you issue Cartesian velocity commands ("move right, move up"), and an internal inverse-kinematics controller translates those into joint motions. In the simplest task, FetchReach, a small red sphere floats in the air near the table, and success means the fingertips arrive within 5 cm of that sphere -- roughly the width of two fingers side by side. It sounds easy, but getting a learning algorithm to do it reliably from scratch is where the interesting challenges begin.
+
+What makes these tasks interesting for learning is that they are goal-conditioned: the robot receives a desired goal (where to move, where to push the object) that changes every episode. The policy must generalize across goals, not just memorize a single target. This is a step toward real-world utility -- a robot that can only reach one fixed position is not very useful.
 
 ### Why this environment family
 
@@ -70,7 +72,7 @@ We chose Fetch for three reasons:
 
 1. **Goal conditioning enables the algorithms we care about.** The central challenge of this book is learning manipulation from sparse binary rewards -- "did you succeed or not?" -- rather than hand-designed distance signals. Solving this requires Hindsight Experience Replay (HER, Chapter 5), which needs an environment that separates `achieved_goal` from `desired_goal` so that failed trajectories can be relabeled as successes for different goals. Fetch environments provide this interface natively. Many popular RL benchmarks (CartPole, Ant, HalfCheetah) do not, which would force us to retrofit goal conditioning rather than teach it.
 
-2. **The difficulty ladder lives inside one family.** Fetch provides five qualitatively different challenges without changing the API:
+2. **The difficulty ladder lives inside one family.** Fetch provides five distinct challenges without changing the API:
 
    - Reaching a target (arm control only, continuous feedback)
    - Reaching with sparse reward (same task, binary signal -- the HER motivation)
@@ -84,7 +86,7 @@ We chose Fetch for three reasons:
 
 ### Depth over breadth
 
-This is a deliberate pedagogical choice: we believe you learn more from understanding one task deeply than from running many tasks superficially. The cost is real -- you will not see locomotion, multi-agent coordination, or real hardware in the main text. We address portability in the appendices (Appendix C ports the methodology to PyBullet's PandaGym; Appendix E demonstrates it on NVIDIA Isaac). But the core curriculum stays with Fetch because depth enables something breadth cannot: *controlled variable elimination*.
+This is a deliberate pedagogical choice: we believe you learn more from understanding one task deeply than from running many tasks superficially. The cost is real -- you will not see locomotion, multi-agent coordination, or real hardware in the main text. We address portability in the appendices (Appendix C ports the methodology to PyBullet's PandaGym; Appendix E demonstrates it on NVIDIA Isaac). But the core curriculum stays with Fetch because depth enables something breadth cannot: controlled variable elimination.
 
 When a training run fails in Chapter 5 (sparse rewards), is the problem the algorithm, the reward, the exploration, or the environment? Because you already solved the same environment with dense rewards in Chapters 3-4, you can rule out the environment. When pixel-based training struggles in Chapter 9, you already solved the same task from state vectors -- so you know the task is solvable, and the problem must be in the visual pipeline. With a new environment each chapter, every failure has five possible causes. With one environment family, you isolate variables the way a lab scientist would.
 
@@ -117,14 +119,14 @@ The Cartesian action space is an important design choice. It means the learning 
 - *Dense reward* (e.g., `FetchReachDense-v4`): the reward is the negative Euclidean distance between `achieved_goal` and `desired_goal`. Closer is better. The reward is always negative or zero, with 0 meaning the goal is perfectly achieved.
 - *Sparse reward* (e.g., `FetchReach-v4`): the reward is -1 if the goal is not achieved and 0 if it is. "Achieved" means the distance is below a threshold (5 cm for Reach).
 
-Dense rewards give the learning algorithm continuous feedback -- "you're getting warmer." Sparse rewards give a binary signal -- "success or failure." Sparse rewards are harder to learn from but more natural: in real robotics, you often know only whether the task succeeded, not by how much you missed. Learning from sparse rewards is one of the central challenges of this book, and we will tackle it directly in Chapter 5 using Hindsight Experience Replay (HER -- an algorithm that turns failed attempts into useful training data by asking "what goal *would* this attempt have achieved?").
+Dense rewards give the learning algorithm continuous feedback -- "you're getting warmer." Sparse rewards give a binary signal -- "success or failure." Sparse rewards are harder to learn from but more natural: in real robotics, you often know only whether the task succeeded, not by how much you missed. Learning from sparse rewards is one of the central challenges of this book, and we will tackle it directly in Chapter 5 using Hindsight Experience Replay (HER -- an algorithm that turns failed attempts into useful training data by asking "what goal would this attempt have achieved?").
 
 For this chapter, we use `FetchReachDense-v4` -- the easiest variant. We are not trying to learn anything interesting yet. We are verifying that the machinery works.
 
 > **NOTE:** We formalize dense and sparse rewards mathematically in Chapter 2. For now, the intuition is sufficient: dense = continuous distance feedback, sparse = binary success/failure signal.
 
 
-## 1.3 The experiment contract (the "no vibes" rule)
+## 1.3 The experiment contract
 
 Every chapter in this book produces concrete artifacts. Not screenshots, not "it looked like it was working," not a training curve in TensorBoard (a web-based visualization dashboard for monitoring training runs) that you squint at and decide looks "good enough" -- files on disk that you can inspect, share, and reproduce.
 
@@ -139,11 +141,11 @@ Here is the contract:
 
 The `ppo` in the example filenames refers to PPO (Proximal Policy Optimization), the algorithm used for training -- we introduce PPO in Chapter 3. The two most important columns are "Format" and "Example." Checkpoints are files with known paths and machine-readable metadata. Evaluation reports are JSON -- not prose, not impressions, but structured data with success rates, episode returns, goal distances, and seed counts. When this book says "94% success rate," there is a JSON file that contains that number, and you can verify it yourself.
 
-**Why provenance matters.** Henderson et al. (2018) documented a reproducibility crisis in deep RL: many published results could not be replicated, even by the original authors, because the experimental conditions were underspecified. Random seeds, hyperparameters, library versions, and hardware all matter. A single random seed can be the difference between 95% success and 40% success on the same algorithm with the same hyperparameters. A result without provenance is not a result -- it is an anecdote.
+**Why provenance matters.** Henderson et al. (2018) documented a reproducibility crisis in deep RL: many published results could not be replicated, even by the original authors, because the experimental conditions were underspecified. Random seeds, hyperparameters, library versions, and hardware all matter. A single random seed can be the difference between 95% success and 40% success on the same algorithm with the same hyperparameters. A result with provenance -- one you can trace back to a specific command, seed, and environment -- is worth far more than one without it.
 
 Our defense is simple: every experiment in this book is defined by a single command, produces versioned artifacts, and records the conditions under which it ran. The `.meta.json` file alongside each checkpoint captures the algorithm, environment, seed, step count, and library versions. The evaluation JSON records exactly which checkpoint was evaluated, on which environment, with which seeds, and whether the policy was deterministic. If you want to know how we got a number, you can find the exact command in the chapter, run it yourself, and compare.
 
-We call this the "no vibes" rule: if you cannot point to a file that contains the number, the number does not exist.
+We find it helpful to hold ourselves to a simple standard: every number we report should trace back to a file on disk. If we can point to the JSON, the result is real. If we cannot, we treat it as unverified.
 
 **The training and evaluation CLIs.** Every chapter uses the same two entry points:
 
@@ -170,7 +172,7 @@ If either check fails, consult your system administrator or Docker's installatio
 
 ### Docker as environment specification
 
-We use Docker containers for all experiments. This is not a convenience choice -- it is a reproducibility choice.
+We use Docker containers for all experiments, primarily for reproducibility.
 
 Here is the scenario we are trying to prevent: you train a policy, achieve 94% success, and send the code to a colleague. They install the dependencies, run the same command, and get 12% success -- or a crash. The difference? Their MuJoCo version is slightly different. Or their CUDA toolkit does not match. Or a transitive dependency upgraded since you pinned yours. These problems are invisible and maddening.
 
@@ -245,7 +247,7 @@ The first time you run `docker/dev.sh`, it installs all dependencies -- this add
 
 Before running the full pipeline, let's look under the hood. This section teaches you to inspect the environment directly -- the observation structure, the reward computation, and the success signal. These are the building blocks that every later chapter depends on.
 
-In later chapters, Build It sections will have you implementing algorithms from scratch -- writing loss functions, replay buffers, and update loops in raw PyTorch. This chapter's Build It is lighter because there is no algorithm to implement yet. Instead, you will learn to *talk to the environment*: query its observations, manually compute rewards, and check success conditions. These skills are diagnostic tools you will use every time something goes wrong in a later chapter.
+In later chapters, Build It sections will have you implementing algorithms from scratch -- writing loss functions, replay buffers, and update loops in raw PyTorch. This chapter's Build It is lighter because there is no algorithm to implement yet. Instead, you will learn to talk to the environment: query its observations, manually compute rewards, and check success conditions. These are diagnostic skills that come in handy whenever something goes wrong in a later chapter.
 
 ### 1.5.1 The observation dictionary
 
@@ -287,7 +289,7 @@ Figure 1.1: The FetchReach environment after `env.reset()`. The red sphere marks
 
 ### 1.5.2 Manual compute_reward: the critical invariant
 
-Every Fetch environment exposes a `compute_reward` method that takes an achieved goal, a desired goal, and an info dictionary, and returns a reward. We access it via `env.unwrapped.compute_reward(...)` because `gym.make()` wraps the environment in several layers (time limits, order enforcement) that do not expose `compute_reward` directly -- `.unwrapped` reaches through to the base Fetch environment. This is not just a convenience function -- it is the foundation of Hindsight Experience Replay (HER), which we introduce in Chapter 5. HER works by asking: "what goal *would* this trajectory have achieved?" and recomputing rewards accordingly. If `compute_reward` does not match the reward that `env.step()` returns, HER learns from incorrect data.
+Every Fetch environment exposes a `compute_reward` method that takes an achieved goal, a desired goal, and an info dictionary, and returns a reward. We access it via `env.unwrapped.compute_reward(...)` because `gym.make()` wraps the environment in several layers (time limits, order enforcement) that do not expose `compute_reward` directly -- `.unwrapped` reaches through to the base Fetch environment. This method is the foundation of Hindsight Experience Replay (HER), which we introduce in Chapter 5. HER works by asking: "what goal would this trajectory have achieved?" and recomputing rewards accordingly. If `compute_reward` does not match the reward that `env.step()` returns, HER learns from incorrect data.
 
 Let's verify this invariant directly:
 
@@ -321,9 +323,9 @@ Manual reward: -1.058329
 Match: True
 ```
 
-The specific reward value depends on the random action sampled, which varies across library versions and seeds. What matters is that the two values match exactly. The rewards match -- this is the *critical invariant*. This is the *critical invariant* for the entire book: `compute_reward(achieved_goal, desired_goal, info)` must equal the reward from `env.step()`. Every chapter that uses HER depends on this.
+The specific reward value depends on the random action sampled, which varies across library versions and seeds. What matters is that the two values match exactly. We call this the critical invariant: `compute_reward(achieved_goal, desired_goal, info)` must equal the reward from `env.step()`. Every chapter that uses HER depends on this.
 
-Why is this so important? When HER relabels a failed trajectory -- "you did not reach the goal at position (1.3, 0.7, 0.5), but you *did* reach position (1.2, 0.6, 0.42)" -- it needs to recompute the reward as if that alternate position had been the goal all along. It does this by calling `compute_reward(achieved_goal=actual_position, desired_goal=relabeled_goal, info)`. If this function returns a different value than `env.step()` would have returned for the same state, then HER is training on incorrect reward labels. The policy learns from corrupted data, and training may silently fail or converge to a bad policy.
+Why does this matter so much? When HER relabels a failed trajectory -- "you did not reach the goal at position (1.3, 0.7, 0.5), but you did reach position (1.2, 0.6, 0.42)" -- it needs to recompute the reward as if that alternate position had been the goal all along. It does this by calling `compute_reward(achieved_goal=actual_position, desired_goal=relabeled_goal, info)`. If this function returns a different value than `env.step()` would have returned for the same state, then HER is training on incorrect reward labels. The policy learns from corrupted data, and training may silently fail or converge to a bad policy.
 
 > **Checkpoint.** Run this check with several different seeds and actions. The rewards should always match exactly (not approximately -- exactly). If they do not, there is a version incompatibility between gymnasium and gymnasium-robotics that may cause problems in Chapter 5.
 
@@ -385,7 +387,7 @@ We have now verified three things by hand:
 2. `compute_reward(ag, dg, info)` matches the reward from `env.step()`
 3. The success signal corresponds to goal distance below a threshold
 
-These are not just warm-up exercises. They connect to the production pipeline in specific ways.
+Each of these checks connects to the production pipeline in specific ways.
 
 When SB3 creates a PPO or SAC model with `MultiInputPolicy`, it reads the observation space to determine the input structure -- the same `Dict` with three `Box` entries that you inspected in section 1.5.1. If the shapes were wrong or the keys were missing, model creation would fail silently or produce a network with the wrong architecture. By inspecting the observation yourself, you know exactly what the model will see.
 
@@ -441,7 +443,7 @@ On Mac, this correctly reports "CUDA not available" -- training proceeds on CPU,
 WARN: CUDA not available; training will use CPU (this is expected on Mac)
 ```
 
-This test always passes (it warns rather than fails on Mac or CPU-only systems) because CPU-only operation is valid. But on a system where you *expect* a GPU, treat a "not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
+This test always passes (it warns rather than fails on Mac or CPU-only systems) because CPU-only operation is valid. But on a system where you expect a GPU, treat a "not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
 
 **Test 2: Fetch environment registry** (`list-envs`)
 
@@ -465,7 +467,7 @@ The `-v3` and `-v4` variants are both present; we use `-v4` throughout this book
 
 Creates a Fetch environment with `render_mode="rgb_array"`, calls `env.render()`, and saves the frame as `smoke_frame.png`. This tests the entire rendering pipeline: MuJoCo physics initialization, scene construction, camera setup, and offscreen rendering via EGL or OSMesa.
 
-Why is rendering non-trivial? On a typical workstation or laptop, rendering uses the display server (X11 on Linux, the window system on Mac) to manage the OpenGL context. But DGX systems and cloud servers are *headless* -- they have no monitor attached and no display server running. Rendering must happen entirely offscreen, which requires either EGL (using the GPU's rendering capability directly, without a display) or OSMesa (a software-only renderer that produces images using the CPU). Both approaches have system library requirements that can fail silently.
+Why is rendering non-trivial? On a typical workstation or laptop, rendering uses the display server (X11 on Linux, the window system on Mac) to manage the OpenGL context. But DGX systems and cloud servers are headless -- they have no monitor attached and no display server running. Rendering must happen entirely offscreen, which requires either EGL (using the GPU's rendering capability directly, without a display) or OSMesa (a software-only renderer that produces images using the CPU). Both approaches have system library requirements that can fail silently.
 
 The script implements a fallback chain: it first tries EGL (hardware-accelerated, preferred on NVIDIA systems), then OSMesa (software rendering, slower but more compatible). The fallback works by re-executing the entire script process with different environment variables -- so if EGL fails, you may see the script's startup output appear twice in your terminal. This is the re-exec mechanism switching backends, not an error.
 
@@ -477,7 +479,7 @@ OK: wrote /workspace/smoke_frame.png
 
 **Test 4: PPO smoke training** (`ppo-smoke`)
 
-Runs PPO (Proximal Policy Optimization, a policy gradient method we derive and implement from scratch in Chapter 3) for 50,000 timesteps on `FetchReachDense-v4` with 8 parallel environments and saves a checkpoint as `ppo_smoke.zip`. This is not long enough to learn a good policy -- it is long enough to verify that the entire training pipeline (environment interaction, gradient computation, parameter updates, checkpoint saving) works end-to-end.
+Runs PPO (Proximal Policy Optimization, a policy gradient method we derive and implement from scratch in Chapter 3) for 50,000 timesteps on `FetchReachDense-v4` with 8 parallel environments and saves a checkpoint as `ppo_smoke.zip`. This is enough to verify that the entire training pipeline (environment interaction, gradient computation, parameter updates, checkpoint saving) works end-to-end, though far too short to learn a good policy.
 
 Why 50,000 steps and not 1,000,000? Because this is a smoke test, not a training run. We want to verify the machinery in under 5 minutes, not produce a useful policy. A full training run for FetchReachDense takes about 500,000 steps (Chapter 3). For now, we just need the loop to execute without crashing.
 
@@ -517,7 +519,7 @@ Action space: Box(-1.0, 1.0, (4,), float32)
 
 A few things to notice here. The policy is a `MultiInputPolicy` -- not a `MlpPolicy` -- because observations are dictionaries, not flat vectors. SB3 handles the dictionary structure internally by processing each key separately and concatenating them before feeding into the neural network. The observation space is a `Dict` with three `Box` entries matching the shapes we saw in section 1.5. The action space is a `Box` with shape `(4,)` and bounds `[-1, 1]`, matching the Cartesian velocity + gripper action we described in section 1.2.
 
-Do not evaluate this checkpoint for performance. It trained for only 50,000 steps -- far too few to learn useful behavior on any task. Its purpose is to prove the loop runs, not that it learns. Learning starts in Chapter 3.
+This checkpoint is not worth evaluating for performance -- it trained for only 50,000 steps, far too few to learn useful behavior on any task. Its purpose is to prove the loop runs, not that it learns. Learning starts in Chapter 3.
 
 **`ppo_smoke.meta.json`** -- A small metadata file capturing the environment ID, seed, training step count, device, and library versions used for the smoke run. Later chapters produce the same `.meta.json` alongside checkpoints in `checkpoints/`.
 
@@ -548,7 +550,7 @@ Together with the Build It checks from section 1.5, you also know:
 - `compute_reward` matches `env.step()` (the critical invariant)
 - The success signal correctly reflects goal distance
 
-This is what "alive" means: the environment can produce valid results. It does not yet mean the environment produces *good* results -- that is what the rest of the book is for.
+This is what "alive" means: the environment can produce valid results. Producing good results -- that is what the rest of the book is for.
 
 > **SIDEBAR: Regenerating figures and videos**
 >
@@ -600,7 +602,7 @@ Here are the most common failures and how to fix them. We have encountered all o
 
 **Cause.** The EGL rendering library is missing or the GPU driver does not expose EGL support.
 
-**Fix.** The proof-of-life script automatically falls back to OSMesa. If you see the script output appear twice, that is the fallback mechanism -- not an error. If *both* EGL and OSMesa fail, check that `libegl1` and `libosmesa6` are installed in the container image. Rebuilding the image with `bash docker/build.sh` usually resolves this.
+**Fix.** The proof-of-life script automatically falls back to OSMesa. If you see the script output appear twice, that is the fallback mechanism -- not an error. If both EGL and OSMesa fail, check that `libegl1` and `libosmesa6` are installed in the container image. Rebuilding the image with `bash docker/build.sh` usually resolves this.
 
 
 ### No Fetch environments found
@@ -667,11 +669,11 @@ You now have a working laboratory. Specifically, you can trust four things:
 - **The training loop works.** A complete cycle -- environment interaction, policy forward pass, gradient computation, parameter update, checkpoint save -- executes without error. The checkpoint is loadable by SB3.
 - **The reward invariant holds.** `compute_reward(achieved_goal, desired_goal, info)` matches the reward returned by `env.step()`. This is the foundation for Hindsight Experience Replay (HER) in Chapter 5.
 
-You also have a set of habits that will carry through the entire book: the three diagnostic questions (can it be solved? is it reliable? is it stable?), the experiment contract (artifacts on disk, not vibes in your head), and the willingness to inspect the environment directly rather than trusting that "it probably works."
+You also have a set of habits that will carry through the entire book: the three diagnostic questions (can it be solved? is it reliable? is it stable?), the experiment contract (artifacts on disk that you can inspect and share), and the willingness to inspect the environment directly rather than trusting that "it probably works."
 
-You do *not* yet know whether training produces good policies. The PPO smoke test ran for only 50,000 steps -- enough to verify the loop, not enough to learn. You do not yet know how to read training diagnostics (what does a healthy reward curve look like?), how to evaluate policies rigorously (across how many seeds? with deterministic or stochastic actions?), or how to tell whether a flat reward curve means "broken" or "needs more time."
+What comes next is where things get interesting. The PPO smoke test ran for only 50,000 steps -- enough to verify the loop, not enough to learn. The remaining chapters will show you how to read training diagnostics (what does a healthy reward curve look like?), how to evaluate policies rigorously (across how many seeds? with deterministic or stochastic actions?), and how to tell whether a flat reward curve means "broken" or "needs more time."
 
-That is what the rest of the book is for. Chapter 2 takes a deeper look at what the robot actually sees -- inspecting all observation components, understanding what the action space means physically, exploring reward semantics for both dense and sparse variants, and establishing the metrics schema (success rate, mean return, goal distance, action smoothness) that you will use for evaluation in every later chapter. Where this chapter asked "does the environment work?", Chapter 2 asks "do we understand what the environment is telling us?"
+Chapter 2 takes a deeper look at what the robot actually sees -- inspecting all observation components, understanding what the action space means physically, exploring reward semantics for both dense and sparse variants, and establishing the metrics schema (success rate, mean return, goal distance, action smoothness) that you will use for evaluation in every later chapter. Where this chapter asked "does the environment work?", Chapter 2 asks "do we understand what the environment is telling us?"
 
 
 ---

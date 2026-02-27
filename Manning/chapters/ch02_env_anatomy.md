@@ -10,7 +10,7 @@
 
 In Chapter 1, you verified that the computational stack works: Docker launches, MuJoCo simulates, the rendering pipeline produces frames, and a training loop runs to completion. You have a proof of life -- evidence that the environment is alive and capable of producing results.
 
-But alive is not the same as understood. You know the environment *works*, but not what it *says*. What do the 10 numbers in the observation vector mean? What happens when the robot takes action `[1, 0, 0, 0]`? Why does the reward function return -0.073 instead of -1? How does the environment know the robot "succeeded"? Without answering these questions, you cannot debug training failures or choose appropriate algorithms.
+But alive is not the same as understood. You know the environment *works*, but not what it *says*. What do the 10 numbers in the observation vector mean? What happens when the robot takes action `[1, 0, 0, 0]`? Why does the reward function return -0.073 instead of -1? How does the environment know the robot "succeeded"? Answering these questions gives you the foundation to debug training failures and choose appropriate algorithms.
 
 This chapter provides a complete anatomy of Fetch environment observations, actions, rewards, and goals. You will inspect every component by hand, verify reward computation against the distance formula, simulate HER-style goal relabeling, and establish the random-policy baseline that every trained agent must beat. With the environment understood, Chapter 3 trains a real policy -- PPO on dense Reach. The observation shapes you document here determine the network architecture. The random baseline you establish here is the floor that PPO must exceed.
 
@@ -19,19 +19,19 @@ This chapter provides a complete anatomy of Fetch environment observations, acti
 
 Imagine you train a policy for 10 hours. The training loop completes without errors. You evaluate the checkpoint and find a success rate of 0%. You check the reward curve -- flat. You check the loss -- it looks normal. Nothing crashed. What went wrong?
 
-Without understanding what the agent sees and what rewards mean, you cannot answer this question. The problem could be anywhere: the observations might have unexpected scales, the rewards might have the wrong sign, the success threshold might be different from what you assumed, or the goal structure might not match what the algorithm expects. You trained for 10 hours, but you never checked whether the environment's outputs make sense for the algorithm you chose.
+Understanding what the agent sees and what rewards mean is what makes this question answerable. The problem could be anywhere: the observations might have unexpected scales, the rewards might have the wrong sign, the success threshold might be different from what you assumed, or the goal structure might not match what the algorithm expects. Knowing the environment anatomy turns a 10-hour mystery into a 10-minute diagnostic.
 
-This is not hypothetical. In our experience, environment misunderstandings are the single most common source of wasted compute in robotics RL. Not bad hyperparameters, not wrong algorithms -- wrong assumptions about what the environment is actually doing.
+In our experience, environment misunderstandings are the most common source of wasted compute in robotics RL -- more than bad hyperparameters or wrong algorithms. The root cause is usually wrong assumptions about what the environment is actually doing.
 
-### Three questions you cannot answer without anatomy
+### Three questions that anatomy answers
 
-Here are three questions that come up in every training failure. Try to answer them without inspecting the environment:
+Here are three questions that come up in every training failure. Each one becomes straightforward once you have inspected the environment:
 
 **1. "Is the observation what the network expects?"** When you create a policy with SB3's `MultiInputPolicy`, it reads the observation space to determine its input structure. If the observation is a dictionary with three keys, the network builds three separate encoders and concatenates them. If the observation were somehow a flat vector (due to a wrapper or version mismatch), the network architecture would be completely different -- and wrong for the task. You need to know exactly what the observation contains to understand what the network receives.
 
 **2. "Is the reward on a reasonable scale?"** Dense Fetch rewards are negative distances -- typical values in the range -0.01 to -0.3 for FetchReach. If you tuned your learning rate assuming rewards on the order of -1 to 0 (as with sparse rewards), your value function targets would be off by an order of magnitude. Reward scale affects everything: the value function's target range, the entropy coefficient in SAC, and the advantage normalization in PPO.
 
-**3. "Can this environment support HER?"** Hindsight Experience Replay -- which we introduce in Chapter 5 -- requires two specific properties from the environment: an explicit `achieved_goal` in the observation, and a `compute_reward` function that accepts arbitrary goals. If either is missing, HER cannot work. You might spend days trying to make HER work on an environment that does not support it, never realizing the problem is structural, not algorithmic.
+**3. "Can this environment support HER?"** Hindsight Experience Replay -- which we introduce in Chapter 5 -- requires two specific properties from the environment: an explicit `achieved_goal` in the observation, and a `compute_reward` function that accepts arbitrary goals. If either is missing, HER cannot work. Checking these properties upfront saves you from a frustrating debugging session where the problem is structural, not algorithmic -- a distinction that is much easier to spot before training than after.
 
 ### What misunderstandings cost
 
@@ -49,7 +49,7 @@ The common thread: every one of these is preventable by inspecting the environme
 
 ### The anatomy as a debugging foundation
 
-There is a positive way to frame this too. When you understand what the environment returns, debugging becomes tractable. A flat reward curve is no longer a mystery -- you can check: does the policy's output fall within the action space bounds? Is the achieved goal moving in response to actions? Is the reward decreasing (getting closer to zero) even if success rate has not budged? Is `compute_reward` returning the same values as `env.step()`?
+When you understand what the environment returns, debugging becomes tractable. A flat reward curve is no longer a mystery -- you can check: does the policy's output fall within the action space bounds? Is the achieved goal moving in response to actions? Is the reward decreasing (getting closer to zero) even if success rate has not budged? Is `compute_reward` returning the same values as `env.step()`?
 
 Each of these diagnostic checks has a specific prerequisite:
 
@@ -58,7 +58,7 @@ Each of these diagnostic checks has a specific prerequisite:
 - **Checking reward trends** requires knowing the reward formula and its range -- dense rewards are negative distances, sparse rewards are 0 or -1 (section 2.5)
 - **Checking the `compute_reward` invariant** requires knowing the API signature and how it relates to `env.step()` (section 2.5)
 
-These are not abstract skills. In Chapter 3, when PPO training stalls, the first thing you will do is check whether the reward is moving. In Chapter 5, when HER does not improve performance, the first thing you will do is check whether `compute_reward` handles relabeled goals correctly. The anatomy you learn here is the diagnostic toolkit for every later chapter.
+Each of these will come up in practice. In Chapter 3, when PPO training stalls, the first thing to check is whether the reward is moving. In Chapter 5, when HER does not improve performance, the first thing to check is whether `compute_reward` handles relabeled goals correctly. The anatomy you build here is the diagnostic toolkit for every later chapter.
 
 The rest of this chapter gives you that knowledge, piece by piece. We start with what the agent sees (observations and goals), move to what it can do (actions), then to how performance is measured (rewards), and finally to the key insight that ties it all together (goal relabeling).
 
@@ -102,6 +102,8 @@ Fetch Workspace (approximate bounds in meters):
   y (sideways) spans roughly 0.5 to 1.0 (goal region)
 ```
 
+When you render this scene, the coordinates come to life. The tan tabletop sits at z=0.42 -- about kitchen-counter height in the simulation. The silver arm links rise from a fixed base at the table's edge, and the gripper hovers at roughly z=0.53, just above where you would rest your elbow. A small red sphere marks the target goal, floating somewhere in the air above the table. The workspace numbers above map directly onto this visual: x runs forward away from the base, y spans the table side to side, and z measures height above the floor.
+
 These numbers matter because they give you a sense of scale. The entire workspace is about 60 cm x 70 cm x 20 cm. The success threshold is 5 cm (0.05 m), which means the end-effector must be within about 8% of the workspace width to "succeed." Random flailing is unlikely to land within 5 cm of an arbitrary target -- which is why random baselines have near-zero success rates.
 
 **Dense vs. sparse rewards.** Each task comes in two reward variants. The environment ID encodes which: `FetchReachDense-v4` uses dense rewards (negative distance to goal), while `FetchReach-v4` uses sparse rewards (0 if goal reached, -1 otherwise). The observation structure and action space are identical between variants -- only the reward computation differs.
@@ -110,15 +112,15 @@ For this chapter, we work primarily with `FetchReachDense-v4` (dense Reach). It 
 
 ![Annotated screenshot of FetchReach-v4 showing the Fetch robot arm reaching toward a red target sphere, with the gripper (achieved_goal) and target (desired_goal) labeled](figures/fetch_reach_setup.png)
 
-Figure 2.1: FetchReach-v4 after `env.reset()`. The robot arm must move its end-effector (the gripper, labeled as achieved_goal) to the red target sphere (desired_goal). No objects are involved -- this is pure arm positioning. (Generated by `bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup --envs FetchReach-v4`.)
+Figure 2.1: FetchReach-v4 after `env.reset()`. The silver arm extends over a tan tabletop, its parallel-jaw gripper (achieved_goal) hovering in the air. A small red sphere marks the target (desired_goal). No objects are involved -- this is pure arm positioning. (Generated by `bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup --envs FetchReach-v4`.)
 
 ![Annotated screenshot of FetchPush-v4 showing the Fetch robot arm, a block on the table, and a red target marker indicating where the block should be pushed](figures/fetch_push_setup.png)
 
-Figure 2.2: FetchPush-v4 after `env.reset()`. A block sits on the table; the robot must push it to the target position. Here, `achieved_goal` is the block's position (not the gripper's), and `desired_goal` is where the block should end up. (Generated by `bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup --envs FetchPush-v4`.)
+Figure 2.2: FetchPush-v4 after `env.reset()`. A dark cube rests on the tan tabletop; a red marker on the surface shows where it needs to go. The robot must slide the block across the table to that target position. Here, `achieved_goal` is the block's position (not the gripper's), and `desired_goal` is where the block should end up. (Generated by `bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup --envs FetchPush-v4`.)
 
 ![Annotated screenshot of FetchPickAndPlace-v4 showing the Fetch robot arm, a block on the table, and a target marker floating in the air where the block must be placed](figures/fetch_pick_and_place_setup.png)
 
-Figure 2.3: FetchPickAndPlace-v4 after `env.reset()`. The target floats in the air above the table -- the robot must pick up the block and place it at the target position. This requires coordinating grasping, lifting, and releasing. (Generated by `bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup --envs FetchPickAndPlace-v4`.)
+Figure 2.3: FetchPickAndPlace-v4 after `env.reset()`. The red target sphere floats in the air above the table -- visibly higher than in Push, signaling that the robot must lift the block off the surface. The robot must pick up the block and place it at that suspended target position, coordinating grasping, lifting, and releasing. (Generated by `bash docker/dev.sh python scripts/capture_proposal_figures.py env-setup --envs FetchPickAndPlace-v4`.)
 
 **Episode structure.** Every episode lasts exactly 50 steps (the environment truncates at this limit). At each step, the agent observes the state, chooses an action, and receives a reward. The episode ends when the step limit is reached -- there is no early termination on success. This means that even a successful policy continues to act for the full 50 steps, which affects how you interpret returns: a policy that reaches the goal on step 10 still receives rewards for the remaining 40 steps. For dense rewards, those remaining steps contribute small negative values (the agent is near the goal). For sparse rewards, they contribute 0s (the agent has already succeeded).
 
@@ -364,7 +366,7 @@ Why do we check all three? Because each catches a different failure mode. If `ma
 
 ### Sparse reward: binary success signal
 
-As Figure 2.5 illustrates, the sparse reward is qualitatively different from the dense variant. Instead of a smooth gradient, the agent receives a binary signal. The sparse reward uses a distance threshold $\epsilon = 0.05$ meters (5 cm):
+As Figure 2.5 illustrates, the sparse reward works very differently from the dense variant. Instead of a smooth gradient, the agent receives a binary signal. The sparse reward uses a distance threshold $\epsilon = 0.05$ meters (5 cm):
 
 $$R_{\text{sparse}} = \begin{cases} 0 & \text{if } \|g_a - g_d\|_2 \leq \epsilon \\ -1 & \text{otherwise} \end{cases}$$
 
@@ -426,7 +428,7 @@ Both reward checks verify the same fundamental property -- the *critical invaria
 
 > The reward returned by `env.step()` must equal `env.unwrapped.compute_reward(achieved_goal, desired_goal, info)`.
 
-This is not paranoid caution. Different versions of gymnasium-robotics have had bugs affecting reward computation, and API changes have altered the signature of `compute_reward`. Running these checks ensures that your specific installation behaves correctly.
+We run these checks because different versions of gymnasium-robotics have had bugs affecting reward computation, and API changes have altered the signature of `compute_reward`. A quick verification ensures that your specific installation behaves correctly.
 
 More importantly, this invariant is the foundation of Hindsight Experience Replay. When HER relabels a trajectory with a different goal, it calls `compute_reward` with the new goal to get the relabeled reward. If `compute_reward` disagrees with `env.step()`, HER trains on incorrect labels. The policy would learn from corrupted data, and training could fail silently -- no error, no crash, just a policy that does not work.
 
@@ -625,7 +627,7 @@ Relabel reward checks: 500 checks, mismatches=0
 
 This bridging proof serves the same purpose as unit tests in software engineering: it confirms that your understanding (the manual computation) matches the implementation (the environment's API). When you run the production script in the next section and it reports "OK," you know exactly what "OK" means -- because you have done the same checks by hand.
 
-In later chapters, the bridging proof will be more dramatic: in Chapter 3, you will compare your from-scratch PPO loss computation against SB3's internal implementation. In Chapter 4, you will compare SAC update targets. Here, the bridge is simpler -- reward computation is just a distance calculation -- but the principle is the same: never trust a pipeline you have not verified by hand.
+In later chapters, the bridging proof will be more dramatic: in Chapter 3, you will compare your from-scratch PPO loss computation against SB3's internal implementation. In Chapter 4, you will compare SAC update targets. Here, the bridge is simpler -- reward computation is just a distance calculation -- but the principle is the same: we find it valuable to verify any pipeline by hand before relying on it.
 
 
 ## 2.9 Run It: The inspection pipeline

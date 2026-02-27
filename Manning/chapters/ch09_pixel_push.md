@@ -527,7 +527,7 @@ DrQ-v2 (Yarats et al., 2021) does the opposite:
 
 The key insight: the critic provides value-based supervision ("this state leads to high/low returns"), which is exactly what the encoder needs to learn useful spatial features. Even when success rate is near zero, the critic's TD error still provides signal: "this state where the gripper is near the puck has slightly higher Q than this state where the gripper is far away." That signal is weak, but it is directional -- it consistently pushes the encoder toward features that discriminate states by spatial proximity to goals. The actor's policy gradient, by contrast, is noisy and uninformative until the encoder already represents something useful -- a chicken-and-egg problem that the critic breaks.
 
-This is a subtle but decisive architectural choice. The code changes amount to about 15 lines: one `forward()` override, one `.detach()` call, and an optimizer rewiring. But in our experiments, it is the difference between 5% flat and a 95% hockey-stick.
+The implementation requires one `forward()` override, one `.detach()` call, and an optimizer rewiring.
 
 ### 9.5.3 CriticEncoderCritic and CriticEncoderActor
 
@@ -592,7 +592,7 @@ class DrQv2SACPolicy(SACPolicy):
 
 The identity-based filtering (`id(p) not in encoder_ids`) avoids fragility if parameter naming conventions change across SB3 versions -- we match on Python object identity, not parameter name strings. The target critic gets its own separate encoder that is updated via Polyak averaging ($\tau = 0.005$), as in standard SAC. This is important: the target encoder must NOT be the same object as the online encoder, or Polyak averaging would be a no-op.
 
-One subtle point deserves careful attention, because getting it wrong silently breaks visual RL:
+It is worth tracing the gradient flow carefully through this shared-encoder setup:
 
 1. **Forward pass:** Computing the actor loss requires calling the critic's Q-networks: $L_\text{actor} = \alpha \log \pi(a|s) - Q(s, a)$. The critic uses the shared encoder to compute features for $Q(s, a)$.
 
@@ -616,7 +616,7 @@ The net effect: the encoder learns from Bellman error (critic loss) only, not fr
 
 ## 9.6 Bridge: From scratch to SB3
 
-You have now built 13 components across five lab files: a pixel wrapper, a replay buffer, two CNN encoders, SpatialSoftmax, an SB3-compatible feature extractor, DrQ augmentation, two DrQ replay buffers, and three gradient routing overrides. These are not toy demonstrations -- they are what SB3 actually uses when you launch a pixel training run.
+You have now built 13 components across five lab files: a pixel wrapper, a replay buffer, two CNN encoders, SpatialSoftmax, an SB3-compatible feature extractor, DrQ augmentation, two DrQ replay buffers, and three gradient routing overrides. These are the same components SB3 uses when you launch a pixel training run.
 
 Verify the full pipeline with three commands:
 
@@ -747,9 +747,9 @@ The difference between Step 1 and Step 2 is 15 lines of gradient routing code. T
 
 ### Step 3: Reading the training curve (the patience tax)
 
-Before adding more components, we pause to understand what just happened. Step 2's curve is not a smooth ascent -- it has three distinct phases, each with a characteristic loss signature. Learning to read this signature is the difference between killing a run too early and knowing to wait. Section 9.8 unpacks the three-phase loss signature in detail.
+Before adding more components, we pause to understand what just happened. Step 2's curve is not a smooth ascent -- it has three distinct phases, each with a characteristic loss signature. Learning to read this signature helps you decide when to be patient and when to intervene. Section 9.8 unpacks the three-phase loss signature in detail.
 
-The headline: pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps. Pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. If you calibrate your stop rules from state-based experience ("kill the run if no progress at 2M steps"), you will kill every pixel run during Phase 1 and conclude "pixel RL doesn't work." This is a self-fulfilling prophecy.
+The headline: pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps. Pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. If your stop rules are calibrated from state-based experience ("kill the run if no progress at 2M steps"), it helps to recalibrate for pixel RL -- otherwise, runs get killed during Phase 1 before the hockey-stick has a chance to appear.
 
 **Principle:** The representation learning phase is an unavoidable overhead. Rising losses during the hockey-stick are good news, not bad. Always read loss curves alongside success rate.
 
@@ -793,7 +793,7 @@ Figure 9.3: The five-step investigation. Steps 0 and 1 fail because the architec
 
 ## 9.8 Reading the training curve
 
-The Step 2 training curve is not a smooth ascent. It has three distinct phases, each with a characteristic loss signature. Learning to read this signature is the difference between killing a run too early ("it's been flat for 2M steps, it must be broken") and knowing to wait ("the critic loss is declining, the representation is warming up -- give it another 2M steps").
+The Step 2 training curve is not a smooth ascent. It has three distinct phases, each with a characteristic loss signature. Learning to read this signature helps you tell the difference between a genuinely stuck run and one that just needs more time ("the critic loss is declining, the representation is warming up -- give it another 2M steps").
 
 ### The three-phase loss signature
 
@@ -833,7 +833,7 @@ The actor loss going negative in Phase 3 is a SAC-specific convergence signal. T
 
 Pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps. Pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. This overhead is the representation learning phase: the encoder must learn useful spatial features before the policy can exploit them. There is no shortcut.
 
-If you calibrate your stop rules from state-based RL ("kill the run if no progress at 2M steps"), you will kill every pixel run during Phase 1 and never see the hockey-stick. This is a self-fulfilling prophecy -- you conclude "pixel RL doesn't work" because you never gave it enough time.
+We find it helpful to recalibrate stop rules for pixel RL. State-based intuitions ("no progress at 2M means it is broken") can lead to terminating runs during Phase 1, before the hockey-stick has a chance to emerge.
 
 > **Tip:** For pixel RL with sparse rewards, set your initial training budget to at least 4x the state-based budget. Monitor critic loss: if it is declining during the flat phase, the representation is warming up. If critic loss is flat AND success is flat for 3M+ steps, something is likely wrong -- check the "What Can Go Wrong" table.
 

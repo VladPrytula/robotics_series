@@ -35,7 +35,7 @@ Here are the results from training SAC without HER on FetchPush-v4 for 2 million
 
 A 5% success rate means the puck lands near the goal roughly once every 20 episodes -- essentially by accident. The mean return of -47.50 out of a maximum of 0 tells you the agent is failing at nearly every timestep of every episode. And the final distance of 184.5mm (the puck ends up about 18cm from the goal on average) shows the agent has not learned to push at all.
 
-The three seeds agree almost perfectly -- this is not a matter of bad luck. This is a structural failure. Figure 5.1 makes this failure visible: a flat line at 5% for the entire training run.
+The three seeds agree almost perfectly, which tells us this is a structural limitation of SAC on sparse rewards, not a matter of unlucky initialization. Figure 5.1 makes this visible: a flat line at 5% for the entire training run.
 
 ![SAC without HER on FetchPush-v4: success rate stuck at approximately 5 percent over 2M training steps, with three seeds overlaid showing consistent failure. A dashed line at 99 percent shows the HER target for contrast.](figures/her_no_her_flatline.png)
 
@@ -82,9 +82,7 @@ Reach achieves 96% without HER because random exploration occasionally succeeds.
 
 Push is different. Success requires a coordinated sequence: approach the puck, make contact, push it in the right direction, and stop it at the goal. Even a generous estimate of the probability of achieving this by random exploration is vanishingly small. We call this the **effective horizon** -- the number of coordinated steps needed for success. For Reach, the effective horizon is roughly 2-5 steps (just move toward the target). For Push, it is 20-50 steps (approach + contact + push + stop). Random exploration at each step has perhaps a 10-20% chance of being correct, so the probability of 20 consecutive correct steps is $(0.15)^{20} \approx 10^{-16}$.
 
-In 2 million training steps with 8 parallel environments, the agent experiences roughly 40,000 episodes. Even at 40,000 episodes, the chance of a single random success on Push is negligible. Without accidental successes, there is no reward signal. Without reward signal, there is no learning.
-
-This is the wall we need HER to break through.
+In 2 million training steps with 8 parallel environments, the agent experiences roughly 40,000 episodes. Even at 40,000 episodes, the chance of a single random success on Push is negligible. The agent needs a way to extract learning signal from all these failed episodes -- and that is exactly what HER provides.
 
 
 ## 5.2 HOW: Hindsight Experience Replay
@@ -99,7 +97,7 @@ If the robot tried to push the puck to position $(0.3, 0.2)$ but the puck ended 
 
 This is Hindsight Experience Replay (Andrychowicz et al., 2017). The name captures the idea: in hindsight, we reinterpret what the agent was trying to do. We are not changing the physics or the actions -- we are changing the question. Instead of "did you reach the intended goal?", we ask "what goal did you reach?"
 
-The insight is surprisingly simple, but its consequences are profound. Every failed episode becomes a source of learning signal. The agent does not need to succeed by chance -- it learns from its failures by reinterpreting them as successes for different goals.
+The insight is simple, but it changes everything about how the agent learns. Every failed episode becomes a source of learning signal. The agent does not need to succeed by chance -- it learns from its failures by reinterpreting them as successes for different goals.
 
 ### Formal definition
 
@@ -158,7 +156,7 @@ This is the core quantitative insight of HER: it manufactures dense reward signa
 
 ### Why HER requires off-policy learning
 
-HER only works with off-policy algorithms like SAC and TD3. This is not an implementation detail -- it is a structural requirement. Here are the three conditions:
+HER only works with off-policy algorithms like SAC and TD3. The reason is structural, and understanding it helps clarify what HER actually does to the data. Here are the three conditions:
 
 > **Definition (Off-policy requirement for HER).**
 >
@@ -627,7 +625,7 @@ Fixed `ent_coef=0.05` bypasses this failure mode. It maintains a small but stead
 
 **`gamma=0.95` (not 0.99).** The discount factor controls how far into the future the agent "looks." The effective horizon is $T_{\text{eff}} = 1/(1-\gamma)$: at $\gamma=0.99$, that is 100 steps; at $\gamma=0.95$, it is 20 steps. A successful push takes roughly 15-25 coordinated steps. At $\gamma=0.95$, the effective horizon matches the task timescale. At $\gamma=0.99$, the agent tries to optimize over steps where it is just waiting after the push is complete -- adding noise without useful signal.
 
-There is also an interaction between these two parameters. SAC's entropy bonus accumulates over the effective horizon: roughly $\alpha \times T_{\text{eff}} \times \bar{\mathcal{H}}$ total entropy contribution. At $\alpha=0.05$ and $\gamma=0.95$ ($T_{\text{eff}}=20$), this contribution is moderate. At $\alpha=0.2$ and $\gamma=0.98$ ($T_{\text{eff}}=50$), it is 10x larger -- enough to overwhelm the sparse reward signal entirely. The worst hyperparameter combinations compound this way: high entropy plus long horizon equals no learning.
+There is also an interaction between these two parameters. SAC's entropy bonus accumulates over the effective horizon: roughly $\alpha \times T_{\text{eff}} \times \bar{\mathcal{H}}$ total entropy contribution. At $\alpha=0.05$ and $\gamma=0.95$ ($T_{\text{eff}}=20$), this contribution is moderate. At $\alpha=0.2$ and $\gamma=0.98$ ($T_{\text{eff}}=50$), it is 10x larger. In our sweep, we found that high entropy plus long horizon can overwhelm the sparse reward signal entirely.
 
 These values come from a 120-run hyperparameter sweep (24 configurations, 5 seeds each) on FetchPush-v4. The sweep confirmed that $\gamma$ is the dominant factor (+11 percentage points marginal effect) and that `ent_coef=0.05` outperforms higher values. The full sweep analysis is available in the tutorial repository; for the book, we present the winning configuration directly.
 
@@ -684,11 +682,11 @@ Reach is the validation task. We run it to confirm that HER does not hurt on an 
 
 The separation is marginal -- both methods succeed. HER achieves a slightly higher success rate (100% vs 96%) and lower variance. This is expected: FetchReach has a short effective horizon (2-5 steps), so random exploration occasionally succeeds even without relabeling. The 96% no-HER result means roughly 4 out of 100 evaluation episodes fail -- usually when the goal spawns at the edge of the workspace.
 
-The pedagogical point: Reach shows that HER does not hurt, but it fails to demonstrate HER's transformative effect. For that, we need Push.
+Reach confirms that HER does not hurt on an easy task. To see where HER becomes essential, we turn to Push.
 
 ### Results: FetchPush-v4 (sparse)
 
-This is the experiment that justifies the entire chapter. The results (3 seeds, 100 evaluation episodes each, 2M training steps):
+Push is where HER's effect becomes clear. The results (3 seeds, 100 evaluation episodes each, 2M training steps):
 
 | Metric | HER | No-HER | Delta |
 |--------|-----|--------|-------|
@@ -702,7 +700,7 @@ Figure 5.5 shows the learning curves for both environments, making the contrast 
 
 ![HER vs no-HER learning curves on FetchReach-v4 and FetchPush-v4: left panel shows both methods reaching near-100 percent success on Reach, right panel shows no-HER stuck at 5 percent while HER climbs to 99 percent on Push.](figures/her_vs_no_her_curves.png)
 
-Figure 5.5: HER vs no-HER learning curves. Left: FetchReach-v4 -- both methods succeed, with HER providing a marginal improvement (100% vs 96%). Right: FetchPush-v4 -- without HER, success stays flat at approximately 5%; with HER, it climbs to 99%. The shaded regions show +/- one standard deviation across 3 seeds. This is the definitive demonstration of HER's value: it transforms an impossible task into a solved one. (Generated by extracting `rollout/success_rate` from TensorBoard logs in `runs/sac{,_her}/Fetch{Reach,Push}-v4/seed{0,1,2}/`.)
+Figure 5.5: HER vs no-HER learning curves. Left: FetchReach-v4 -- both methods succeed, with HER providing a marginal improvement (100% vs 96%). Right: FetchPush-v4 -- without HER, success stays flat at approximately 5%; with HER, it climbs to 99%. The shaded regions show +/- one standard deviation across 3 seeds. The contrast on Push makes HER's value concrete: a task that SAC alone cannot solve becomes a 99% success rate with goal relabeling. (Generated by extracting `rollout/success_rate` from TensorBoard logs in `runs/sac{,_her}/Fetch{Reach,Push}-v4/seed{0,1,2}/`.)
 
 ### What the mean return tells you
 
@@ -792,7 +790,7 @@ Here are the failure modes we have encountered when training SAC+HER on sparse r
 
 This chapter introduced Hindsight Experience Replay and demonstrated its transformative effect on sparse-reward goal-conditioned tasks. Here is what you accomplished:
 
-- **The sparse reward problem.** You trained SAC without HER on FetchPush-v4 and observed a 5% success rate across 3 seeds -- a structural failure, not bad luck. Sparse rewards provide almost no gradient signal because the agent rarely succeeds by chance. The effective horizon for Push (20-50 coordinated steps) makes random success vanishingly improbable.
+- **The sparse reward problem.** You trained SAC without HER on FetchPush-v4 and observed a 5% success rate across 3 seeds -- consistent across seeds, pointing to a structural limitation rather than unlucky initialization. Sparse rewards provide almost no gradient signal because the agent rarely succeeds by chance. The effective horizon for Push (20-50 coordinated steps) makes random success vanishingly improbable.
 
 - **The HER insight.** A trajectory that fails to reach its intended goal is a successful demonstration of reaching wherever it ended up. By relabeling the desired goal with an achieved goal and recomputing the reward, HER turns failures into learning signal.
 

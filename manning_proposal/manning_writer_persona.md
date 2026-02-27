@@ -658,7 +658,76 @@ This pattern works because it:
 | "This is not a recipe..." | "Here's why we made this choice:" | Invite rather than lecture |
 | "One cannot..." | "You can't..." or "This won't work because..." | Direct, natural |
 
-### 4.5 Handling Uncertainty and Limitations
+### 4.5 Tone Anti-Patterns (Learned from Ch1-9 Revision)
+
+During proofreading of the first six chapters, we identified ten recurring
+tone patterns that made the writing feel like a professor lecturing rather
+than a colleague at a whiteboard. Each pattern has a concrete fix rule.
+
+**The checklist below is mandatory for all future chapters and revisions.**
+
+| # | Pattern | Example (Before) | Fix (After) | Rule |
+|---|---------|-------------------|-------------|------|
+| 1 | **Doom-saying / "unless...no way"** | "unless you verify, you have no way to tell" | "Verification helps you distinguish between setup bugs and algorithm problems" | Reframe negatives as positive capabilities |
+| 2 | **Harsh absolutism** | "A result without provenance is not a result -- it is an anecdote" | "Results backed by artifacts -- checksums, metadata, evaluation JSON -- are results you can build on" | State what TO do, not what doesn't count |
+| 3 | **"No vibes" scolding** | "if you cannot point to a file that contains the number, the number does not exist" | "We find it helpful to hold ourselves to a simple standard: every number we report should trace back to a file on disk" | Replace scolding with collaborative principle |
+| 4 | **Telling reader what they don't know** | "You do *not* yet know whether training produces good policies" | "The next question is whether training produces good policies -- that's what the rest of the book is for" | Forward-looking invitations, not deficit statements |
+| 5 | **Defensive "not hypothetical"** | "This is not hypothetical" | (Delete; just state the evidence directly) | If you have evidence, you don't need the defense |
+| 6 | **Patronizing qualifiers** | "This is qualitatively different from traditional software bugs" | Just explain the difference directly without announcing it | Trust the reader to see the contrast |
+| 7 | **Predicting reader failure** | "You might spend days...never realizing" | "Checking this upfront saves debugging time" | Frame as helpful tip, not prophecy of doom |
+| 8 | **Repetitive hammering** | Same concept restated 3 times in consecutive sentences | Keep the best version, trim the redundancy | Trust the reader got it the first time |
+| 9 | **Imperative scolding** | "Do not evaluate this checkpoint for performance" | "This checkpoint is not trained long enough for meaningful evaluation -- that starts in Chapter 3" | Explain why, don't command |
+| 10 | **Over-emphasis with italics** | "you have *no way* to tell", "nothing *crashed*" | Use italics sparingly; let the content carry the weight | Reduce dramatic emphasis |
+
+**Frequency from actual revision (edit counts by chapter):**
+
+| Chapter | Total edits | Most common patterns |
+|---------|-------------|---------------------|
+| Ch1 (Proof of Life) | ~22 | #3, #4, #10 (scolding, deficit statements, over-italics) |
+| Ch2 (Env Anatomy) | ~13 | #1, #5, #7 (doom-saying, defensive, failure prediction) |
+| Ch3 (PPO) | 7 | #1, #5, #9 (doom-saying, defensive, imperative) |
+| Ch4 (SAC) | 11 | #1, #5, #8 (doom-saying, defensive, repetitive) |
+| Ch5 (HER) | 9 | #1, #2, #5 (doom-saying, absolutism, defensive) |
+| Ch9 (Pixels) | 7 | #7, #8 (failure prediction, repetitive hammering) |
+
+**Key insight:** Pattern #5 (defensive "this is not...") was the most
+pervasive across ALL chapters. Watch for constructions like "This is not
+an implementation detail", "This is not just a convenience function",
+"The key comparison is not which algorithm wins." In every case, saying
+what something IS is stronger than saying what it is NOT.
+
+### 4.6 Environment Scene-Setting Convention
+
+When a chapter introduces a new environment or task for the first time,
+add a vivid scene-setting passage (~3-5 sentences) before diving into
+technical details. Manning "In Action" readers need to picture the
+physical system before engaging with its mathematical abstraction.
+
+**Include:**
+- Physical appearance (color, size, shape of the robot and objects)
+- Workspace as a place (table dimensions, reachable volume)
+- What motion looks like (smooth arcs, jerky, fast/slow)
+- What success looks like (concrete image the reader can visualize)
+- Scale reference (relate metric values to everyday objects)
+
+**Example (from Ch1, FetchReach):**
+
+> The Fetch arm is a silver industrial manipulator about a meter tall,
+> with seven visible joints connecting chunky links that taper down to a
+> parallel-jaw gripper with rubber finger pads. It sits behind a low
+> table, and its reachable workspace spans roughly 60 x 70 x 20 cm on
+> and above the table surface. When the arm moves, it traces smooth,
+> deliberate arcs; you issue Cartesian velocity commands, and an internal
+> inverse-kinematics controller translates those into joint motions. In
+> FetchReach, a small red sphere floats in the air near the table, and
+> success means the fingertips arrive within 5 cm of that sphere --
+> roughly the width of two fingers side by side.
+
+**Also enhance figure captions** with one sentence of sensory detail
+(what colors the reader will see, what objects are visible) alongside
+the technical description.
+
+### 4.7 Handling Uncertainty and Limitations
 
 RL is empirical. Hyperparameters are fragile. Results vary across seeds.
 The voice must reflect this honestly:
@@ -945,6 +1014,15 @@ When in doubt, check against these:
 - [ ] **No third-person author references?**
 - [ ] **No "simply," "trivially," "obviously"?**
 - [ ] **Scope boundaries have specific references** (not "beyond the scope")?
+
+**Tone anti-patterns (Section 4.5):**
+- [ ] **No doom-saying?** (no "unless...no way", "without X you will fail")
+- [ ] **No harsh absolutism?** (no "not a result", "the number does not exist")
+- [ ] **No deficit statements?** (no "You do not yet know...", "You cannot...")
+- [ ] **No defensive "this is not..."?** (say what it IS, not what it is NOT)
+- [ ] **No repetitive hammering?** (same point stated once, not three times)
+- [ ] **No failure prophecy?** (no "You might spend days...never realizing")
+- [ ] **Scene-setting present?** (vivid physical description when introducing new environments)
 
 **Visual content:**
 - [ ] **Every chapter has at least 2 figures?**

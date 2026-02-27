@@ -84,9 +84,9 @@ In theory, you can follow this gradient and improve. In practice, vanilla policy
 
 **Advantage estimates are noisy.** We do not know the true advantage -- we estimate it from sampled trajectories. With a finite batch, these estimates have high variance. Sometimes they are way off, and we make bad updates.
 
-**Big updates break everything.** Suppose we estimate that some action is great ($A \gg 0$) and crank up its probability. But if our estimate was wrong, we have committed to a bad action. Worse, the new policy visits different states, making our old advantage estimates invalid. The whole thing can spiral into catastrophic collapse.
+**Big updates can be destructive.** Suppose we estimate that some action is great ($A \gg 0$) and crank up its probability. But if our estimate was wrong, we have committed to a bad action. Worse, the new policy visits different states, making our old advantage estimates invalid. The whole thing can spiral into a collapse that the policy never recovers from.
 
-This is not hypothetical. Training curves that look promising can crash to zero and never recover. In our experience, unclipped policy gradient on Fetch tasks fails roughly half the time -- you get lucky with some seeds and unlucky with others. That is not a reliable foundation to build on.
+In our experience, unclipped policy gradient on Fetch tasks fails roughly half the time -- some seeds converge and others crash to zero and never recover. PPO's clipping mechanism was designed to make training reliably stable across seeds.
 
 ### PPO's solution: constrained updates
 
@@ -143,7 +143,7 @@ Why this helps PPO:
 
 - **Every action provides signal.** "You got 2cm closer" or "you drifted 1cm away" -- the algorithm always has gradient information.
 - **Exploration is not a bottleneck.** Even random actions produce useful data, because every distance tells you something.
-- **Learning problems are algorithm problems.** If PPO fails on dense Reach, the issue is in your implementation, not in insufficient exploration. Dense rewards decouple the exploration problem from the learning problem.
+- **Learning problems are algorithm problems.** Dense rewards decouple the exploration problem from the learning problem, so any training issues on dense Reach point to the implementation rather than insufficient exploration. This makes debugging much more straightforward.
 
 Compare to sparse rewards ($R = 0$ if success, $-1$ otherwise): most of your data carries no information about which direction to improve. We address that challenge in Chapter 5 with HER.
 
@@ -157,7 +157,7 @@ Before we train, it is worth asking three practical questions (from Chapter 1):
 
 3. **Is the solution stable?** With dense rewards and PPO's clipping, small hyperparameter changes should not break convergence. We verify this empirically: three seeds with the same hyperparameters all reach 100% success (see Reproduce It).
 
-These questions are more interesting for harder tasks. For dense Reach, the answers are reassuring -- which is precisely the point. We start here because failure would be unambiguous evidence of a bug.
+These questions become more interesting for harder tasks. For dense Reach, the answers are reassuring -- which is precisely the point. We start here so that success validates the full pipeline, and any issues can be traced directly to implementation bugs rather than task difficulty.
 
 
 ## 3.2 HOW: The actor-critic architecture and training loop
@@ -199,7 +199,7 @@ repeat:
 
 **Steps 3-4: Update networks.** Unlike supervised learning, we do multiple passes over the same data: `n_epochs = 10` is typical for PPO. Each pass uses minibatches of size `batch_size`. This reuses our expensive-to-collect trajectory data while the clipping prevents us from overfitting to it.
 
-**Step 5: Discard and repeat.** This is where PPO's fundamental limitation appears.
+**Step 5: Discard and repeat.** This step reveals PPO's key tradeoff.
 
 > **Definition (on-policy learning).** An algorithm is **on-policy** if it can only learn from data collected by the current policy $\pi_\theta$. Every time you update $\theta$, all transitions collected with the old parameters become invalid for computing unbiased gradients. You must throw away the data and collect fresh transitions with the new policy.
 
@@ -221,7 +221,7 @@ Why does this matter for what comes next? The on-policy constraint is the main r
 | `gamma` | 0.99 | Discount factor |
 | `ent_coef` | 0.0 | Entropy bonus (exploration incentive) |
 
-For FetchReachDense-v4, SB3 defaults work well. We recommend against tuning hyperparameters until you have verified that the baseline works with these values.
+For FetchReachDense-v4, SB3 defaults work well. We find it helpful to verify the baseline with these default values first, before experimenting with hyperparameter changes.
 
 ### Compact equation summary
 
@@ -644,7 +644,7 @@ When you train with SB3 and open TensorBoard, the logged metrics correspond dire
 | `train/policy_gradient_loss` | `compute_ppo_loss` -> `info["policy_loss"]` | Clipped surrogate objective |
 | `rollout/ep_rew_mean` | (environment) | Mean episode return |
 
-This mapping is important. When you see `train/clip_fraction = 0.15` in TensorBoard, you know what that means -- 15% of the probability ratios exceeded the $[0.8, 1.2]$ clip range, and those updates were constrained. That number came from the same calculation as the `clip_fraction` in our `compute_ppo_loss`. You are not reading opaque metrics from a black box; you are reading quantities you have implemented and verified.
+This mapping is worth internalizing. When you see `train/clip_fraction = 0.15` in TensorBoard, you know what that means -- 15% of the probability ratios exceeded the $[0.8, 1.2]$ clip range, and those updates were constrained. That number came from the same calculation as the `clip_fraction` in our `compute_ppo_loss`. Having built these components yourself, you can read every TensorBoard metric as a quantity you understand from the inside.
 
 
 ## 3.10 Run It: Training PPO on FetchReachDense-v4
