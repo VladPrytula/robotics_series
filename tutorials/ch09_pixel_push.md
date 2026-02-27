@@ -663,9 +663,55 @@ been stable above 90% for 500K+ steps and critic\_loss is declining (Phase 3),
 the agent has converged. In our experience, 3.5-4M steps is sufficient. Running
 past convergence wastes compute that is better spent on additional seeds.
 
-**Memory:** A 500K-transition pixel buffer uses ~40 GB RAM. Ensure the machine
-has at least 60 GB free before launching. If OOM occurs, reduce to
-`--buffer-size 300000` (~24 GB).
+#### Memory: The Pixel Buffer Is the Binding Constraint
+
+For pixel RL, RAM -- not GPU speed -- is usually the limiting resource. The
+replay buffer stores every transition's `obs` and `next_obs` as pixel arrays,
+and these dominate memory.
+
+**Per-transition breakdown.** Each transition stores two observations (obs and
+next_obs), each containing a 4-frame stack of 84x84 RGB images:
+
+```
+Per observation:  12 x 84 x 84 x 1 byte (uint8) = 84,672 bytes (~83 KB)
+Per transition:   2 x 84,672 = 169,344 bytes (~165 KB)
+                  + proprioception, goals, actions, rewards (~200 bytes)
+                  Total: ~170 KB per transition
+```
+
+For comparison, a state-based transition (25D float64 obs + goals + actions)
+uses ~200 bytes. **Pixel transitions are ~850x larger.**
+
+**Buffer size to RAM table:**
+
+| `--buffer-size` | Buffer RAM | Total with model + envs | Recommended for |
+|----------------:|----------:|------------------------:|-----------------|
+| 500,000 | ~40 GB | ~45-50 GB | 60+ GB machines (DGX) |
+| 300,000 | ~24 GB | ~28-32 GB | 32 GB machines |
+| 200,000 | ~16 GB | ~20-22 GB | 24 GB machines |
+| 100,000 | ~8 GB | ~12-14 GB | 16 GB machines |
+
+**Per-tier practical advice:**
+
+- **60+ GB RAM (DGX, large workstations):** Use the recommended `--buffer-size 500000`. This retains enough early exploration for the hockey-stick to emerge on schedule (~2.2M steps).
+
+- **32 GB RAM:** Use `--buffer-size 200000`. Expect the hockey-stick onset to shift later (perhaps ~3M steps instead of ~2.2M) because the buffer forgets early exploration sooner. Final success rate should still reach 90%+.
+
+- **16 GB RAM:** Use `--buffer-size 100000`. The agent may plateau at 70-85% and need 5-6M steps to reach 90%+. The smaller buffer means the agent "forgets" early diverse experience faster, weakening the HER relabeling signal.
+
+- **8 GB RAM:** Experimental. Consider running the state-only variant (`--full-state`) first to verify the pipeline, then attempt pixels with `--buffer-size 50000`. Success is not guaranteed -- the buffer may be too small for the hockey-stick to emerge.
+
+**Why buffer size matters for HER.** HER relabels transitions using goals from
+*future* transitions in the same episode. When the buffer is small relative to
+training length, old episodes are overwritten before their relabeled variants
+propagate value through the Bellman equation. This delays or weakens the
+hockey-stick phase transition: the positive feedback loop (more successes ->
+better value estimates -> more successes) needs a critical mass of diverse
+experience in the buffer to ignite.
+
+**Note:** SB3's `DictReplayBuffer` does not support `optimize_memory_usage`
+(which halves memory by storing `next_obs` implicitly). The RAM figures above
+are what you will actually see.
 
 ### 9.14 Resume from Checkpoint
 

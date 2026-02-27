@@ -25,7 +25,7 @@ You have completed Chapter 0. You now have:
 - MuJoCo physics simulation running headlessly
 - A verified training loop that produces checkpoints
 
-You are running on a DGX cluster, a Linux workstation, or a Mac. Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
+You are running on a DGX cluster, a Linux workstation, or a Mac. If you are on a Mac or a CPU-only machine, that is fine for this chapter and the next several (through Chapter 8). MuJoCo physics is CPU-bound; GPU utilization sits at ~5% for state-based RL because 256x256 MLPs processing 25D observation vectors complete forward and backward passes in microseconds regardless of device. The GPU becomes important at Chapter 9 (pixel observations) and essential at Appendix E (Isaac Lab GPU physics). Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
 
 **How to Execute Commands.** All commands in this curriculum run through the Docker wrapper:
 

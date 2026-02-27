@@ -36,7 +36,9 @@ This leads to **SAC + HER** as the core method. We're not claiming it's the only
 
 ## Who This Is For
 
-You should already understand MDPs, policy gradients, and basic PyTorch. You should have access to a GPU (DGX preferred, but any CUDA-capable machine works). You should be comfortable with Docker and command-line workflows.
+You should already understand MDPs, policy gradients, and basic PyTorch. You should be comfortable with Docker and command-line workflows.
+
+**Compute requirements vary by chapter.** Chapters 0-8 are state-based RL (MuJoCo + small MLPs) and run well on any machine, including Mac laptops -- GPU utilization is ~5% because MuJoCo physics is the bottleneck. Chapter 9 (pixel-based RL) needs RAM more than GPU power: 40 GB for the recommended 500K buffer, though 16 GB works with a smaller buffer at the cost of slower convergence. Appendix E (Isaac Lab) requires Linux with an NVIDIA GPU for GPU-accelerated physics. Most of this curriculum works without a GPU.
 
 **Time investment:** 10 weeks, 5-10 hours per week. The curriculum is dense. Rushing defeats the purpose.
 

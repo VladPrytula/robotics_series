@@ -47,7 +47,7 @@ Within the general reproducibility framework, this chapter addresses a specific 
 
 **Problem (Environment Verification).** *Construct and verify a containerized environment $S$ such that: (1) GPU computation is available within $S$; (2) MuJoCo physics simulation runs correctly within $S$; (3) headless rendering produces valid images within $S$; (4) a complete training loop executes without error within $S$.*
 
-Each condition is necessary for the reinforcement learning experiments that follow. Without GPU access, training is prohibitively slow. Without MuJoCo, we cannot simulate the Fetch robot. Without rendering, we cannot generate evaluation videos. Without a working training loop, we cannot learn policies.
+Each condition is necessary for the reinforcement learning experiments that follow. GPU access accelerates training for pixel-based chapters (Ch9) and is required for GPU-physics chapters (Appendix E); for state-based chapters (Ch1-8), CPU is the actual bottleneck and GPU adds little. Without MuJoCo, we cannot simulate the Fetch robot. Without rendering, we cannot generate evaluation videos. Without a working training loop, we cannot learn policies.
 
 We recommend completing all verification steps before proceeding. In our experience, skipping this chapter and proceeding directly to training eventually surfaces as rendering errors, CUDA misconfigurations, or import failures -- and debugging those in context takes longer than verifying the environment systematically from the start.
 
@@ -75,7 +75,17 @@ Verification is not bureaucracy. It is the empirical side of our well-posedness 
 
 **What we verify.** The container can access the host GPU via the NVIDIA runtime.
 
-**Why this matters.** Reinforcement learning with neural network function approximators is computationally intensive. A single training run may require $10^6$-$10^7$ gradient updates, each involving forward and backward passes through networks with $10^5$-$10^6$ parameters. On CPU, this takes days or weeks. On GPU, it takes hours.
+**Why this matters.** We verify GPU access early because later chapters need it -- but not all chapters, and not for the same reasons. The compute requirements vary significantly across the curriculum:
+
+| Chapters | Workload | CPU viable? | GPU needed? | RAM constraint |
+|----------|----------|-------------|-------------|----------------|
+| 0-8 | State-based RL (MuJoCo + 256x256 MLPs on 25D vectors) | Yes (~60-100 fps Mac, ~600 fps DGX) | No -- GPU at ~5% utilization | 8 GB plenty |
+| 9 | Pixel-based RL (CNN on 84x84x12 images) | Slow but possible | Helpful (2-3x speedup) | **40-50 GB** for 500K buffer |
+| App. E | Isaac Lab (GPU-parallel PhysX, 64-128 envs) | No | **Required** (GPU physics) | 12+ GB VRAM |
+
+For Chapters 0-8, the bottleneck is MuJoCo physics simulation, which runs on CPU regardless of platform. A 256x256 MLP processing a 25D vector completes forward and backward passes in microseconds -- the GPU has almost nothing to do. Training runs that take minutes on DGX take tens of minutes on a Mac laptop, not days.
+
+The GPU becomes important at Chapter 9, where a CNN processes 84x84 pixel images every step, and essential at Appendix E, where Isaac Lab runs physics itself on the GPU. We verify GPU access now so that readers on GPU-equipped machines catch driver or toolkit issues early, before they matter.
 
 But GPU access inside a container is not automatic. The container runs in an isolated namespace; it cannot see host devices unless explicitly granted access. The `--gpus all` flag instructs Docker to use the NVIDIA Container Toolkit, which mounts the GPU device files and driver libraries into the container.
 
@@ -85,7 +95,7 @@ But GPU access inside a container is not automatic. The container runs in an iso
 3. Docker was not invoked with `--gpus all`
 4. The GPU is in use by another process with exclusive access
 
-Training will still *run* on CPU, but it will be 10-100x slower, making iterative experimentation impractical.
+Training will still *run* on CPU -- and for Chapters 0-8, CPU is perfectly adequate. For Chapter 9, training will be 2-3x slower but workable. Appendix E (Isaac Lab) has no CPU path and requires an NVIDIA GPU.
 
 **The test.** The script checks `torch.cuda.is_available()` inside the container. If CUDA is available, it reports the device name and count. If not, it prints a warning but does not halt the test sequence -- training can still proceed on CPU (this is the expected path on Mac). On a DGX system where CUDA *should* be available, treat a "CUDA not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
 
@@ -156,7 +166,7 @@ The four tests form a dependency chain:
 GPU Access -> MuJoCo Functionality -> Headless Rendering -> Training Loop
 ```
 
-Each test assumes the previous tests pass. It helps to diagnose in order -- rendering issues are harder to debug if MuJoCo itself cannot initialize, and training performance is hard to evaluate without GPU access.
+Each test assumes the previous tests pass. It helps to diagnose in order -- rendering issues are harder to debug if MuJoCo itself cannot initialize, and training performance is hard to evaluate without verifying the compute environment.
 
 **Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The `all` subcommand respects this ordering and stops at the first failure. The one exception is `gpu-check`, which always exits with status 0 even when CUDA is unavailable, so it warns but does not block subsequent tests. This is intentional: CPU-only operation is valid on Mac and other non-NVIDIA platforms.
 
@@ -295,7 +305,7 @@ The platform also supports development on Apple Silicon Macs (M4, M3, M2, M1). T
 
 Apple's Metal Performance Shaders (MPS) backend for PyTorch exists but has edge cases with certain operations. For maximum compatibility and to avoid subtle bugs, we use CPU on Mac. This is perfectly adequate for development and debugging--the physics simulation in MuJoCo is CPU-bound anyway.
 
-**Remark (On Performance).** *The 6-10x slower throughput on Mac is expected. The bottleneck is MuJoCo physics simulation, which runs on CPU regardless of platform. On DGX, the GPU handles neural network operations in microseconds, so the CPU is the bottleneck. On Mac, both physics and neural networks run on CPU, compounding the slowdown. This is acceptable for development; use DGX for serious training runs.*
+**Remark (On Performance).** *The 6-10x throughput gap between Mac and DGX is mostly about faster CPUs and more cores on DGX, not GPU acceleration. For state-based RL (Ch1-8), both platforms are CPU-bound -- MuJoCo physics dominates, and the 256x256 MLP completes in microseconds regardless of device. Mac is fully viable for Chapters 1-8; training runs that take seconds on DGX take tens of minutes on Mac, which is fine for learning and iteration. For pixel-based RL (Ch9), the gap widens because CNNs benefit from GPU parallelism -- but RAM, not GPU speed, is usually the binding constraint there (see Ch9 for buffer-size guidance).*
 
 #### Usage on Mac
 
@@ -331,13 +341,17 @@ All tests should pass on both platforms, and all artifacts should be generated c
 
 #### Known Limitations
 
-1. **Performance**: CPU training is ~10-20x slower than CUDA. Mac is suitable for development, debugging, and small experiments. For serious training (>100k timesteps), use DGX.
+1. **State-based RL (Ch1-8)**: Mac is fully viable. Training runs complete in tens of minutes rather than seconds, which is fine for learning and iteration. No GPU needed.
 
-2. **Rendering quality**: OSMesa (software rendering) produces identical images to EGL but is slower. This matters only for video generation, not for training.
+2. **Pixel-based RL (Ch9)**: RAM is the binding constraint, not GPU speed. A 500K-transition pixel buffer uses ~40 GB; Mac laptops with 16-32 GB should reduce `--buffer-size` (see Ch9 for guidance). Training is 2-3x slower without a GPU but workable.
 
-3. **Docker Desktop memory**: You may need to increase Docker Desktop's memory allocation (Settings -> Resources -> Memory) to 8GB+ for large batch sizes or long training runs.
+3. **Isaac Lab (Appendix E)**: Not available on Mac. Isaac Lab requires Linux + NVIDIA GPU for GPU-accelerated physics (PhysX). There is no CPU fallback.
 
-4. **No MPS (Apple GPU) support**: MPS (Metal Performance Shaders) cannot work in Docker containers because Docker runs Linux, not macOS. MPS is a macOS-only API that requires direct access to Apple's Metal framework. Inside a Linux container, `torch.backends.mps.is_available()` always returns False, regardless of the host being an M4 Mac.
+4. **Rendering quality**: OSMesa (software rendering) produces identical images to EGL but is slower. This matters only for video generation, not for training.
+
+5. **Docker Desktop memory**: You may need to increase Docker Desktop's memory allocation (Settings -> Resources -> Memory) to 8GB+ for large batch sizes or long training runs.
+
+6. **No MPS (Apple GPU) support**: MPS (Metal Performance Shaders) cannot work in Docker containers because Docker runs Linux, not macOS. MPS is a macOS-only API that requires direct access to Apple's Metal framework. Inside a Linux container, `torch.backends.mps.is_available()` always returns False, regardless of the host being an M4 Mac.
 
 #### Docker Desktop Configuration for Mac
 
