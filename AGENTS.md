@@ -89,6 +89,34 @@ bash docker/dev.sh python train.py --algo sac --her --env FetchReach-v4 --seed 0
 bash docker/dev.sh python eval.py --ckpt checkpoints/...zip --env FetchReachDense-v4 --n-episodes 100 --seeds 0-99 --deterministic --json-out results/metrics.json
 ```
 
+### Isaac Lab (Appendix E)
+
+Isaac Lab is a separate GPU-only track for Appendix E (peg-in-hole insertion).
+Use the dedicated image and entrypoint (`docker/Dockerfile.isaac`,
+`docker/dev-isaac.sh`) rather than `docker/dev.sh`.
+
+```bash
+# Build Isaac image (thin layer on NGC Isaac Lab 2.3.2)
+bash docker/build.sh isaac
+
+# Interactive Isaac shell (Linux + NVIDIA only)
+bash docker/dev-isaac.sh
+
+# End-to-end Isaac proof of life (GPU + env step + render + versions JSON)
+bash docker/dev-isaac.sh python3 scripts/isaac_proof_of_life.py all --headless
+
+# Subchecks
+bash docker/dev-isaac.sh python3 scripts/isaac_proof_of_life.py gpu-check
+bash docker/dev-isaac.sh python3 scripts/isaac_proof_of_life.py env-step --headless
+bash docker/dev-isaac.sh python3 scripts/isaac_proof_of_life.py render --headless
+```
+
+Isaac-specific behavior:
+- Linux + NVIDIA required; `docker/dev-isaac.sh` fails fast on Mac/no-GPU.
+- No project venv inside Isaac container (uses Isaac Kit Python).
+- Runs as root (`OMNI_KIT_ALLOW_ROOT=1`) and mounts persistent named cache volumes.
+- Mounts repo at `/workspace/project` (not `/workspace`) to avoid shadowing Isaac Lab internals.
+
 ### Non-interactive Docker execution (scripts/CI)
 
 `docker/dev.sh` uses `docker run -it` and will fail without a TTY. Use this pattern instead:
@@ -129,7 +157,10 @@ Key environment variables needed:
 - `docs/pdfs/`: Generated PDFs (do not edit by hand; build from markdown).
 - `Manning/`: Manning book draft (pandoc build via `scripts/build_book.py`). Separate product from tutorials; follow `Manning/CLAUDE.md`.
 - `manning_proposal/`: Book proposal + chapter production protocol + role prompt files (`manning_proposal/agents/`).
+- `scripts/isaac_proof_of_life.py`: Isaac Lab proof-of-life CLI (`gpu-check`, `env-step`, `render`, `all`) for Appendix E.
+- `docker/Dockerfile.isaac` + `docker/dev-isaac.sh`: Isaac Lab container build and runtime wrapper.
 - `syllabus.md`: 10-week executable curriculum with "done when" criteria.
+- `tasks/`: Working documents -- plans, research notes, and lessons learned. Use as active session context (especially `tasks/lessons.md`).
 
 ## Key Conventions
 
@@ -172,6 +203,12 @@ All Python commands run through Docker via `docker/dev.sh`:
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py all
 bash docker/dev.sh python train.py --algo sac --env FetchReach-v4 --total-steps 1000000
 ```
+
+This wrapper:
+- Starts a GPU-enabled container (`--gpus all`)
+- Creates/activates a venv with dependencies from `requirements.txt`
+- Sets rendering backend (`MUJOCO_GL=egl`)
+- Preserves host UID/GID (avoids root-owned files)
 
 ### Chapter scripts pattern
 
@@ -225,7 +262,10 @@ tmux attach -t rl
 
 ### GPU utilization note
 
-Low GPU utilization (~5-10%) during RL training is **expected**. The bottleneck is CPU-bound MuJoCo simulation, not GPU-bound neural network operations. With small batch sizes (256) and simple MLPs, GPU operations complete in microseconds while the CPU runs physics. Typical throughput: ~600 fps. This is not a problem to solve--it's the nature of RL with physics simulators.
+GPU utilization depends on the observation modality:
+
+- **State-based RL (Ch1-8):** Low GPU utilization (~5-10%) is expected. Small MLPs (256x256) on 25D vectors complete forward+backward passes in microseconds. The bottleneck is CPU-bound MuJoCo simulation. Typical throughput: ~600 fps.
+- **Pixel-based RL (Ch9+):** GPU utilization of 40-60% is normal. ManipulationCNN processes batches of 84x84x12 images (4-frame stack) through conv layers for both obs and next_obs per training step. The CPU (MuJoCo physics for n_envs) and GPU (CNN forward/backward) form a balanced pipeline. Typical throughput: 30-50 fps with n_envs=4.
 
 ## Prerequisite and Concept Architecture
 
@@ -326,6 +366,32 @@ Ch5: dense-first debugging, multi-phase control, goal stratification,
      noise injection (observation noise, action noise), degradation,
      curriculum learning, difficulty schedule (linear, success-gated),
      NoisyEvalWrapper, CurriculumGoalWrapper
+
+Ch6: action interface, action scaling, low-pass filter (EMA),
+     smoothness (mean squared action difference), time-to-success (TTS),
+     peak action, path length, action energy, controller metric bundle,
+     proportional controller, planning-vs-control decomposition,
+     ActionScalingWrapper, LowPassFilterWrapper, run_controller_eval
+
+Ch7: degradation curve, critical sigma (sigma*), degradation slope,
+     robustness AUC, brittleness fingerprint, noise injection
+     (eval-time wrapper), observation noise model, action noise model,
+     cross-seed aggregation, NoiseSweepResult, run_noise_sweep,
+     aggregate_across_seeds, compute_degradation_summary,
+     noise-augmented training, clean-vs-robust tradeoff,
+     experiment card (formalized .meta.json pattern)
+
+Ch9: pixel observation wrapper, goal mode (none/desired/both),
+     render_and_resize, NatureCNN encoder (Mnih et al. 2015),
+     sample-efficiency ratio (rho), DrQ (random shift augmentation),
+     replicate padding, DrQ replay buffer, uint8 pixel storage,
+     native resolution rendering, SubprocVecEnv (parallel envs),
+     replay ratio / gradient steps, deceptively dense reward,
+     HerDrQDictReplayBuffer, visual HER synthesis,
+     information asymmetry (policy sees pixels, HER sees vectors),
+     value wavefront (Bellman diffusion through goal space),
+     hockey-stick learning curve (geometric phase transition + positive feedback),
+     critical competence radius, effective horizon k* (Laidlaw et al. 2024)
 ```
 
 ### Canonical References
@@ -350,10 +416,18 @@ references do not have to mentally translate.
 | TD3 (original paper) | Fujimoto et al. (2018) | ICML 2018 |
 | HER (original paper) | Andrychowicz et al. (2017) | arXiv:1707.01495 |
 | Reproducibility in RL | Henderson et al. (2018) | AAAI 2018 |
+| DrQ (data augmentation) | Kostrikov et al. (2020) | arXiv:2004.13649, Section 3.1 |
+| NatureCNN | Mnih et al. (2015) | Nature 518(7540), 529-533 |
+| Visual goal-conditioned RL | Nair et al. (2018) | NeurIPS 2018, arXiv:1807.04742 |
 | Fetch environments | Plappert et al. (2018) | arXiv:1802.09464 |
 | Neural network basics | Goodfellow et al. (2016) | Ch6-8 |
 | Information theory | Cover & Thomas (2006) | Ch2 (entropy) |
 | RL algorithms survey | Spinning Up in Deep RL | spinningup.openai.com |
+| Effective horizon | Laidlaw et al. (2024) | ICLR 2024 Spotlight, arXiv:2312.08369 |
+| Quasimetric Q-functions | Wang & Isola (2022) | ICLR 2022, arXiv:2206.15478 |
+| Difficulty spectrum dynamics | Huang et al. (2025) | arXiv:2602.14872, Section 4 |
+| Contrastive goal-conditioned RL | Eysenbach et al. (2022) | NeurIPS 2022, arXiv:2206.07568 |
+| HER as implicit curriculum | Ren et al. (2019) | NeurIPS 2019, arXiv:1906.04279 |
 
 **Notation convention:** We follow Sutton & Barto (2018) notation throughout:
 - Policy: $\pi(a|s)$ or $\pi_\theta(a|s)$ when parameterized
@@ -604,66 +678,134 @@ math (`$$...$$`) on its own line.
 
 The Manning book draft is produced from tutorials using an explicit protocol:
 - Follow `manning_proposal/chapter_production_protocol.md` for every chapter
-- Use the role prompts in `manning_proposal/agents/` (Scaffolder -> Lab Engineer + Writer -> Reviewer -> Publisher)
+- Use the role prompts in `manning_proposal/agents/`:
+  Scaffolder -> Lab Engineer + Writer -> Reviewer -> Revisor (optional) -> Publisher
 - Keep book chapters in `Manning/chapters/` and scaffolds in `Manning/scaffolds/`
 - Book voice and structure follow `manning_proposal/manning_writer_persona.md` (it overrides tutorial-era voice guidance)
 - Do not modify `tutorials/` as part of book writing; the scaffold is the handoff artifact
 - Book markdown must be pandoc-friendly: avoid MkDocs-specific syntax (`!!!`, `--8<--`, `<details>`); use plain Markdown
 - Validate/build via `python scripts/build_book.py` (Publisher phase runs pandoc/LaTeX; other phases are markdown-only)
 
+**Manning directory map:**
+- `Manning/chapters/`: chapter drafts (`chNN_<topic>.md`)
+- `Manning/scaffolds/`: scaffold contracts (`chNN_scaffold.md`)
+- `Manning/reviews/`: review outputs (`chNN_review.md`)
+- `Manning/revisions/`: targeted revision logs (`chNN_revision_NNN.md`)
+- `Manning/output/`: generated PDF/DOCX artifacts (do not edit by hand)
+- `Manning/reference.docx`: optional DOCX style template
+
+**Canonical workflow:**
+1. Scaffolder -> `Manning/scaffolds/chNN_scaffold.md`
+2. Lab Engineer + Writer (parallel when possible)
+3. Reviewer -> `Manning/reviews/chNN_review.md`
+4. Revisor (optional, targeted fixes) -> chapter/scaffold updates + revision log
+5. Publisher -> `Manning/output/chNN_<topic>.pdf/.docx` + `build_report.json`
+
+**Writer span protocol:** For long chapters, follow the Writer Span Mode in
+`manning_proposal/agents/writer.md` and the corresponding section in
+`manning_proposal/chapter_production_protocol.md`.
+
+**Pipeline design note:** Phases 1-3.5 are markdown-only. Publisher is the
+only phase that runs pandoc/LaTeX toolchain, and therefore catches build-only
+breakages (math/render/image/reference issues) that reviewers may miss.
+
+**Build commands:**
+
+```bash
+# Build all chapters (PDF + DOCX)
+python scripts/build_book.py
+
+# Build one chapter
+python scripts/build_book.py --chapters 1
+
+# Validate only (no build)
+python scripts/build_book.py --validate-only --verbose
+
+# Combined manuscript
+python scripts/build_book.py --combined
+```
+
+**Build dependencies (Publisher):**
+- Ubuntu/Debian: `pandoc texlive-xetex texlive-latex-extra texlive-fonts-recommended fonts-dejavu fonts-dejavu-extra`
+- Optional GIF conversion: `imagemagick`
+
+**DOCX template bootstrap:**
+
+```bash
+python3 scripts/build_book.py --init-reference-doc
+```
+
+If Manning provides a house template, place it at `Manning/reference.docx`.
+
+**Codex orchestration note:** The prompts in `manning_proposal/agents/*.md`
+are model-agnostic and can be used directly with Codex subagents. Separate
+Codex-specific prompt files are optional, not required.
+
 ## Workflow Orchestration
 
 ### 1. Plan Mode Default
 
-- Enter plan mode for any non-trivial task (3+ steps or architectural decisions)
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
 - This includes: new chapter scripts, tutorial rewrites, training pipeline changes, HER/algorithm config changes
-- If an experiment or implementation goes sideways, stop and re-plan immediately
-- Plan verification steps too (how to validate a training run before launching it)
-- Write detailed specs upfront: environments, seeds, metrics, success criteria
+- If an experiment or implementation goes sideways, STOP and re-plan immediately -- don't keep pushing on a broken approach
+- Use plan mode for verification steps too, not just building (e.g., plan how to validate a training run before launching it)
+- Write detailed specs upfront: which environments, seeds, metrics, success criteria
 
 ### 2. Subagent Strategy
 
-- Use subagents to keep the main context clean
-- Offload secondary research, codebase exploration, and parallel analysis
-- One task per subagent
+- Use subagents liberally to keep main context window clean
+- Offload secondary research (e.g., "what SB3 hyperparameters does HER support?"), codebase exploration, and parallel analysis to subagents
+- For complex problems (debugging training divergence, multi-file refactors), throw more compute at it via subagents
+- One task per subagent for focused execution
+- Use Explore subagents for codebase questions; use Plan subagents for architecture decisions
 
 ### 3. Self-Improvement Loop
 
-- After any correction from the user: record the pattern, root cause, and prevention rule
-- If `tasks/lessons.md` exists, update it; otherwise keep a short "lessons" note in the repo-local workflow docs
+- After ANY correction from the user: update `tasks/lessons.md` with the pattern, root cause, and fix
+- Write rules that prevent the same mistake (e.g., "always check reward type before choosing algorithm")
+- Ruthlessly iterate on these lessons until mistake rate drops
+- Review `tasks/lessons.md` at session start for relevant project context
+- Current lesson themes include: sensor separation (pixels + proprio), manipulation-safe encoders (not NatureCNN), TensorBoard log hygiene, visual HER framing, gradient-scale vs feature-quality diagnostics, replay memory sizing for pixels, and hockey-stick regime interpretation.
 
 ### 4. Verification Before Done
 
 - Never mark a task complete without proving it works
 - For scripts: run them (or confirm they run) inside Docker via `docker/dev.sh` or the non-interactive pattern
 - For tutorials: verify snippet-includes resolve, math renders, and linked scripts exist
-- For training changes: check that metrics move in the expected direction (success_rate up, losses stabilizing)
+- For training changes: check that metrics move in the expected direction (success_rate up, value_loss stabilizing)
+- Diff behavior between main and your changes when relevant
+- Ask yourself: "Would this pass peer review in a reproducibility-focused RL lab?"
 
 ### 5. Demand Elegance (Balanced)
 
 - For non-trivial changes (new chapter scripts, algorithm implementations, lab modules): pause and ask "is there a more elegant way?"
-- Skip this for simple, obvious fixes
+- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
+- Skip this for simple, obvious fixes -- don't over-engineer a one-line config change
+- Challenge your own work before presenting it, but respect the project's simplicity-first principle
 
 ### 6. Autonomous Bug Fixing
 
-- When given a bug report (training divergence, Docker build failure, broken eval): fix it without hand-holding
-- Use logs, errors, and metrics as the evidence trail
+- When given a bug report (training divergence, Docker build failure, broken eval): just fix it. Don't ask for hand-holding
+- Point at logs, errors, failing metrics -- then resolve them
+- Zero context switching required from the user
+- Go fix failing CI tests, broken Docker builds, or crashing scripts without being told how
 
 ## Task Management
 
-If `tasks/` exists, use it as lightweight session state:
-1. Plan first: write a checklist to `tasks/todo.md`
-2. Track progress: mark items complete as you go
-3. Document results: add outcomes (metrics, artifacts) to `tasks/todo.md`
-4. Capture lessons: update `tasks/lessons.md` after corrections
+1. **Plan First**: Write plan to `tasks/todo.md` with checkable items (`- [ ]` / `- [x]`)
+2. **Verify Plan**: Check in with the user before starting implementation on non-trivial work
+3. **Track Progress**: Mark items complete as you go
+4. **Explain Changes**: High-level summary at each step (what changed, why, what metrics to expect)
+5. **Document Results**: Add a review section to `tasks/todo.md` with outcomes (success rates, artifacts produced)
+6. **Capture Lessons**: Update `tasks/lessons.md` after corrections -- pattern, root cause, prevention rule
 
 ## Core Principles
 
-- **Simplicity First**: Make every change as simple as possible. Minimal code impact beats refactors.
-- **No Laziness**: Find root causes. No temporary workarounds. If training fails, diagnose why.
-- **Minimal Impact**: Touch only what's necessary. Avoid regressions in working pipelines.
-- **Reproducibility Always**: Seeds, Docker, version-pinned deps, JSON artifacts.
-- **Quantify Everything**: Numbers, not adjectives. Report success rates, returns, goal distances.
+- **Simplicity First**: Make every change as simple as possible. Impact minimal code. A one-line hyperparameter fix is better than a refactored training loop.
+- **No Laziness**: Find root causes. No temporary workarounds. Senior researcher standards -- if training fails, diagnose *why*, don't just retry with different seeds.
+- **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing regressions in working pipelines.
+- **Reproducibility Always**: Every experiment must be reproducible. Seeds, Docker, version-pinned deps, JSON artifacts.
+- **Quantify Everything**: Numbers, not adjectives. Report success rates, returns, goal distances -- not "it seems to work."
 
 ## Testing Guidelines
 

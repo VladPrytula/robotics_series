@@ -16,7 +16,9 @@ These modules show **how equations map to code**. They are:
 |------|-----------|--------------|
 | `ppo_from_scratch.py` | PPO | GAE, clipped ratio, value loss |
 | `sac_from_scratch.py` | SAC | Twin critics, entropy bonus, temperature tuning |
+| `isaac_sac_minimal.py` | SAC (Appendix E) | Dict-observation encoding, squashed Gaussian policy, SAC update step |
 | `her_relabeler.py` | HER | Goal relabeling, reward recomputation |
+| `isaac_goal_relabeler.py` | HER (Appendix E) | Insertion-style sparse reward, future-goal sampling, HER episode processing |
 | `curriculum_wrapper.py` | Curriculum | Goal difficulty scheduling, air/table control |
 
 ## Region Markers
@@ -50,8 +52,14 @@ bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --verify
 # SAC lab: verify Q-targets finite, entropy coef trends down
 bash docker/dev.sh python scripts/labs/sac_from_scratch.py --verify
 
+# Appendix E SAC lab: verify dict-obs SAC update wiring
+bash docker/dev.sh python scripts/labs/isaac_sac_minimal.py --verify
+
 # HER lab: verify relabeling increases non-negative reward fraction
 bash docker/dev.sh python scripts/labs/her_relabeler.py --verify
+
+# Appendix E HER lab: verify insertion-style relabeling invariants
+bash docker/dev.sh python scripts/labs/isaac_goal_relabeler.py --verify
 
 # Curriculum lab: verify goal distributions at easy/hard difficulty
 bash docker/dev.sh python scripts/labs/curriculum_wrapper.py --verify
