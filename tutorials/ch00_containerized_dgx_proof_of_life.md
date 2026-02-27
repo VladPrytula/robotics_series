@@ -80,7 +80,7 @@ Verification is not bureaucracy. It is the empirical side of our well-posedness 
 | Chapters | Workload | CPU viable? | GPU needed? | RAM constraint |
 |----------|----------|-------------|-------------|----------------|
 | 0-8 | State-based RL (MuJoCo + 256x256 MLPs on 25D vectors) | Yes (~60-100 fps Mac, ~600 fps DGX) | No -- GPU at ~5% utilization | 8 GB plenty |
-| 9 | Pixel-based RL (CNN on 84x84x12 images) | Slow but possible | Helpful (2-3x speedup) | **40-50 GB** for 500K buffer |
+| 9 | Pixel-based RL (CNN on 84x84x12 images) | Slow but possible | Helpful (2-3x speedup) | **~85 GB** for 500K buffer; 100K fits in 32 GB |
 | App. E | Isaac Lab (GPU-parallel PhysX, 64-128 envs) | No | **Required** (GPU physics) | 12+ GB VRAM |
 
 For Chapters 0-8, the bottleneck is MuJoCo physics simulation, which runs on CPU regardless of platform. A 256x256 MLP processing a 25D vector completes forward and backward passes in microseconds -- the GPU has almost nothing to do. Training runs that take minutes on DGX take tens of minutes on a Mac laptop, not days.
@@ -343,7 +343,7 @@ All tests should pass on both platforms, and all artifacts should be generated c
 
 1. **State-based RL (Ch1-8)**: Mac is fully viable. Training runs complete in tens of minutes rather than seconds, which is fine for learning and iteration. No GPU needed.
 
-2. **Pixel-based RL (Ch9)**: RAM is the binding constraint, not GPU speed. A 500K-transition pixel buffer uses ~40 GB; Mac laptops with 16-32 GB should reduce `--buffer-size` (see Ch9 for guidance). Training is 2-3x slower without a GPU but workable.
+2. **Pixel-based RL (Ch9)**: RAM is the binding constraint, not GPU speed. A 500K-transition pixel buffer uses ~80 GB; Mac laptops with 32 GB should use `--buffer-size 100000` (see Ch9 for per-tier guidance). Training is 2-3x slower without a GPU but workable.
 
 3. **Isaac Lab (Appendix E)**: Not available on Mac. Isaac Lab requires Linux + NVIDIA GPU for GPU-accelerated physics (PhysX). There is no CPU fallback.
 

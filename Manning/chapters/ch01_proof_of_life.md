@@ -236,7 +236,7 @@ The first time you run `docker/dev.sh`, it installs all dependencies -- this add
 | Docker image | `robotics-rl:latest` | `robotics-rl:mac` |
 | Base image | `nvcr.io/nvidia/pytorch` | `python:3.11-slim` |
 
-> The 6-10x throughput difference is expected. MuJoCo physics runs on CPU regardless of platform; on Linux, the GPU handles neural network forward and backward passes in microseconds, while on Mac both physics and neural networks compete for CPU time. This is fine for development, debugging, and running the early chapters. For serious training runs (Chapter 5 onward, where you may need 500,000 to 3,000,000 environment steps), use a GPU-equipped machine.
+> The 6-10x throughput gap is mostly about faster CPUs and more cores on Linux machines, not GPU acceleration. For state-based RL (Chapters 1-8), both platforms are CPU-bound: MuJoCo physics dominates, and a 256x256 MLP processing a 25D observation vector completes in microseconds regardless of device. Mac is fully viable through Chapter 8 -- training runs that take seconds on DGX take tens of minutes on Mac, which is fine for learning and iteration. The GPU becomes important at Chapter 9 (pixel observations, where a CNN processes 84x84 images every step) and essential at Appendix E (Isaac Lab, where physics itself runs on the GPU). For Chapter 9, RAM is usually the binding constraint rather than GPU speed -- see that chapter for buffer-size guidance.
 >
 > Apple's MPS (Metal Performance Shaders) backend exists for PyTorch but cannot work inside Docker, since Docker on Mac runs a Linux VM that has no access to the Metal framework. CPU is the reliable default.
 >
@@ -445,6 +445,16 @@ WARN: CUDA not available; training will use CPU (this is expected on Mac)
 
 This test always passes (it warns rather than fails on Mac or CPU-only systems) because CPU-only operation is valid. But on a system where you expect a GPU, treat a "not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
 
+We verify GPU access early because later chapters need it -- but not all chapters, and not for the same reasons:
+
+| Chapters | Workload | CPU viable? | GPU needed? | RAM constraint |
+|----------|----------|-------------|-------------|----------------|
+| 1-8 | State-based RL (MuJoCo + small MLPs on 25D vectors) | Yes (~60-100 fps Mac, ~600 fps Linux) | No -- GPU at ~5% utilization | 8 GB plenty |
+| 9 | Pixel-based RL (CNN on 84x84x12 images) | Slow but possible | Helpful (2-3x speedup) | ~85 GB for 500K buffer; 100K fits in 32 GB |
+| App. E | Isaac Lab (GPU-parallel PhysX) | No | **Required** | 12+ GB VRAM |
+
+For Chapters 1-8, the bottleneck is MuJoCo physics simulation, which runs on CPU regardless of platform. Training runs that take minutes on a Linux GPU machine take tens of minutes on a Mac laptop -- not days.
+
 **Test 2: Fetch environment registry** (`list-envs`)
 
 Imports `gymnasium_robotics` and lists all registered Fetch environments. You should see a list that includes:
@@ -531,7 +541,7 @@ The four tests form a logical dependency chain:
 GPU check  ->  Fetch env registry  ->  Headless rendering  ->  Training loop
 ```
 
-Each test assumes the previous ones work. Rendering depends on MuJoCo initializing correctly (Test 2). Training depends on rendering being at least attempted (the training test disables rendering, but it still needs MuJoCo and Gymnasium working). And training performance depends on GPU availability (Test 1) -- without a GPU, training runs 10-20x slower.
+Each test assumes the previous ones work. Rendering depends on MuJoCo initializing correctly (Test 2). Training depends on rendering being at least attempted (the training test disables rendering, but it still needs MuJoCo and Gymnasium working). And training performance depends on the compute environment (Test 1) -- for state-based chapters (2-8), CPU is adequate; for pixel chapters (9+), GPU helps but RAM is often the binding constraint.
 
 When something fails, diagnose in order. If rendering fails, check Test 2 first -- maybe MuJoCo itself cannot initialize. If training is unexpectedly slow, check Test 1 -- maybe CUDA is not available. The `all` subcommand runs the tests sequentially and the output makes it clear which test failed.
 

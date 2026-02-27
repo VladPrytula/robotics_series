@@ -686,20 +686,20 @@ uses ~200 bytes. **Pixel transitions are ~850x larger.**
 
 | `--buffer-size` | Buffer RAM | Total with model + envs | Recommended for |
 |----------------:|----------:|------------------------:|-----------------|
-| 500,000 | ~40 GB | ~45-50 GB | 60+ GB machines (DGX) |
-| 300,000 | ~24 GB | ~28-32 GB | 32 GB machines |
-| 200,000 | ~16 GB | ~20-22 GB | 24 GB machines |
-| 100,000 | ~8 GB | ~12-14 GB | 16 GB machines |
+| 500,000 | ~80 GB | ~85-90 GB | 120+ GB machines (DGX) |
+| 300,000 | ~48 GB | ~53-58 GB | 64 GB machines |
+| 200,000 | ~32 GB | ~37-42 GB | 48 GB machines |
+| 100,000 | ~16 GB | ~21-24 GB | 32 GB machines |
 
 **Per-tier practical advice:**
 
-- **60+ GB RAM (DGX, large workstations):** Use the recommended `--buffer-size 500000`. This retains enough early exploration for the hockey-stick to emerge on schedule (~2.2M steps).
+- **120+ GB RAM (DGX, large workstations):** Use the recommended `--buffer-size 500000`. This retains enough early exploration for the hockey-stick to emerge on schedule (~2.2M steps).
 
-- **32 GB RAM:** Use `--buffer-size 200000`. Expect the hockey-stick onset to shift later (perhaps ~3M steps instead of ~2.2M) because the buffer forgets early exploration sooner. Final success rate should still reach 90%+.
+- **64 GB RAM:** Use `--buffer-size 300000`. Expect the hockey-stick onset to shift later (perhaps ~3M steps instead of ~2.2M) because the buffer forgets early exploration sooner. Final success rate should still reach 90%+.
 
-- **16 GB RAM:** Use `--buffer-size 100000`. The agent may plateau at 70-85% and need 5-6M steps to reach 90%+. The smaller buffer means the agent "forgets" early diverse experience faster, weakening the HER relabeling signal.
+- **32 GB RAM:** Use `--buffer-size 100000`. The agent may plateau at 70-85% and need 5-6M steps to reach 90%+. The smaller buffer means the agent "forgets" early diverse experience faster, weakening the HER relabeling signal.
 
-- **8 GB RAM:** Experimental. Consider running the state-only variant (`--full-state`) first to verify the pipeline, then attempt pixels with `--buffer-size 50000`. Success is not guaranteed -- the buffer may be too small for the hockey-stick to emerge.
+- **16 GB RAM:** Experimental. Consider running the state-only variant (`--full-state`) first to verify the pipeline, then attempt pixels with `--buffer-size 50000`. Success is not guaranteed -- the buffer may be too small for the hockey-stick to emerge.
 
 **Why buffer size matters for HER.** HER relabels transitions using goals from
 *future* transitions in the same episode. When the buffer is small relative to

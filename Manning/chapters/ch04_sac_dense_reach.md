@@ -899,8 +899,8 @@ come from these runs:
       --seed $seed --total-steps 1000000
   done
 
-Hardware:     Any modern GPU (tested on NVIDIA GB10; CPU works but ~4x slower)
-Time:         ~28 min per seed (GPU), ~120 min per seed (CPU)
+Hardware:     Any machine with Docker (GPU optional; tested on NVIDIA GB10)
+Time:         ~28 min per seed (Linux GPU), ~120 min per seed (Mac/CPU)
 Seeds:        0, 1, 2
 
 Artifacts produced:

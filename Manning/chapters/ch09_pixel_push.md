@@ -163,6 +163,17 @@ $$\text{bytes per transition} = 84{,}672 \times 2 = 169{,}344 \approx 165 \text{
 
 > **Sidebar: The memory wall.** A 500,000-transition pixel buffer costs $500{,}000 \times 169{,}344 \approx 80$ GB for pixel arrays alone. Adding proprioception, goals, actions, and rewards brings the total to roughly 85 GB. On our DGX with 119 GB RAM, this leaves about 34 GB for the OS, CUDA, and the model -- tight but feasible. A 1M buffer would need 170 GB and is physically impossible on this machine. For comparison, a 500K state-based buffer uses about 250 MB. Pixels cost 340x more per transition.
 
+**What if you don't have 120 GB?** Smaller buffers work, at the cost of delayed or weaker convergence. The buffer retains early diverse exploration that HER relabels into learning signal; when old episodes are overwritten before their value propagates through the Bellman equation, the hockey-stick ignites later or stalls at a lower plateau.
+
+| Buffer size | Buffer RAM | Total needed | Expected effect |
+|------------:|----------:|---------:|-----------------|
+| 500K | ~80 GB | ~85-90 GB | Full performance; hockey-stick at ~2.2M steps |
+| 300K | ~48 GB | ~53-58 GB | Hockey-stick may shift to ~3M; final success 90%+ |
+| 200K | ~32 GB | ~37-42 GB | Slower convergence; may need 5M+ steps for 90% |
+| 100K | ~16 GB | ~21-24 GB | May plateau at 70-85%; consider `--full-state` first |
+
+Readers with 64 GB should use `--buffer-size 300000`. Readers with 32 GB should use `--buffer-size 100000`. Below 32 GB, pixel Push training is experimental -- verify the pipeline with `--full-state` first, then try pixels with `--buffer-size 50000`.
+
 The key insight: store as uint8 (1 byte per value), convert to float32 only at sample time. The conversion cost is negligible for a 256-sample batch (256 x 84,672 x 4 bytes = 87 MB for obs + next_obs) but would quadruple memory if applied to the full buffer. SB3's `DictReplayBuffer` already stores pixels as uint8 when the observation space dtype is `np.uint8` -- our wrapper defines the pixel space with `dtype=np.uint8` to ensure this. One caveat: SB3's `DictReplayBuffer` does NOT support `optimize_memory_usage=True` (which would avoid storing `next_obs` separately for a 2x savings). It raises `ValueError` if you try. So we live with the full `obs` + `next_obs` cost.
 
 **Listing 9.3: PixelReplayBuffer -- uint8 storage, float32 sampling**

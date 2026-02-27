@@ -828,8 +828,8 @@ come from these runs:
   bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py env-all \
     --env FetchPush-v4 --seeds 0,1,2 --total-steps 2000000 --ent-coef 0.05
 
-Hardware:     Any modern GPU (tested on NVIDIA GB10; CPU works but ~4x slower)
-Time:         ~28 min per seed for Reach (GPU), ~56 min per seed for Push (GPU)
+Hardware:     Any machine with Docker (GPU optional; tested on NVIDIA GB10)
+Time:         ~28 min per seed for Reach (Linux GPU), ~56 min per seed for Push (Linux GPU)
 Seeds:        0, 1, 2
 
 Artifacts produced:
