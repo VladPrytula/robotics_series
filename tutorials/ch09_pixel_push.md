@@ -458,9 +458,23 @@ like failure but are the encoder warm-up phase -- a necessary overhead.
 run precisely because the encoder has not yet learned, which ensures you never
 see it learn.
 
+**The practical stopping rule:** Conversely, once the agent has converged, there
+is no reason to keep training. In our experiments, success rate plateaued at
+95-96% around 3.5M steps. Running to 5M burns ~15 extra hours of compute for
+no meaningful improvement. We find the following heuristic useful:
+
+- **Do not stop before 3M steps** (the hockey-stick may not have completed)
+- **Stop when success rate has been stable above 90% for 500K+ steps**
+- **Monitor critic\_loss:** once it is declining in Phase 3 (not Phase 1 --
+  check success rate to disambiguate), convergence is underway
+
+In our seed 0 run, 4M steps was more than sufficient. The 3.5M checkpoint
+at 95% would also have been a defensible stopping point.
+
 **One concept taught:** How to READ training curves in pixel RL. Rising losses
 = the hockey-stick signal. Declining losses with flat success = the failure
-signal. This is the opposite of supervised learning intuition.
+signal. This is the opposite of supervised learning intuition. And once
+convergence is clear, stop early rather than wasting compute.
 
 ### 9.8 Step 4 -- The DrQ Surprise (Augmentation vs Representation)
 
@@ -613,7 +627,7 @@ docker run --rm \
 | `--no-drq` | DrQ disabled | SpatialSoftmax incompatibility (Step 4) |
 | `--buffer-size 500000` | 500K transitions | ~40 GB RAM; retains early exploration |
 | `--her-n-sampled-goal 8` | HER-8 | 88% reward=0 transitions; stronger critic signal |
-| `--total-steps 5000000` | 5M steps | Allows full hockey-stick + convergence |
+| `--total-steps 5000000` | 5M steps | Conservative budget; can stop at 3.5-4M if converged |
 | `--checkpoint-freq 500000` | Every 500K steps | Prevents losing training to OOM/kill |
 
 Default architecture (ManipulationCNN + SpatialSoftmax + proprioception) is
@@ -640,9 +654,14 @@ Key metrics to watch:
 | 500K | 4-8% (flat) | Normal. Encoder warming up. |
 | 1.0M | 6-10% (flat) | Normal. Still in Phase 1. |
 | 2.0M | 10-15% (slight upward trend) | If flat at 5%: check `--critic-encoder` is set |
-| 2.5M | 30-50% (hockey-stick) | If still flat: extend to 4M before aborting |
-| 3.5M | 90%+ | If below 50%: something is likely misconfigured |
-| 4.5M | 95%+ (saturated) | |
+| 2.5M | 30-60% (hockey-stick) | If still flat: extend to 4M before aborting |
+| 3.0M | 85-93% | If below 50%: something is likely misconfigured |
+| 3.5M | 95%+ (converged) | Safe to stop here |
+
+**When to stop:** You do not need to run all 5M steps. Once success rate has
+been stable above 90% for 500K+ steps and critic\_loss is declining (Phase 3),
+the agent has converged. In our experience, 3.5-4M steps is sufficient. Running
+past convergence wastes compute that is better spent on additional seeds.
 
 **Memory:** A 500K-transition pixel buffer uses ~40 GB RAM. Ensure the machine
 has at least 60 GB free before launching. If OOM occurs, reduce to
@@ -765,7 +784,7 @@ the problem is in the script wiring, not the visual pipeline.
 | Augmentation | None (no DrQ) | SpatialSoftmax + DrQ = incompatible |
 | HER | n\_sampled\_goal=8 | 88% relabeled transitions for critic signal |
 | Buffer | 500K transitions | Retains early exploration; fits in ~40 GB |
-| Training budget | 5M steps (2-4x state) | Allows representation learning phase |
+| Training budget | 3.5-4M steps (2-4x state) | Stop when converged; 5M is conservative upper bound |
 
 ### Concepts Introduced
 
@@ -821,18 +840,34 @@ python scripts/ch09_pixel_push.py train \
 ```
 
 **Hardware:** NVIDIA DGX (any modern GPU works; times vary).
-**Time:** ~40 hours per seed at ~30 fps.
+**Time:** ~25-30 hours per seed at ~30 fps (to 4M steps; 5M is the conservative
+upper bound, but convergence typically occurs by 3.5-4M).
 **RAM:** ~40-50 GB per run (500K pixel buffer + model + envs).
 
-**Results (seed 0):**
+**Practical tip:** Monitor `rollout/success_rate` in TensorBoard. Once it has
+been stable above 90% for 500K+ steps and `train/critic_loss` is declining
+(Phase 3, not Phase 1 -- check success rate to tell them apart), you can stop
+early and use the most recent periodic checkpoint. Running past convergence
+wastes compute better spent on additional seeds.
+
+**Results (seed 0, stopped at 4M steps):**
 
 | Metric | Value |
 |--------|------:|
-| Success rate (final) | 95% |
+| Success rate (at 4M) | 96% |
 | Hockey-stick onset | ~2.2M steps |
-| 90%+ success | ~3.5M steps |
-| Training time | ~37 hours |
-| FPS | ~30 |
+| 90%+ success | ~3.0M steps |
+| Training time (to 4M) | ~25 hours |
+| FPS | ~28-30 |
+
+**Checkpoints saved (seed 0):**
+
+| Steps | Success rate | File |
+|------:|------:|------|
+| 2,500,000 | ~60% | `..._seed0_2500000_steps.zip` |
+| 3,000,000 | ~92% | `..._seed0_3000000_steps.zip` |
+| 3,500,000 | ~95% | `..._seed0_3500000_steps.zip` |
+| 4,000,000 | 96% | `..._seed0_4000000_steps.zip` |
 
 **Multi-seed results:** Seeds 1 and 2 are queued. The chapter will be updated
 with 3-seed statistics when complete.
