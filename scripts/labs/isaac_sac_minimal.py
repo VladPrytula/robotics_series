@@ -45,10 +45,11 @@ class DictFlattenEncoder(nn.Module):
     """
     Flatten selected dict-observation keys into one feature vector.
 
-    Typical goal-conditioned Isaac keys:
-    - "observation"
-    - "achieved_goal"
-    - "desired_goal"
+    Supports both observation conventions:
+    - Gymnasium-Robotics goal-conditioned: keys=["observation", "achieved_goal", "desired_goal"]
+    - Isaac Lab flat-dict: keys=["policy"]
+
+    The keys parameter makes this encoder agnostic to the observation layout.
     """
 
     def __init__(self, keys: list[str]):
@@ -242,6 +243,16 @@ def _make_synthetic_batch(batch_size: int, obs_dim: int, goal_dim: int, act_dim:
     return Batch(obs=obs, actions=actions, rewards=rewards, next_obs=next_obs, dones=dones)
 
 
+def _make_isaac_style_batch(batch_size: int, obs_dim: int, act_dim: int, device: torch.device) -> Batch:
+    """Build a batch mimicking Isaac Lab's {'policy': (batch, obs_dim)} convention."""
+    obs = {"policy": torch.randn(batch_size, obs_dim, device=device)}
+    next_obs = {"policy": torch.randn(batch_size, obs_dim, device=device)}
+    actions = torch.rand(batch_size, act_dim, device=device) * 2.0 - 1.0
+    rewards = torch.randn(batch_size, device=device)
+    dones = torch.randint(0, 2, (batch_size,), device=device).float()
+    return Batch(obs=obs, actions=actions, rewards=rewards, next_obs=next_obs, dones=dones)
+
+
 def run_verification(seed: int = 0) -> None:
     torch.manual_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -307,6 +318,39 @@ def run_verification(seed: int = 0) -> None:
     print(f"actor_loss={last_info['actor_loss']:.4f}")
     print(f"alpha={last_info['alpha']:.4f}")
     print("[PASS] SAC update checks")
+
+    # Test 2: Isaac Lab convention (single 'policy' key).
+    # Isaac Lab envs expose {'policy': (num_envs, obs_dim)} instead of
+    # {observation, achieved_goal, desired_goal}. Verify encoder handles it.
+    print()
+    print("--- Isaac Lab observation convention ---")
+    isaac_obs_dim = 32
+    encoder_isaac = DictFlattenEncoder(["policy"]).to(device)
+    batch_isaac = _make_isaac_style_batch(batch_size, isaac_obs_dim, act_dim, device)
+    obs_flat_isaac = encoder_isaac(batch_isaac.obs)
+    assert obs_flat_isaac.shape == (batch_size, isaac_obs_dim), (
+        f"Expected ({batch_size}, {isaac_obs_dim}), got {obs_flat_isaac.shape}"
+    )
+    assert torch.isfinite(obs_flat_isaac).all(), "Isaac-style encoding has NaN/Inf"
+
+    # Build actor/critic for Isaac obs dim and run one update.
+    actor_isaac = SquashedGaussianActor(isaac_obs_dim, act_dim).to(device)
+    critic_isaac = TwinQCritic(isaac_obs_dim, act_dim).to(device)
+    critic_target_isaac = TwinQCritic(isaac_obs_dim, act_dim).to(device)
+    critic_target_isaac.load_state_dict(critic_isaac.state_dict())
+    log_alpha_isaac = torch.tensor(0.0, requires_grad=True, device=device)
+
+    isaac_info = sac_update_step(
+        encoder_isaac, actor_isaac, critic_isaac, critic_target_isaac,
+        log_alpha_isaac, batch_isaac,
+        actor_opt=torch.optim.Adam(actor_isaac.parameters(), lr=3e-4),
+        critic_opt=torch.optim.Adam(critic_isaac.parameters(), lr=3e-4),
+        alpha_opt=torch.optim.Adam([log_alpha_isaac], lr=3e-4),
+    )
+    for name, value in isaac_info.items():
+        assert torch.isfinite(torch.tensor(value)), f"Isaac {name} non-finite: {value}"
+    print("[PASS] Isaac-style observation encoding + SAC update")
+
     print("=" * 60)
     print("[ALL PASS] Isaac SAC minimal verified")
     print("=" * 60)
@@ -317,11 +361,17 @@ def run_bridge() -> None:
     print("Isaac SAC Minimal -- Bridge to SB3 Appendix E")
     print("=" * 60)
     print("From-scratch component -> SB3/Run-It counterpart")
-    print("  DictFlattenEncoder    -> MultiInputPolicy feature concat")
+    print("  DictFlattenEncoder    -> MultiInputPolicy feature concat (goal-conditioned)")
+    print("                        -> MlpPolicy feature extractor (Isaac flat-dict)")
     print("  SquashedGaussianActor -> SAC actor network")
     print("  TwinQCritic           -> SAC critic/target critics")
     print("  temperature_loss      -> SAC ent_coef auto tuning")
     print("  sac_update_step       -> model.learn() gradient step internals")
+    print()
+    print("Observation conventions:")
+    print("  Gymnasium-Robotics: {observation, achieved_goal, desired_goal} -> MultiInputPolicy + HER")
+    print("  Isaac Lab:          {policy: flat_vector}                      -> MlpPolicy, no HER")
+    print("  The Run-It adapter detects the convention and picks accordingly.")
     print()
     print("Run-It script: scripts/appendix_e_isaac_peg.py")
     print("Build-It add-on: this file + isaac_goal_relabeler.py")

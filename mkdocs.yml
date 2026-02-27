@@ -79,6 +79,11 @@ nav:
     - "Chapter 3: SAC on Dense Reach": tutorials/ch03_sac_dense_reach.md
     - "Chapter 4: HER on Sparse Reach/Push": tutorials/ch04_her_sparse_reach_push.md
     - "Chapter 5: PickAndPlace": tutorials/ch05_pick_and_place.md
+    - "Chapter 6: Action Interface": tutorials/ch06_action_interface.md
+    - "Chapter 7: Robustness Curves": tutorials/ch07_robustness_curves.md
+    - "Chapter 9: Pixel Push": tutorials/ch09_pixel_push.md
+    - "Chapter 10: Visual SAC": tutorials/ch10_visual_reach.md
+    - "Appendix E: Isaac Peg-In-Hole": tutorials/appendix_e_isaac_peg.md
   - Syllabus: syllabus.md
   - Reference:
     - CLI: reference/cli.md

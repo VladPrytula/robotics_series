@@ -385,6 +385,62 @@ see it learn."
 
 ---
 
+## Lesson 11: Contact-Rich Tasks Need Temporal Context
+
+**Context:** SAC with MLP on Isaac Factory PegInsert (500K steps, 64 envs).
+Reward flat at ~29, episode length always 149 (max). SAC internals active
+(entropy 0.89->0.10, actor loss updating) but no reward improvement.
+
+**Pattern:** SAC with a memoryless MLP achieves approach-tier reward on
+contact-rich insertion tasks but flat-lines on fine manipulation. The agent
+learns to move near the socket but cannot learn the force-guided insertion
+sequence.
+
+**Root cause:** The 19D policy observation provides a single-frame snapshot
+(fingertip pose, velocities, prev_actions). Fine insertion requires sensing
+how forces evolve over multiple timesteps -- is the peg catching on a rim,
+sliding into the chamfer, or jamming? A memoryless MLP processes each frame
+independently and cannot reason about temporal sequences. NVIDIA's reference
+config uses LSTM (1024 units, 2 layers) for exactly this reason.
+
+**Fix:** Frame stacking (4 frames of 19D = 76D input) gives the MLP a
+~0.27-second temporal window at 15 Hz control rate. Combined with a larger
+network ([512, 256, 128]) and longer training budget (3M steps matching
+NVIDIA's PPO budget).
+
+**Rule:** Before assuming an MLP policy is sufficient for a new task, check
+whether the reference configuration uses recurrent architectures (LSTM/GRU).
+If it does, the task likely requires temporal reasoning. Frame stacking is the
+standard adaptation for feedforward policies; if that fails, recurrence is
+genuinely needed.
+
+---
+
+## Lesson 12: Isaac Lab num_envs=1 Is a Pathological Case
+
+**Context:** Initial Isaac Lab runs used num_envs=1, producing ~3 fps on
+an A100 GPU for Factory PegInsert.
+
+**Pattern:** Extremely low throughput despite powerful GPU hardware. A 500K
+step run at 3 fps would take ~46 hours -- impractical for iteration.
+
+**Root cause:** NVIDIA PhysX (Isaac Lab's physics engine) is designed for
+GPU-parallel batched execution. With num_envs=1, over 95% of GPU compute
+is wasted on kernel launch overhead. The GPU spends most of its time waiting,
+not simulating.
+
+**Fix:** Use Factory's default num_envs=128 (or at minimum 64). At
+num_envs=64, throughput jumps to ~145 fps (48x improvement). At num_envs=128,
+~170 fps.
+
+**Rule:** Always check the environment's default num_envs in Isaac Lab's task
+configs before running experiments. For Factory tasks, 128 is the standard. The
+num_envs=1 default in our pipeline was a conservative choice for SB3
+compatibility that turned out to be unnecessary -- Sb3VecEnvWrapper handles
+batched envs natively.
+
+---
+
 ## Reference Notes
 
 - See `tasks/ch09_pixel_pixels_stack_notes.md` for a concise mapping of research to our code (84x84 sufficiency with stacking, encoder/aug choices, flags to check, and targeted experiments).

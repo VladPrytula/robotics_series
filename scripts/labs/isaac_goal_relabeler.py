@@ -245,6 +245,11 @@ def run_verification(seed: int = 0) -> None:
     print("=" * 60)
     print("[ALL PASS] Isaac goal relabeler verified")
     print("=" * 60)
+    print()
+    print("NOTE: HER relabeling requires goal-conditioned environments")
+    print("(observation + achieved_goal + desired_goal keys).")
+    print("Isaac Lab envs with {'policy': ...} format are NOT goal-conditioned.")
+    print("Run discover-envs to check your target env's observation structure.")
 
 
 def run_demo(seed: int = 0) -> None:
@@ -283,6 +288,11 @@ def run_bridge() -> None:
     print("  process_episode_with_her -> real + virtual sample mix")
     print()
     print("Run-It integration point: scripts/appendix_e_isaac_peg.py --her auto|on|off")
+    print()
+    print("NOTE: HER relabeling requires goal-conditioned environments")
+    print("(observation + achieved_goal + desired_goal keys).")
+    print("Isaac Lab envs with {'policy': ...} format are NOT goal-conditioned.")
+    print("With --her auto, the pipeline detects this and runs SAC without HER.")
 
 
 def main() -> None:
