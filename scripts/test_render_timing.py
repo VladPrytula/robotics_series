@@ -31,7 +31,7 @@ from isaaclab_rl.sb3 import Sb3VecEnvWrapper
 
 
 def make_env(env_id, num_envs=1, render_mode=None):
-    """Create Isaac Lab env using the same pattern as appendix_e_isaac_peg.py."""
+    """Create Isaac Lab env using the same pattern as appendix_e_isaac_manipulation.py."""
     from isaaclab_tasks.utils import parse_env_cfg
 
     env_cfg = parse_env_cfg(env_id, device="cuda:0", num_envs=num_envs)

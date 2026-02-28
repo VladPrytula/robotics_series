@@ -15,7 +15,7 @@ A systematic course in goal-conditioned reinforcement learning for robotic manip
 | [Chapter 6](ch06_action_interface.md) | Policies as Controllers | RL vs PD decomposition, engineering metrics | `ch06_action_interface.py` | `labs/action_interface.py` |
 | [Chapter 7](ch07_robustness_curves.md) | Robustness Curves | Noise degradation analysis, robustness AUC | `ch07_robustness_curves.py` | `labs/robustness.py` |
 | [Chapter 10](ch10_visual_reach.md) | Visual SAC | State vs pixel vs DrQ comparison, `--fast` mode | `ch10_visual_reach.py` | `labs/pixel_wrapper.py`, `labs/visual_encoder.py`, `labs/image_augmentation.py` |
-| [Appendix E](appendix_e_isaac_peg.md) | Isaac Peg-In-Hole | Isaac env discovery, insertion training/eval artifacts | `appendix_e_isaac_peg.py` | `labs/isaac_sac_minimal.py`, `labs/isaac_goal_relabeler.py` |
+| [Appendix E](appendix_e_isaac_manipulation.md) | Isaac Lab Manipulation | Isaac Lift-Cube training/eval, GPU-parallel scaling | `appendix_e_isaac_manipulation.py` | `labs/isaac_sac_minimal.py`, `labs/isaac_goal_relabeler.py` |
 
 **Legend:**
 
@@ -43,7 +43,7 @@ Chapter 7: How fragile is it? (Robustness Curves)
     |
 Chapter 10: Can it learn from pixels? (Visual SAC + DrQ)
     |
-Appendix E: Does the method port to Isaac insertion? (GPU-only)
+Appendix E: Does the method port to Isaac Lab? (GPU-only)
 ```
 
 ## Running Commands
@@ -277,23 +277,23 @@ tmux attach -t rl                 # Reattach later
 
 ---
 
-### [Appendix E: Isaac Peg-In-Hole](appendix_e_isaac_peg.md)
+### [Appendix E: Isaac Lab Manipulation](appendix_e_isaac_manipulation.md)
 
-**Goal:** Port the same experiment contract to Isaac Lab insertion tasks.
+**Goal:** Port the same experiment contract to Isaac Lab with GPU-parallel physics.
 
 **You will:**
 
-- Discover available Isaac env IDs and peg/insertion candidates
-- Run dense-first smoke checks before long insertion runs
-- Train SAC (with optional HER when goal-conditioned structure exists)
+- Discover available Isaac env IDs and verify the Isaac container
+- Train SAC on Lift-Cube (state-based: 256 envs, ~9K fps)
+- Train SAC from pixels via native TiledCamera (64 envs, ~1.2K fps)
 - Produce the same artifact pattern: checkpoint + metadata + eval JSON + comparison JSON
 - Validate from-scratch Build It components for SAC update math and goal relabeling
 
 **Done when:** You have a valid `appendix_e_sac_*` checkpoint and evaluation JSON, and can answer:
 
-- Which insertion env ID did you train on, and why was it selected?
-- Did HER run in `auto` mode, and was the env truly goal-conditioned?
-- What does your success-rate / final-goal-distance report say about tolerance sensitivity?
+- How does Lift-Cube's dense reward compare to FetchPickAndPlace's sparse reward?
+- Why must the CurriculumManager be disabled for off-policy SAC?
+- What does the hockey-stick learning curve in pixel training tell you about visual representation learning?
 
 ---
 

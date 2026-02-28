@@ -18,6 +18,7 @@ videos/*
 !videos/*_demo*.mp4
 !videos/*_exploration*.gif
 !videos/ch04_push_*_grid.gif
+!videos/appendix_e_*.mp4
 runs/
 
 # Keep demo videos in docs

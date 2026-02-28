@@ -1,6 +1,6 @@
 # Appendix E: Isaac Lab Manipulation (GPU-Only)
 
-**Goal:** Transfer the book's SAC methodology to a GPU-parallel manipulation
+**Goal:** Transfer the SAC methodology from the main tutorials to a GPU-parallel manipulation
 task in Isaac Lab, demonstrating that the same algorithm and diagnostic skills
 work across simulators -- with dramatically different wall-clock performance.
 
@@ -8,7 +8,7 @@ work across simulators -- with dramatically different wall-clock performance.
 
 ## Bridge: Why Appendix E Exists
 
-Through Chapters 0-10, we developed a full workflow on Gymnasium-Robotics
+Through Tutorials 0-10, we developed a full workflow on Gymnasium-Robotics
 Fetch tasks. That depth was intentional: one environment family lets us isolate
 algorithmic effects.
 
@@ -22,9 +22,10 @@ GPU-parallel physics.*
 
 Two constraints shape scope. First, Isaac Lab requires Linux + NVIDIA GPU,
 so the entire appendix is GPU-only. Second, we practice honest
-method-benchmark matching: we demonstrate SAC on tasks where it works
-(Lift-Cube, a fully observable MDP) and explain where it does not
-(PegInsert, a POMDP requiring recurrence).
+method-benchmark matching: the primary demonstration is Lift-Cube, a fully
+observable MDP with dense reward shaping that SAC solves reliably. We are
+explicit about what this proves and what it does not (see "Honest Difficulty
+Comparison" below).
 
 ---
 
@@ -43,7 +44,7 @@ which runs on both platforms.
 
 ### Software Requirements
 
-The host needs the same Docker + NVIDIA Container Toolkit stack as Chapter 0.
+The host needs the same Docker + NVIDIA Container Toolkit stack as Tutorial 0.
 Verify with:
 
 ```bash
@@ -68,7 +69,7 @@ NGC Isaac Lab 2.3.2 image. No venv, no MuJoCo, no Gymnasium-Robotics.
 
 ### How `dev-isaac.sh` Differs from `dev.sh`
 
-Readers familiar with `dev.sh` from Chapters 0-10 will find `dev-isaac.sh`
+Readers familiar with `dev.sh` from Tutorials 0-10 will find `dev-isaac.sh`
 similar in spirit but different in several important details:
 
 | Aspect | MuJoCo (`dev.sh`) | Isaac (`dev-isaac.sh`) |
@@ -114,7 +115,7 @@ free other workloads if your GPU is shared.
 
 ## Verification Protocol
 
-Following Chapter 0's pattern, we verify the Isaac environment through a
+Following Tutorial 0's pattern, we verify the Isaac environment through a
 4-test dependency chain. Each test assumes the previous tests pass:
 
 ```
@@ -164,7 +165,7 @@ configuration issue.
 **The test.**
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py discover-envs --headless
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py discover-envs --headless
 ```
 
 Expected output: a list of registered `Isaac-*` environment IDs and a JSON
@@ -190,7 +191,7 @@ env creation.
 **The test.**
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py smoke \
     --headless --seed 0 --dense-env-id Isaac-Lift-Cube-Franka-v0 --smoke-steps 100
 ```
 
@@ -202,7 +203,7 @@ time). It verifies that the env creates, wraps, and steps without error.
 **What we verify.** SAC trains for a non-trivial number of steps, and a
 checkpoint + metadata JSON are saved.
 
-**Why this matters.** Like Chapter 0's PPO smoke test, this validates the
+**Why this matters.** Like Tutorial 0's PPO smoke test, this validates the
 full pipeline: environment interaction, replay buffer population, gradient
 computation, checkpoint serialization. Many bugs only appear after
 `learning_starts` transitions have been collected and the first gradient
@@ -216,7 +217,7 @@ though `Sb3VecEnvWrapper` handles this automatically.
 **The test.**
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py smoke \
     --headless --seed 0 --dense-env-id Isaac-Lift-Cube-Franka-v0
 ```
 
@@ -339,7 +340,7 @@ control. A Reach policy only needs phase 1.
 ### Staged Dense Reward
 
 Isaac Lab's Lift-Cube environment uses a staged dense reward structure that
-mirrors Chapter 5's curriculum pattern -- the reward design teaches the agent
+mirrors Tutorial 5's curriculum pattern -- the reward design teaches the agent
 in stages:
 
 | Reward term | Weight | What it rewards |
@@ -356,7 +357,7 @@ the reaching bonus (easy), then discovers that lifting unlocks a much larger
 reward signal (15x reaching), and finally learns that tracking the target is
 the largest reward component (16x+5x).
 
-This is the same pedagogical pattern we saw in Chapter 5 (goal stratification
+This is the same pedagogical pattern we saw in Tutorial 5 (goal stratification
 and curriculum learning) -- except here the curriculum is baked into the
 reward function rather than requiring a separate wrapper.
 
@@ -421,14 +422,13 @@ end-effector velocities or joint positions.
 
 ### Full Observability: MLP Is Sufficient
 
-Unlike Factory PegInsert (which is a POMDP requiring recurrence -- see Scope
-Boundary below), Lift-Cube is a fully observable MDP. The 36D observation
+Lift-Cube is a fully observable MDP. The 36D observation
 includes joint positions, joint velocities, object position, target pose,
 and previous actions. A single observation frame contains everything the
 agent needs to decide the optimal action -- no temporal reasoning required.
 
 This is why SAC with a feedforward MLP works: the Markov property holds.
-Compare to FetchPush in Chapter 4: similar structure, similar difficulty,
+Compare to FetchPush in Tutorial 4: similar structure, similar difficulty,
 same methodology.
 
 ### Why SAC Should Work
@@ -519,7 +519,7 @@ core update math and relabeling mechanics independent of any one Isaac task ID.
     The SAC verification now tests two observation conventions:
 
     1. **Goal-conditioned** (`{observation, achieved_goal, desired_goal}`) --
-       the Gymnasium-Robotics layout used in Chapters 4-8.
+       the Gymnasium-Robotics layout used in Tutorials 4-8.
     2. **Isaac Lab flat-dict** (`{policy: flat_vector}`) -- what most Isaac
        envs actually provide.
 
@@ -533,14 +533,14 @@ core update math and relabeling mechanics independent of any one Isaac task ID.
 ## WHAT: Run It Pipeline
 
 The production Appendix E pipeline lives in
-`scripts/appendix_e_isaac_peg.py` and provides the same chapter-style
-subcommands as the rest of the book: `discover-envs`, `smoke`, `train`,
+`scripts/appendix_e_isaac_manipulation.py` and provides the same subcommands as the
+other tutorial scripts: `discover-envs`, `smoke`, `train`,
 `eval`, `all`, `compare`, and `record` (video recording from checkpoints).
 
 ### E.10 Discover Available Isaac Environments
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py discover-envs --headless
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py discover-envs --headless
 ```
 
 **Note:** `--headless` is required on DGX and other headless systems. Without
@@ -565,7 +565,7 @@ includes a `probed_envs` section with observation metadata.
 ### E.11 Dense-First Smoke Check
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py smoke \
     --headless --seed 0 --dense-env-id Isaac-Lift-Cube-Franka-v0
 ```
 
@@ -577,25 +577,25 @@ Isaac Sim boot).
 
 ```bash
 # Primary target: Lift-Cube with 256 parallel envs (8M steps, ~14 min)
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py train \
     --headless --seed 0 \
     --env-id Isaac-Lift-Cube-Franka-v0 \
     --num-envs 256 --total-steps 8000000
 
 # Or any other Isaac env
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py train \
     --headless --env-id Isaac-Reach-Franka-v0 --seed 0
 ```
 
 Periodic checkpoints are saved every 100K steps by default (configurable via
 `--checkpoint-freq`). At 256 parallel envs on a modern GPU, expect ~9,000-
 10,000 fps throughput -- 8M steps completes in approximately **14 minutes**.
-Compare this to Chapter 9's pixel-based Push training: ~40 hours on MuJoCo.
+Compare this to Tutorial 9's pixel-based Push training: ~40 hours on MuJoCo.
 
 ### E.13 Evaluate a Checkpoint
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py eval \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py eval \
     --headless \
     --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
 ```
@@ -603,7 +603,7 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py eval \
 ### E.14 Compare Multiple Result Files
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py compare \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py compare \
     --env-id Isaac-Lift-Cube-Franka-v0 \
     --result results/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_eval.json \
     --result results/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed1_eval.json
@@ -621,7 +621,7 @@ Each subprocess gets its own fresh `SimulationApp`, avoiding the singleton
 constraint at the cost of ~10 seconds of boot time per phase:
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py all \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py all \
     --headless --seed 0 \
     --env-id Isaac-Lift-Cube-Franka-v0 \
     --num-envs 256 --total-steps 8000000
@@ -630,7 +630,7 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py all \
 ### E.16 Record Video From Checkpoint
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py record \
     --headless \
     --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
 ```
@@ -645,15 +645,16 @@ filename or `.meta.json` if available. Output defaults to
 
 ## Reproduce It
 
-This section documents actual training results on Lift-Cube, plus the
-debugging journey with PegInsert that led us to choose this benchmark.
+This section documents actual training results on Lift-Cube -- both
+state-based and pixel-based -- including the debugging journey that
+shaped our approach.
 
 ### SAC on Lift-Cube (Primary Result)
 
 Training command:
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py train \
     --headless --seed 0 \
     --env-id Isaac-Lift-Cube-Franka-v0 \
     --num-envs 256 --total-steps 8000000 \
@@ -743,7 +744,7 @@ documented because most curriculum RL research uses on-policy methods.
 Training command (curriculum auto-disabled for SAC):
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py train \
     --headless --seed 0 \
     --env-id Isaac-Lift-Cube-Franka-v0 \
     --num-envs 256 --total-steps 8000000 \
@@ -804,235 +805,252 @@ completes in under 15 minutes.
 
 ### Video Progression: Seeing Learning Happen
 
-Numbers tell us the agent improved; videos show us *how*. We recorded one
-episode from three checkpoints spaced across the 8M training run to visualize
-the progression from random behavior to competent manipulation.
+Numbers tell us the agent improved; videos show us *how*. We recorded
+deterministic episodes from checkpoints spaced across training to visualize the
+progression from random behavior to competent manipulation -- for both the
+state-based (8M steps) and pixel-based (4M steps) pipelines.
 
-| Stage | Checkpoint | Steps | Expected behavior |
-|-------|-----------|-------|-------------------|
-| Early | `*_199680_steps.zip` | ~200K | Random arm movements, occasionally approaching cube |
-| Mid | `*_2999808_steps.zip` | ~3M | Reaching cube reliably, attempting grasp, partial lifts |
-| Converged | `*_seed0.zip` | 8M (final) | Full reach-grasp-lift-track sequence, every episode |
+**State-based progression** (Isaac Lab viewport camera, 250 frames at 30 fps):
 
-Recording uses Isaac Lab's viewport camera via `env.render()`:
+| Stage | Video | Steps | Behavior |
+|-------|-------|-------|----------|
+| Grasping | `videos/appendix_e_state_3M_grasping.mp4` | ~3M | Arm reaches cube, attempts grasp, partial lifts |
+| Lifting | `videos/appendix_e_state_5M_lifting.mp4` | ~5M | Reliable grasp and lift, beginning target tracking |
+| Converged | `videos/appendix_e_state_8M_converged.mp4` | ~8M | Full reach-grasp-lift-track, smooth and purposeful |
+
+**Pixel-based progression** (TiledCamera sensor, 84x84 RGB, 250 frames at 30 fps):
+
+| Stage | Video | Steps | Behavior |
+|-------|-------|-------|----------|
+| Pre-takeoff | `videos/appendix_e_pixel_500K_random.mp4` | ~500K | Exploring, some reaching, CNN learning visual features |
+| Post-takeoff | `videos/appendix_e_pixel_1500K_reaching.mp4` | ~1.5M | Reaching and grasping from pixels, post hockey-stick |
+| Converged | `videos/appendix_e_pixel_4M_converged.mp4` | ~4M | Full manipulation from pixels, near state-based quality |
+
+To generate all six progression videos:
 
 ```bash
-# Each runs as a separate subprocess (SimulationContext singleton)
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
-    --headless --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_199680_steps.zip
-
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
-    --headless --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_2999808_steps.zip
-
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
-    --headless --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
+bash scripts/record_appendix_e_videos.sh
 ```
 
-Output: `videos/appendix_e_Isaac-Lift-Cube-Franka-v0_*.mp4`
+Or record individual checkpoints:
+
+```bash
+# State-based (auto-detects observation layout)
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py record \
+    --headless --env-id Isaac-Lift-Cube-Franka-v0 \
+    --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_3000064_steps.zip \
+    --video-out videos/appendix_e_state_3M_grasping.mp4
+
+# Pixel-based (--pixel creates TiledCamera env to match MultiInputPolicy)
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py record \
+    --headless --pixel --env-id Isaac-Lift-Cube-Franka-v0 \
+    --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_3999744_steps.zip \
+    --video-out videos/appendix_e_pixel_4M_converged.mp4
+```
 
 The `record` subcommand creates the env with `render_mode="rgb_array"` and
 `--enable_cameras` (for headless Vulkan rendering), warms up the renderer
 (first few frames are often black during shader compilation), runs one
-deterministic episode, and saves frames as MP4 at 30 fps via `imageio`.
+deterministic episode, and saves frames as MP4 at 30 fps via `imageio`. For
+pixel checkpoints, pass `--pixel` (or let the script auto-detect from
+`.meta.json`) so the environment creates the TiledCamera sensor matching the
+`MultiInputPolicy` observation space.
 
-**What to look for in the videos.** At the early checkpoint (200K), the arm
-moves without purpose -- no reaching strategy, deep negative reward (~-27) --
-because the agent is still in the random exploration phase, collecting
-experience for the replay buffer. By the mid checkpoint (3M), the arm reaches
-toward the cube and sometimes grasps it, though you may see partial lifts that
-fail when the cube slips; reward is around -15, meaning the agent has learned
-reaching and is discovering grasping. At the converged checkpoint (8M), the
-motion is smooth and purposeful -- approach, close gripper, lift, track target
--- with positive reward (+0.54) and reliable manipulation across goal
-configurations. This progression mirrors the training curve: the jumps between
-phases (reaching -> grasping -> lifting -> tracking) are visible both in reward
-plots and in behavior.
+**What to look for in the videos.** In the state-based series, the progression
+from grasping (3M) to lifting (5M) to converged (8M) shows the agent
+discovering each phase of the four-phase control sequence. By 8M steps, the
+motion is smooth and purposeful -- approach, close gripper, lift, track target.
+In the pixel-based series, the progression from pre-takeoff (500K) to
+post-takeoff (1.5M) to converged (4M) mirrors the hockey-stick learning curve:
+the early checkpoint shows the agent exploring while the CNN learns visual
+features, and the post-takeoff checkpoint shows reaching and grasping emerging
+once visual representations become informative. The pixel-converged policy
+achieves near state-based quality despite learning entirely from 84x84 images.
 
-### PegInsert: What Came Before (Diagnostic Journey)
+## Honest Difficulty Comparison
 
-Before Lift-Cube, we attempted Factory PegInsert -- a contact-rich insertion
-task that seemed like a natural target for manipulation RL. The debugging
-process is instructive because it demonstrates how to diagnose
-method-benchmark mismatches.
+We want to be explicit about where Lift-Cube sits on the difficulty ladder
+established by the main text, because the wall-clock speedup numbers from GPU
+parallelism can create a misleading impression that we have solved a harder
+problem than we actually have.
 
-**First attempt (500K steps, 64 envs):**
+### Isaac-Lift-Cube vs FetchPickAndPlace
 
-| Metric | Start | End | Interpretation |
-|--------|-------|-----|---------------|
-| ep_rew_mean | 31.5 | 29.3 | Flat -- stuck at approach-tier reward |
-| ep_len_mean | 149 | 149 | Always times out, never inserts |
-| ent_coef | 0.89 | 0.10 | Policy becoming deterministic |
+| Property | Isaac-Lift-Cube-Franka-v0 | FetchPickAndPlace-v4 |
+|----------|---------------------------|----------------------|
+| Reward type | Dense (staged shaping) | Sparse ($-1$ / $0$) |
+| Goal conditioning | No (`policy` key only) | Yes (achieved/desired goal) |
+| HER needed? | No | Yes (essential) |
+| Control phases | 4 (approach, grasp, lift, track) | 4 (approach, grasp, lift, place) |
+| Exploration difficulty | Low (dense reward guides agent) | High (needle-in-haystack without HER) |
+| Closest Fetch analogue | FetchReachDense + FetchPush-dense | FetchPickAndPlace (sparse) |
 
-SAC is "confidently failing" -- the same Phase 1 pattern from Lesson 9.
-The agent learns to approach the socket but cannot perform fine insertion.
+The key difference is **reward shaping**. Isaac Lab's Lift-Cube uses a staged
+dense reward that functions as an implicit curriculum -- the weight structure
+(reaching=1.0, lifting=15.0, tracking=16.0+5.0) guides the agent through the
+multi-phase control sequence without requiring the agent to discover it through
+exploration. FetchPickAndPlace with sparse rewards provides no such guidance:
+the agent must stumble upon a successful grasp-lift-place sequence entirely
+through random exploration (or HER relabeling).
 
-**Root cause:** Factory PegInsert is a **POMDP**. The actor sees 19D partial
-state (fingertip pose, velocities, previous actions) while the critic sees
-72D full state (including socket geometry, contact forces, peg orientation).
-Fine insertion requires temporal reasoning about contact sequences -- is the
-peg catching, sliding, or jamming? A memoryless MLP processes each frame
-independently and cannot distinguish these contact modes.
+Dense shaping is not cheating -- it is a well-understood technique (Ch5 discusses
+it as "goal stratification baked into the reward"). But it means Lift-Cube is
+substantially easier from an exploration standpoint than sparse PickAndPlace,
+even though both require four-phase manipulation.
 
-NVIDIA's reference config uses LSTM (1024 units, 2 layers) + asymmetric
-actor-critic for exactly this reason. The LSTM gives the policy implicit
-memory of the recent force sequence.
+### What This Appendix Proves (and What It Does Not)
 
-**What we tried:** Frame stacking (4 frames of 19D = 76D input), larger
-network ([512, 256, 128]), longer budget (3M steps). Frame stacking
-approximates temporal context but is fundamentally limited compared to
-learned recurrence -- it provides a fixed window rather than adaptive memory.
+**What it proves:**
 
-**What we learned:** The diagnostic skill from Chapter 9 (recognizing the
-three-phase loss pattern) transferred perfectly. The method did not fail
-because SAC is wrong -- it failed because the problem structure (POMDP)
-does not match the algorithm's assumptions (Markov observations). This
-mismatch is exactly the kind of structural diagnosis the book teaches.
+- SAC transfers across simulators without algorithm changes
+- GPU-parallel physics provides 15-170x wall-clock speedup
+- The same diagnostic skills (curriculum crash analysis, observation space
+  inspection, dense-first debugging) apply in Isaac Lab
+- The experiment contract (checkpoint + metadata + eval JSON) ports cleanly
 
----
+**What it does not prove:**
 
-## Scope Boundary: PegInsert and the Limits of Transfer
-
-Factory PegInsert is documented as a **scope boundary** -- a case where our
-method does not work, and we can explain precisely why.
-
-### The Mismatch
-
-| Property | Lift-Cube | PegInsert |
-|----------|-----------|-----------|
-| Actor observation | 36D (full state) | 19D (partial state) |
-| Critic observation | 36D (same) | 72D (full state) |
-| Markov? | Yes | No (POMDP) |
-| NVIDIA reference | PPO, MlpPolicy | PPO + LSTM, asymmetric |
-| SAC+MLP result | Learns multi-phase control | Stuck at approach tier |
-
-### Why SAC+MLP Cannot Solve PegInsert
-
-The actor's 19D observation is a single-frame snapshot: fingertip position,
-velocity, and previous action. But fine insertion requires sensing how forces
-evolve over multiple timesteps. Consider three contact states:
-
-1. **Peg sliding into chamfer** -- forces are low, decreasing. Correct action: continue downward.
-2. **Peg catching on rim** -- lateral forces are rising. Correct action: retract and realign.
-3. **Peg jammed against sidewall** -- forces are high, stable. Correct action: wiggle.
-
-All three may produce identical single-frame observations (similar pose,
-similar forces). Only the *sequence* of forces distinguishes them. A
-memoryless MLP maps identical inputs to identical outputs -- it cannot
-distinguish these three states.
-
-### What Would Be Needed
-
-To solve PegInsert with our framework, we would need one of three approaches.
-The most direct is to **enrich the observation** so that it becomes Markov --
-by including contact forces, peg orientation relative to socket, and enough
-history that a single frame contains all decision-relevant information, which
-effectively converts the POMDP into an MDP. Alternatively, we could **add
-recurrence** (LSTM or GRU layers in the policy) to give it learned memory,
-though this requires switching from SB3 (which does not support recurrent SAC)
-to a framework like RL-Games or cleanrl. A coarser approximation is **frame
-stacking**, which provides a fixed temporal window rather than adaptive memory;
-our experiment with 4-frame stacking was inconclusive and may need more frames
-or a longer training budget.
-
-This is not a failure of SAC -- it is a mismatch between problem structure
-and algorithm assumptions. Recognizing this mismatch is exactly the
-diagnostic skill the book teaches (Lesson 13).
+- That we can solve sparse-reward manipulation on Isaac Lab (we did not attempt
+  it -- Lift-Cube uses dense reward)
+- That SAC handles contact-rich POMDP tasks (tight-tolerance insertion
+  requires recurrence, which is outside our MLP-based pipeline)
+- That the pixel results match the state-based results in quality (they do not
+  -- pixel training is slower and less sample-efficient, as expected from Ch9)
 
 ---
 
-## Pixels on Isaac: Bridging to Chapter 9
+## Pixels on Isaac: Native TiledCamera Results
 
-Chapter 9 showed that SAC could learn from pixels instead of state vectors
+Tutorial 9 showed that SAC could learn from pixels instead of state vectors
 on MuJoCo FetchPush. A natural question: can we do the same on Isaac Lab?
+The answer is yes -- and Isaac Lab's native `TiledCamera` sensor makes it
+substantially more practical than the viewport-based approach we initially
+attempted.
 
-### Approach: Render-Based Pixel Wrapper
+### Approach: Native TiledCamera Sensor
 
-Rather than using Isaac Lab's native visuomotor environments (which have
-`subtask_terms` reward issues and are a harder Stack-Cube task), we add pixel
-observations to Lift-Cube using `env.render()` -- exactly the same pattern
-Chapter 9 used with FetchPush.
+Rather than capturing a single global viewport and resizing it (which forces
+`num_envs=1` and kills GPU parallelism), we use Isaac Lab's `TiledCamera`
+sensor. TiledCamera renders all parallel environments into a single
+GPU-tiled image, then slices per-env -- this is Isaac Lab's native approach
+to visuomotor RL, scaling to 16-64+ parallel envs on a single GPU.
 
-**How it works.** We create Lift-Cube with `render_mode="rgb_array"` and
-`--enable_cameras`, so that after `Sb3VecEnvWrapper` the env exposes
-`Box(36,)` state observations and supports `render()` for viewport frames.
-Our `IsaacPixelObsWrapper` then calls `render()` each step, resizes the
-1280x720 viewport to 84x84 via PIL, transposes HWC to CHW, and creates a Dict
-observation: `{"pixels": uint8(3, 84, 84), "state": float32(36,)}`. SB3's
-`MultiInputPolicy` auto-detects the image key and routes it through NatureCNN
-(CNN for pixels, Flatten for the state vector, concatenated before the
-policy/value MLP).
+**How it works.** The `--pixel` flag extends the base Lift-Cube env config by
+adding a `TiledCamera` sensor at `{ENV_REGEX_NS}/Camera` (one camera per
+env instance, 84x84 RGB), adding an `image` observation term with
+`clip=(0, 255)` so `Sb3VecEnvWrapper` validates it as a uint8 image, and
+setting `concatenate_terms=False` so the observation space becomes a Dict.
+SB3's `MultiInputPolicy` then auto-detects the image key and routes it
+through NatureCNN (CNN for pixels, Flatten for state vectors, concatenated
+before the policy/value MLP).
 
-This mirrors Chapter 9's `PixelObservationWrapper` but wraps a VecEnv
-(Isaac Lab) rather than a Gymnasium env. The observation design follows the
-same sensor separation principle (Lesson 1): the CNN processes world-state
-from pixels, while the state vector provides proprioception directly.
+The resulting observation space after `Sb3VecEnvWrapper` is:
 
-### The Trade-Off: Parallelism vs Pixels
+```python
+Dict({
+    "joint_pos":              Box(9,),       # Franka arm + gripper
+    "joint_vel":              Box(9,),       # Joint velocities
+    "object_position":        Box(3,),       # Cube position
+    "target_object_position": Box(7,),       # Target pose (pos + quat)
+    "actions":                Box(8,),       # Previous action
+    "tiled_camera":           Box(3, 84, 84) # uint8 RGB image
+})
+```
 
-Isaac Lab's viewport camera is **global** -- it renders the scene from a
-single viewport, not per-environment. This forces `num_envs=1` for pixel
-mode, collapsing the GPU parallelism advantage that made state-based training
-so fast.
+This follows the same sensor separation principle from Lesson 1: the CNN
+processes world-state from pixels (cube position, target, table geometry),
+while the state vectors provide proprioception (joint angles, velocities)
+directly -- no need for the CNN to learn what the robot already knows about
+its own body.
 
-| Mode | num_envs | Expected fps | Wall time (2M steps) |
-|------|----------|-------------|---------------------|
-| State-based | 256 | ~9,000 | ~3.6 min |
-| Pixel-based | 1 | ~50-200 | hours |
+### Throughput Comparison
+
+| Mode | num_envs | fps | Wall time (4M steps) |
+|------|----------|-----|---------------------|
+| State-based | 256 | ~7,010 | ~9.5 min |
+| **Pixel (TiledCamera)** | **64** | **~1,181** | **~56 min** |
+| Old viewport hack | 1 | ~16 | days (impractical) |
 | Ch9 MuJoCo pixel Push | 4 | ~30-50 | ~40 hours |
 
-This is an honest trade-off: GPU physics helps state-based training
-enormously (256 envs, 9,000+ fps), but pixel rendering bottlenecks back to
-serial execution. The rendering pipeline (Vulkan viewport capture -> CPU
-resize -> numpy conversion) adds ~10-20ms per step.
+The TiledCamera approach is ~74x faster than the old viewport hack and ~24x
+faster than MuJoCo pixel training. It still pays a throughput penalty compared
+to state-based training (1,181 vs 7,010 fps at fewer envs) because rendering
+84x84 RGB per env per step adds GPU workload, but the penalty is manageable
+rather than prohibitive.
+
+### Pixel Training Results (4M Steps)
+
+Training command:
+
+```bash
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py train \
+    --headless --seed 0 --pixel \
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --num-envs 64 --total-steps 4000000 \
+    --checkpoint-freq 500000 \
+    --learning-rate 3e-4 --gamma 0.99
+```
+
+**Training progression (4M steps, seed 0, pixel, 64 envs):**
+
+| Timesteps | ep_rew_mean | Phase |
+|-----------|------------|-------|
+| 64K | -27.2 | Random exploration |
+| 500K | -26.8 | Still exploring (flat) |
+| 800K | -26.5 | Hockey-stick flat regime |
+| 1.0M | -22.0 | **Takeoff** -- reaching discovered |
+| 1.4M | -8.2 | Grasping beginning |
+| 2.0M | -3.5 | Lifting |
+| 3.0M | -1.5 | Tracking |
+| 4.0M | -1.07 | Near convergence |
+
+The learning curve exhibits the **hockey-stick** shape we first observed in
+Tutorial 9's pixel Push training: a flat regime (0-800K steps) where the CNN
+has not yet learned useful features, followed by rapid takeoff once visual
+representations become informative. The mechanism is the same geometric
+phase transition -- once the critic can distinguish "near cube" from "far
+from cube" in pixel space, the value wavefront propagates backward through
+the policy, and each improvement creates more informative training data for
+the next update.
+
+### Key Lessons from Pixel Training
+
+**`clip=(0, 255)` is essential.** `Sb3VecEnvWrapper` validates image
+observations by checking that the space bounds match uint8 range. Without
+the `clip` parameter on the `ObsTerm`, the image observation has unbounded
+space, which causes `Sb3VecEnvWrapper` to treat it as a regular float
+vector rather than an image -- breaking NatureCNN routing.
+
+**Proprioception in Dict obs matters.** By setting `concatenate_terms=False`,
+we keep state vectors (joint angles, velocities) alongside the image in the
+observation Dict. If we concatenated everything, the flat vector would
+lose the image structure, and SB3 would use `MlpPolicy` instead of
+`MultiInputPolicy` with CNN features.
+
+**Curriculum must be disabled.** The same Lesson 14 applies: curriculum
+reward scaling is incompatible with SAC's replay buffer. The pixel pipeline
+disables it automatically.
 
 ### Running Pixel Lift-Cube
 
 ```bash
-# Smoke test: verify pixel wrapper + MultiInputPolicy initialization
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+# Smoke test: verify TiledCamera + MultiInputPolicy initialization
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py smoke \
     --headless --seed 0 --pixel \
     --dense-env-id Isaac-Lift-Cube-Franka-v0 --smoke-steps 2000
 
-# Full training (2M steps, num_envs=1 forced by --pixel)
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+# Full pixel training (4M steps, 64 envs, ~56 min)
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py train \
     --headless --seed 0 --pixel \
     --env-id Isaac-Lift-Cube-Franka-v0 \
-    --total-steps 2000000 \
-    --buffer-size 200000 \
-    --batch-size 256 \
-    --learning-starts 5000
+    --num-envs 64 --total-steps 4000000 \
+    --checkpoint-freq 500000
 ```
 
-A few key choices deserve explanation. The **`--pixel`** flag injects
-`--enable_cameras` automatically and forces `num_envs=1` (since the viewport
-camera is global). We set **buffer_size=200K** because each 84x84x3 uint8
-frame is ~21KB, so 200K transitions (obs + next_obs) consume ~8GB -- which
-fits in RAM. The **batch_size** stays at 256, the same as state-based
-training, and **learning_starts=5000** ensures we collect some pixel experience
-before the first gradient update.
-
-### What Isaac Lab Also Offers (Native Visuomotor)
-
-Isaac Lab has five visuomotor Stack-Cube variants with per-environment
-cameras (table-mounted + wrist-mounted, 200x200 RGB each). These are
-architecturally richer than our render-based approach but require non-trivial
-adapter work. Isaac Lab provides float32 [0, 1] images while SB3 expects
-uint8 [0, 255] -- our `IsaacImageNormWrapper` handles this conversion, but the
-visuomotor envs also use `subtask_terms` instead of standard reward terms.
-Processing two 200x200 camera streams (table-mounted and wrist-mounted) doubles
-CNN computation, and Stack-Cube is itself a harder task (stacking two cubes)
-with a different reward structure than Lift-Cube.
-
-We chose the render-based approach because it isolates the pixel observation
-question from the task difficulty question: same task (Lift-Cube), same
-reward, just different observations. This makes the comparison with
-state-based Lift-Cube clean and interpretable.
-
-Readers interested in the native visuomotor integration can consult Isaac
-Lab's camera sensor documentation (`isaaclab.sensors.Camera`), NVIDIA's
-RL-Games training scripts for visuomotor tasks, and the
-`IsaacImageNormWrapper` in our pipeline (which handles the float32->uint8
-conversion).
+The `--pixel` flag handles the TiledCamera setup automatically: it injects
+`--enable_cameras` into the Isaac args, constructs the visuomotor env config
+with the camera sensor and Dict observation space, and selects
+`MultiInputPolicy` for SB3.
 
 ---
 
@@ -1040,7 +1058,7 @@ conversion).
 
 We find it helpful to list the failure modes we have encountered, since Isaac
 Lab's error messages are not always self-explanatory. We use the same
-Symptom/Cause/Resolution format as Chapter 0's Appendix A.
+Symptom/Cause/Resolution format as Tutorial 0.
 
 ### SimulationApp Singleton
 
@@ -1134,7 +1152,7 @@ check whether it has curriculum terms that modify reward weights:
 
 ```bash
 # Look for CurriculumManager in the env startup logs
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py smoke \
     --headless --dense-env-id <your-env> --smoke-steps 100 2>&1 | grep -i curriculum
 ```
 
@@ -1170,7 +1188,8 @@ A complete Appendix E Lift-Cube run should produce:
 - `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.meta.json`
 - `results/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_eval.json`
 - `results/appendix_e_isaac_env_catalog.json`
-- `videos/appendix_e_Isaac-Lift-Cube-Franka-v0_*.mp4` (from `record` command)
+- `videos/appendix_e_state_*.mp4` (state-based progression: 3M, 5M, 8M)
+- `videos/appendix_e_pixel_*.mp4` (pixel progression: 500K, 1.5M, 4M)
 
 The `.meta.json` includes `obs_space_type`, `is_goal_conditioned`, `pixel`,
 and `wrapper: "Sb3VecEnvWrapper"` fields, so you can verify after training

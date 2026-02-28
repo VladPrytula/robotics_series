@@ -373,7 +373,7 @@ def run_bridge() -> None:
     print("  Isaac Lab:          {policy: flat_vector}                      -> MlpPolicy, no HER")
     print("  The Run-It adapter detects the convention and picks accordingly.")
     print()
-    print("Run-It script: scripts/appendix_e_isaac_peg.py")
+    print("Run-It script: scripts/appendix_e_isaac_manipulation.py")
     print("Build-It add-on: this file + isaac_goal_relabeler.py")
 
 

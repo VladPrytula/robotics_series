@@ -91,7 +91,7 @@ bash docker/dev.sh python eval.py --ckpt checkpoints/...zip --env FetchReachDens
 
 ### Isaac Lab (Appendix E)
 
-Isaac Lab is a separate GPU-only track for Appendix E (peg-in-hole insertion).
+Isaac Lab is a separate GPU-only track for Appendix E (GPU-parallel manipulation).
 Use the dedicated image and entrypoint (`docker/Dockerfile.isaac`,
 `docker/dev-isaac.sh`) rather than `docker/dev.sh`.
 

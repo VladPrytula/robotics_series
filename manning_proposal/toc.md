@@ -126,15 +126,15 @@ D.2 Minimal demo: collect frames -> train a small VAE (latent compression)
 D.3 Scope boundary: pointers to Dreamer/DayDreamer-style methods
 D.4 Summary
 
-Appendix E -- Peg-in-hole insertion in Isaac (GPU-only optional)
-This appendix exists to add variety (not another Fetch arm task) and to cover a
-contact-rich regime where "close enough" is not success. It is optional because
-Isaac stacks typically require an NVIDIA GPU. Readers without that hardware can
-still use the checkpoint track to run evaluation and inspect the metrics.
-E.1 Why insertion is qualitatively different: tolerances, contact, jamming
-E.2 Scope boundary: GPU requirement, and why we stay state-based (not pixels)
-E.3 Define success and shaping: alignment + insertion depth + penalties
-E.4 Curriculum knobs: hole tolerance, initial offset/rotation, friction, noise
-E.5 Fast path: easy tolerance run (<= 500k steps) + "did it learn" checks
-E.6 Deliverables: success vs tolerance curve, time-to-insert, stability metrics
+Appendix E -- Isaac Lab Manipulation (GPU-only optional)
+This appendix demonstrates portability: the same SAC methodology transfers to
+Isaac Lab with GPU-parallel physics providing 15-170x wall-clock speedups. It is
+optional because Isaac Lab requires Linux + NVIDIA GPU. Readers without that
+hardware can still use the checkpoint track to run evaluation and inspect metrics.
+E.1 Why this appendix exists: portability evidence and GPU-parallel scaling
+E.2 Build It: SAC core for dict observations + goal relabeling
+E.3 Run It: Lift-Cube training (state-based: 256 envs, ~9K fps, 14 min)
+E.4 Honest difficulty comparison: Lift-Cube vs FetchPickAndPlace
+E.5 Pixels on Isaac: TiledCamera results (64 envs, ~1.2K fps)
+E.6 What can go wrong: curriculum crash, singleton, obs mismatch
 E.7 Summary

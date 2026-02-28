@@ -9,9 +9,6 @@ that mirrors the book's FetchPush work (approach, grasp, lift, track). The same
 SAC methodology from Chapters 3-4 transfers directly, with GPU-parallel physics
 providing dramatic speedups (500-800 fps at 256 envs vs 30-50 fps on MuJoCo).
 
-Scope boundary: Factory PegInsert is documented as a case study of method-problem
-mismatch (POMDP requiring recurrence; see tutorial for analysis).
-
 Design goals (aligned with the tutorial/book workflow):
 1) Dense-first debugging: run a short smoke train on a known-easy Isaac env
    before long manipulation runs.
@@ -30,33 +27,33 @@ SB3 integration:
 
 Typical usage (inside Isaac container):
     # Discover available Isaac env IDs
-    python3 scripts/appendix_e_isaac_peg.py discover-envs --headless
+    python3 scripts/appendix_e_isaac_manipulation.py discover-envs --headless
 
     # Dense-first smoke test on Lift-Cube
-    python3 scripts/appendix_e_isaac_peg.py smoke --headless --seed 0 \
+    python3 scripts/appendix_e_isaac_manipulation.py smoke --headless --seed 0 \
         --dense-env-id Isaac-Lift-Cube-Franka-v0
 
     # Train SAC on Lift-Cube (primary target)
-    python3 scripts/appendix_e_isaac_peg.py train --headless --seed 0 \
+    python3 scripts/appendix_e_isaac_manipulation.py train --headless --seed 0 \
         --env-id Isaac-Lift-Cube-Franka-v0 --num-envs 256 --total-steps 2000000
 
     # Train on any other Isaac env explicitly
-    python3 scripts/appendix_e_isaac_peg.py train --headless --env-id Isaac-Reach-Franka-v0
+    python3 scripts/appendix_e_isaac_manipulation.py train --headless --env-id Isaac-Reach-Franka-v0
 
     # Evaluate a checkpoint
-    python3 scripts/appendix_e_isaac_peg.py eval --headless \
+    python3 scripts/appendix_e_isaac_manipulation.py eval --headless \
         --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
 
     # Record video from a checkpoint
-    python3 scripts/appendix_e_isaac_peg.py record --headless \
+    python3 scripts/appendix_e_isaac_manipulation.py record --headless \
         --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
 
     # Pixel-based training (native TiledCamera sensor, multi-env)
-    python3 scripts/appendix_e_isaac_peg.py train --headless --pixel \
+    python3 scripts/appendix_e_isaac_manipulation.py train --headless --pixel \
         --env-id Isaac-Lift-Cube-Franka-v0 --num-envs 16 --total-steps 2000000
 
 Run through wrapper (recommended):
-    bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke --headless
+    bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py smoke --headless
 """
 from __future__ import annotations
 
@@ -83,8 +80,8 @@ CHECKPOINTS_DIR = Path("checkpoints")
 
 DEFAULT_DENSE_ENV_ID = "Isaac-Reach-Franka-v0"
 
-# Conservative regex set for auto-selecting a likely insertion task.
-PEG_ENV_PATTERNS = [
+# Regex patterns for auto-selecting manipulation task candidates.
+MANIP_ENV_PATTERNS = [
     r"peg",
     r"insert",
     r"insertion",
@@ -96,7 +93,7 @@ PEG_ENV_PATTERNS = [
 
 @dataclass
 class AppendixEConfig:
-    env_id: str = ""  # Empty => auto-select peg/insertion env from registry
+    env_id: str = ""  # Empty => auto-select manipulation env from registry
     dense_env_id: str = DEFAULT_DENSE_ENV_ID
     seed: int = 0
     device: str = "cuda:0"
@@ -137,7 +134,7 @@ def _require_gym() -> None:
     if gym is None:
         raise SystemExit(
             "[appendix-e] Missing dependency: gymnasium. "
-            "Run inside the project container: bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py ..."
+            "Run inside the project container: bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_manipulation.py ..."
         )
 
 
@@ -238,8 +235,8 @@ def _registered_isaac_env_ids() -> list[str]:
     return sorted([eid for eid in env_ids if eid.startswith("Isaac-")])
 
 
-def _find_peg_candidates(env_ids: list[str]) -> list[str]:
-    regex = re.compile("|".join(PEG_ENV_PATTERNS), flags=re.IGNORECASE)
+def _find_manip_candidates(env_ids: list[str]) -> list[str]:
+    regex = re.compile("|".join(MANIP_ENV_PATTERNS), flags=re.IGNORECASE)
     return [eid for eid in env_ids if regex.search(eid)]
 
 
@@ -248,10 +245,10 @@ def _resolve_train_env_id(cfg: AppendixEConfig) -> str:
         return cfg.env_id
 
     env_ids = _registered_isaac_env_ids()
-    candidates = _find_peg_candidates(env_ids)
+    candidates = _find_manip_candidates(env_ids)
     if not candidates:
         raise SystemExit(
-            "[appendix-e] No peg/insertion-like env ID found automatically. "
+            "[appendix-e] No manipulation env ID found automatically. "
             "Run 'discover-envs' and pass --env-id explicitly."
         )
 
@@ -658,7 +655,7 @@ def _do_train(
 
     meta = {
         "created_at": _now_iso(),
-        "pipeline": "appendix_e_isaac_peg",
+        "pipeline": "appendix_e_isaac_manipulation",
         "algo": "sac",
         "env_id": env_id,
         "seed": cfg.seed,
@@ -772,7 +769,7 @@ def _do_eval(
 
     report = {
         "created_at": _now_iso(),
-        "pipeline": "appendix_e_isaac_peg",
+        "pipeline": "appendix_e_isaac_manipulation",
         "env_id": env_id,
         "checkpoint": str(ckpt_path),
         "seed_base": cfg.seed,
@@ -859,19 +856,19 @@ def cmd_discover_envs(cfg: AppendixEConfig, isaac_extra_args: list[str], pattern
     _import_isaac_tasks()
     try:
         env_ids = _registered_isaac_env_ids()
-        peg = _find_peg_candidates(env_ids)
+        manip = _find_manip_candidates(env_ids)
 
         if pattern:
             rgx = re.compile(pattern, flags=re.IGNORECASE)
             env_ids = [eid for eid in env_ids if rgx.search(eid)]
-            peg = [eid for eid in peg if rgx.search(eid)]
+            manip = [eid for eid in manip if rgx.search(eid)]
 
         print(f"[appendix-e] Registered Isaac envs: {len(env_ids)}")
         for env_id in env_ids:
             print(f"  {env_id}")
 
-        print(f"\n[appendix-e] Peg/insertion-like candidates: {len(peg)}")
-        for env_id in peg:
+        print(f"\n[appendix-e] Manipulation candidates: {len(manip)}")
+        for env_id in manip:
             print(f"  {env_id}")
 
         # Probe observation space for the dense-first env only.
@@ -893,16 +890,16 @@ def cmd_discover_envs(cfg: AppendixEConfig, isaac_extra_args: list[str], pattern
                 elif "obs_shape" in result:
                     obs_detail = f", shape={result['obs_shape']}"
                 print(f"[appendix-e]   -> {gc_str}{obs_detail}")
-        if peg and not any(eid in probed_envs for eid in peg):
-            print(f"[appendix-e]   To probe a peg candidate, re-run with: --dense-env-id {peg[0]}")
+        if manip and not any(eid in probed_envs for eid in manip):
+            print(f"[appendix-e]   To probe a candidate, re-run with: --dense-env-id {manip[0]}")
 
         report = {
             "created_at": _now_iso(),
             "total_isaac_envs": len(env_ids),
             "isaac_env_ids": env_ids,
-            "peg_candidates": peg,
+            "manip_candidates": manip,
             "probed_envs": probed_envs,
-            "patterns": PEG_ENV_PATTERNS,
+            "patterns": MANIP_ENV_PATTERNS,
             "versions": _gather_versions(),
         }
         out = _ensure_dir(cfg.results_dir) / "appendix_e_isaac_env_catalog.json"
@@ -974,6 +971,19 @@ def _load_env_from_meta(ckpt_path: Path) -> str | None:
     return str(env_id) if env_id else None
 
 
+def _load_pixel_from_meta(ckpt_path: Path) -> bool | None:
+    """Read pixel flag from checkpoint .meta.json, or None if not found."""
+    meta = _meta_path(ckpt_path)
+    if not meta.exists():
+        return None
+    try:
+        payload = json.loads(meta.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    pixel = payload.get("pixel")
+    return bool(pixel) if pixel is not None else None
+
+
 def cmd_eval(cfg: AppendixEConfig, isaac_extra_args: list[str], ckpt: str) -> int:
     """Evaluate a checkpoint. Boots Isaac once."""
     ckpt_path = Path(ckpt).expanduser().resolve()
@@ -1013,6 +1023,14 @@ def cmd_record(cfg: AppendixEConfig, isaac_extra_args: list[str], ckpt: str, vid
             "[appendix-e] Could not infer env_id. Pass --env-id explicitly."
         )
 
+    # Auto-detect pixel mode from meta.json if not explicitly set via --pixel
+    use_pixel = cfg.pixel
+    if not use_pixel:
+        meta_pixel = _load_pixel_from_meta(ckpt_path)
+        if meta_pixel:
+            print("[appendix-e] Auto-detected pixel=True from checkpoint .meta.json")
+            use_pixel = True
+
     # Determine output path
     if not video_out:
         videos_dir = _ensure_dir("videos")
@@ -1026,10 +1044,12 @@ def cmd_record(cfg: AppendixEConfig, isaac_extra_args: list[str], ckpt: str, vid
     try:
         from stable_baselines3 import SAC
 
-        print(f"[appendix-e] Recording video: {ckpt_path.name} on {env_id}")
+        pixel_tag = " (pixel)" if use_pixel else " (state)"
+        print(f"[appendix-e] Recording video: {ckpt_path.name} on {env_id}{pixel_tag}")
         isaac_env = _make_isaac_env(
             env_id, device=cfg.device, num_envs=1,
             seed=cfg.seed, render_mode="rgb_array",
+            pixel=use_pixel,
         )
         env = _wrap_for_sb3(isaac_env)
         model = SAC.load(str(ckpt_path), env=env, device="auto")
@@ -1161,10 +1181,10 @@ def cmd_all(cfg: AppendixEConfig, isaac_extra_args: list[str]) -> int:
                 "[appendix-e] discover-envs did not produce catalog. Cannot resolve env_id."
             )
         data = json.loads(catalog.read_text(encoding="utf-8"))
-        candidates = data.get("peg_candidates", [])
+        candidates = data.get("manip_candidates", [])
         if not candidates:
             raise SystemExit(
-                "[appendix-e] No peg/insertion-like env found. Pass --env-id explicitly."
+                "[appendix-e] No manipulation env found. Pass --env-id explicitly."
             )
         cfg.env_id = candidates[0]
         print(f"[appendix-e] Auto-selected target env: {cfg.env_id}")
@@ -1249,7 +1269,7 @@ def cmd_compare(cfg: AppendixEConfig, env_id: str, result_paths: list[str]) -> i
 
     out = {
         "created_at": _now_iso(),
-        "pipeline": "appendix_e_isaac_peg",
+        "pipeline": "appendix_e_isaac_manipulation",
         "env_id": env_id,
         "rows": rows,
     }
@@ -1277,7 +1297,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def add_common(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--env-id", default="", help="Target Isaac env id (e.g., Isaac-Lift-Cube-Franka-v0). Empty = auto-select peg/insertion candidate")
+        p.add_argument("--env-id", default="", help="Target Isaac env id (e.g., Isaac-Lift-Cube-Franka-v0). Empty = auto-select manipulation candidate")
         p.add_argument("--dense-env-id", default=DEFAULT_DENSE_ENV_ID, help="Known-easy env for dense-first smoke")
         p.add_argument("--seed", type=int, default=0)
         p.add_argument("--device", default="cuda:0", help="Isaac device for parse_env_cfg, e.g., cuda:0")
@@ -1300,7 +1320,7 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("--checkpoints-dir", default="checkpoints")
         p.add_argument("--results-dir", default="results")
 
-    p_disc = sub.add_parser("discover-envs", help="List Isaac env IDs and peg/insertion candidates")
+    p_disc = sub.add_parser("discover-envs", help="List Isaac env IDs and manipulation candidates")
     add_common(p_disc)
     p_disc.add_argument("--pattern", default="", help="Optional regex filter applied after discovery")
 

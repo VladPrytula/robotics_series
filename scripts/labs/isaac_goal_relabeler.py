@@ -287,7 +287,7 @@ def run_bridge() -> None:
     print("  reward_fn            -> env.compute_reward invariant")
     print("  process_episode_with_her -> real + virtual sample mix")
     print()
-    print("Run-It integration point: scripts/appendix_e_isaac_peg.py --her auto|on|off")
+    print("Run-It integration point: scripts/appendix_e_isaac_manipulation.py --her auto|on|off")
     print()
     print("NOTE: HER relabeling requires goal-conditioned environments")
     print("(observation + achieved_goal + desired_goal keys).")

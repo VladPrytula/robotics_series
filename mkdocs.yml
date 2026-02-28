@@ -83,7 +83,7 @@ nav:
     - "Chapter 7: Robustness Curves": tutorials/ch07_robustness_curves.md
     - "Chapter 9: Pixel Push": tutorials/ch09_pixel_push.md
     - "Chapter 10: Visual SAC": tutorials/ch10_visual_reach.md
-    - "Appendix E: Isaac Peg-In-Hole": tutorials/appendix_e_isaac_peg.md
+    - "Appendix E: Isaac Lab Manipulation": tutorials/appendix_e_isaac_manipulation.md
   - Syllabus: syllabus.md
   - Reference:
     - CLI: reference/cli.md
