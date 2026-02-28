@@ -1,8 +1,8 @@
-# Appendix E: Isaac Peg-In-Hole (GPU-Only)
+# Appendix E: Isaac Lab Manipulation (GPU-Only)
 
-**Goal:** Transfer the book's method to a contact-rich insertion task in Isaac Lab,
-while keeping the same experiment contract: reproducible commands, metadata,
-and JSON evaluation artifacts.
+**Goal:** Transfer the book's SAC methodology to a GPU-parallel manipulation
+task in Isaac Lab, demonstrating that the same algorithm and diagnostic skills
+work across simulators -- with dramatically different wall-clock performance.
 
 ---
 
@@ -14,13 +14,18 @@ algorithmic effects.
 
 This appendix adds **portability evidence**: the same methodological pattern
 (define the contract -> build components -> run controlled experiments)
-applied to Isaac Lab.
+applied to Isaac Lab. The primary demonstration task is
+`Isaac-Lift-Cube-Franka-v0` -- a manager-based manipulation task that mirrors
+our FetchPush work (approach, grasp, lift, track a target). The narrative
+becomes: *the same SAC methodology, dramatically faster thanks to
+GPU-parallel physics.*
 
 Two constraints shape scope:
 
 1. **GPU-only runtime.** Isaac Lab requires Linux + NVIDIA GPU.
-2. **State-first for insertion.** We prioritize state observations
-   before adding pixel complexity.
+2. **Honest method-benchmark matching.** We demonstrate SAC on tasks where
+   it works (Lift-Cube, fully observable MDP) and explain where it does not
+   (PegInsert, POMDP requiring recurrence).
 
 ---
 
@@ -176,11 +181,12 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py discover-envs -
 
 Expected output: a list of registered `Isaac-*` environment IDs and a JSON
 catalog at `results/appendix_e_isaac_env_catalog.json`. The command also
-probes the observation space of the dense-first env (`Isaac-Reach-Franka-v0`).
+probes the observation space of the dense-first env (`Isaac-Reach-Franka-v0`
+by default, or any env you specify with `--dense-env-id`).
 
 ### Test 3: Env Creates and Steps
 
-**What we verify.** An Isaac env can be created, wrapped with
+**What we verify.** The Lift-Cube env can be created, wrapped with
 `Sb3VecEnvWrapper`, and stepped by SB3.
 
 **Why this matters.** This is the integration test between Isaac Lab's batched
@@ -198,7 +204,7 @@ and clip infinite action bounds.
 
 ```bash
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
-    --headless --seed 0 --smoke-steps 100
+    --headless --seed 0 --dense-env-id Isaac-Lift-Cube-Franka-v0 --smoke-steps 100
 ```
 
 With only 100 steps this completes in ~30 seconds (mostly Isaac Sim boot
@@ -226,14 +232,14 @@ update fires.
 
 ```bash
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
-    --headless --seed 0
+    --headless --seed 0 --dense-env-id Isaac-Lift-Cube-Franka-v0
 ```
 
-This runs the default 10,000-step smoke test (~2-3 minutes). On completion,
-check for:
+This runs the default 10,000-step smoke test (~1-2 minutes including Isaac
+boot). On completion, check for:
 
-- `checkpoints/appendix_e_sac_Isaac-Reach-Franka-v0_seed0.zip`
-- `checkpoints/appendix_e_sac_Isaac-Reach-Franka-v0_seed0.meta.json`
+- `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip`
+- `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.meta.json`
 
 ### Summary
 
@@ -241,8 +247,8 @@ check for:
 |------|---------|-----------|----------|
 | 1. Container boots | `dev-isaac.sh python3 -c "import torch; ..."` | ~15-30s | GPU name |
 | 2. Tasks register | `dev-isaac.sh python3 ... discover-envs --headless` | ~30-60s | Env catalog JSON |
-| 3. Env steps | `dev-isaac.sh python3 ... smoke --headless --smoke-steps 100` | ~30s | Console output |
-| 4. Training completes | `dev-isaac.sh python3 ... smoke --headless` | ~2-3 min | Checkpoint + meta |
+| 3. Env steps | `dev-isaac.sh python3 ... smoke --headless --dense-env-id Isaac-Lift-Cube-Franka-v0 --smoke-steps 100` | ~30s | Console output |
+| 4. Training completes | `dev-isaac.sh python3 ... smoke --headless --dense-env-id Isaac-Lift-Cube-Franka-v0` | ~1-2 min | Checkpoint + meta |
 
 ---
 
@@ -270,6 +276,16 @@ the replay buffer swap goals after the fact and recompute rewards.
 
 This is a flat observation vector -- there are no separate goal keys, no
 `compute_reward` method, and no built-in mechanism for HER relabeling.
+
+**Lift-Cube specifically** provides a 36D flat observation:
+
+| Component | Dimensions | Description |
+|-----------|------------|-------------|
+| `joint_pos` | 9 | Franka arm joint positions (7) + gripper (2) |
+| `joint_vel` | 9 | Joint velocities |
+| `object_position` | 3 | Cube position in world frame |
+| `target_object_position` | 7 | Target pose (position + quaternion) |
+| `actions` | 8 | Previous action (feedback for smoothness) |
 
 **Consequences for our pipeline:**
 
@@ -321,49 +337,127 @@ pass infinite bounds through to SB3 -- you will get NaN in the actor loss.
 
 ---
 
-## WHY: Insertion Is Different
+## WHY: Lifting Is Different From Reaching
 
-Peg insertion differs from Reach/Push in one decisive way: **tolerance**.
-A policy can be visually close but still fail due to orientation error,
-contact geometry, or jamming.
+Lift-Cube requires a multi-phase control sequence that Reach does not:
 
-That makes sparse rewards harsher:
+1. **Approach** -- move the gripper toward the cube
+2. **Grasp** -- close the gripper around the cube
+3. **Lift** -- raise the cube off the table
+4. **Track** -- move the held cube to the target pose
 
-- Most episodes fail with reward `-1`
-- Success is binary and narrow
-- Early learning depends on relabeling and replay quality
+Each phase has a qualitatively different optimal action: approach requires
+large arm movements, grasping requires precise gripper timing, lifting
+requires coordinated upward motion, and tracking requires fine position
+control. A Reach policy only needs phase 1.
 
-The practical consequence is the same as Chapter 5:
-we need off-policy learning (SAC) and usually HER-style relabeling when the
-environment exposes goal-conditioned structure. For envs that do not expose
-goal structure, SAC alone with dense rewards is the starting point.
+### Staged Dense Reward
 
-### Contact Requires Memory
+Isaac Lab's Lift-Cube environment uses a staged dense reward structure that
+mirrors Chapter 5's curriculum pattern -- the reward design teaches the agent
+in stages:
 
-Insertion is different from Reach or Push not just in tolerance but in
-*information structure*. A Reach policy can decide its action from a single
-observation -- current pose plus goal is sufficient. An insertion policy needs
-to feel how forces evolve over multiple timesteps: is the peg catching on a
-rim? Sliding into the chamfer? Jamming against the sidewall?
+| Reward term | Weight | What it rewards |
+|-------------|--------|----------------|
+| `reaching_object` | 1.0 | Distance from gripper to cube |
+| `lifting_object` | 15.0 | Height of cube above table |
+| `object_goal_tracking` | 16.0 | Distance from cube to target pose |
+| `object_goal_tracking_fine_grained` | 5.0 | Precise tracking bonus |
+| `action_rate` | -0.0001 | Penalizes jerky actions |
+| `joint_vel` | -0.0001 | Penalizes fast joint movement |
 
-This temporal dependency is why NVIDIA's reference configuration for Factory
-PegInsert uses LSTM (1024 units, 2 layers). The LSTM gives the policy implicit
-memory of the recent force sequence, letting it distinguish "sliding in" from
-"stuck against edge" even when the instantaneous observations look similar.
+The weight structure creates a natural curriculum: the agent first maximizes
+the reaching bonus (easy), then discovers that lifting unlocks a much larger
+reward signal (15x reaching), and finally learns that tracking the target is
+the largest reward component (16x+5x).
 
-Our SAC pipeline uses feedforward MLPs -- no recurrent state. A single-frame
-MLP processes each timestep independently, which is fine for Reach (where
-the optimal action depends only on the current pose-to-goal vector) but
-problematic for insertion (where the optimal action depends on the *history*
-of contact forces).
+This is the same pedagogical pattern we saw in Chapter 5 (goal stratification
+and curriculum learning) -- except here the curriculum is baked into the
+reward function rather than requiring a separate wrapper.
 
-The standard adaptation for adding temporal context to a memoryless policy is
-**frame stacking**: concatenating the N most recent observations into a single
-input vector. With 4 frames of 19D observations, the MLP sees 76D of input
-that encodes position, velocity, and acceleration trends over a ~0.27-second
-window (at the environment's 15 Hz control rate). This is coarser than an
-LSTM's learned memory, but it gives the policy enough temporal signal to
-distinguish contact modes without changing the algorithm.
+### The Hidden Curriculum (and Why SAC Must Disable It)
+
+Isaac Lab's Lift-Cube env has a second curriculum mechanism that is less
+obvious but critically important: a **CurriculumManager** that scales the
+`action_rate` and `joint_vel` penalty weights during training.
+
+| Term | Initial weight | Final weight | Scaling |
+|------|---------------|-------------|---------|
+| `action_rate` | -0.0001 | -0.1 | 1000x |
+| `joint_vel` | -0.0001 | -0.1 | 1000x |
+
+The pedagogical idea is sound: start with tiny penalties so the agent can
+explore freely -- thrash around, make big movements to discover how to reach
+and grasp. Once it learns the basics, ramp up the penalties to encourage
+smooth, controlled motion. *First learn WHAT to do, then learn to do it
+SMOOTHLY.*
+
+NVIDIA designed this curriculum for PPO. PPO is on-policy: it collects a
+batch of experience, updates the policy, then **discards all old data**.
+When the penalties increase, PPO's next batch is collected entirely under
+the new reward scale. There is no conflict between old and new reward
+magnitudes.
+
+**SAC cannot tolerate this.** SAC stores hundreds of thousands of transitions
+in a replay buffer. When the curriculum scales penalties by 1000x, those old
+transitions have rewards of magnitude ~5, but new transitions have rewards of
+magnitude ~5000. The Q-function trains on a mix of both and must somehow
+reconcile two incompatible scales. It is like training a regression model
+where half the labels are in meters and the other half are in kilometers,
+with no indicator of which is which.
+
+In our experiments, this caused a catastrophic reward collapse at ~4.6M
+steps: the reward went from -4.14 (best ever, agent was lifting and tracking)
+to -3,050 in a single 64K-step interval (see Reproduce It below for the
+full diagnostic). The critic loss exploded 540x and the training never
+recovered.
+
+**Our fix:** The pipeline automatically disables the CurriculumManager for
+SAC by setting all curriculum terms to `None` at env creation time. The
+penalty signals still exist at their initial constant values (-0.0001) --
+they just do not change magnitude mid-training. This preserves smooth
+action incentives without poisoning the replay buffer.
+
+**The general principle:** Any system that changes the reward function
+mid-training is incompatible with off-policy replay buffers. The buffer
+cannot distinguish "old reward scale" transitions from "new reward scale"
+transitions. This is a specific instance of a broader assumption: replay
+buffers assume the MDP is **stationary** -- that the transition dynamics
+and reward function do not change over time. Curriculum learning that
+modifies reward weights violates this stationarity assumption.
+
+### Action Space: Joint-Level Control
+
+The action space is 8-dimensional: 7 joint position targets for the Franka
+arm + 1 gripper command. This is more complex than Fetch's 4D Cartesian
+deltas (`dx, dy, dz, gripper`), but the same SAC algorithm handles both --
+continuous actions are continuous actions, regardless of whether they represent
+end-effector velocities or joint positions.
+
+### Full Observability: MLP Is Sufficient
+
+Unlike Factory PegInsert (which is a POMDP requiring recurrence -- see Scope
+Boundary below), Lift-Cube is a fully observable MDP. The 36D observation
+includes joint positions, joint velocities, object position, target pose,
+and previous actions. A single observation frame contains everything the
+agent needs to decide the optimal action -- no temporal reasoning required.
+
+This is why SAC with a feedforward MLP works: the Markov property holds.
+Compare to FetchPush in Chapter 4: similar structure, similar difficulty,
+same methodology.
+
+### Why SAC Should Work
+
+The problem structure tells us SAC is the right algorithm:
+
+- **Continuous actions** -> actor-critic (not DQN)
+- **Dense reward** -> off-policy works well (no HER needed)
+- **36D state** -> MLP sufficient (no CNN, no LSTM)
+- **Sample efficiency** -> SAC's replay buffer reuses experience (vs PPO's on-policy waste)
+
+NVIDIA's reference configuration for Lift-Cube uses PPO with 16.3M steps.
+SAC's superior sample efficiency (off-policy reuse) should solve the task in
+substantially fewer steps -- our budget is 2M, an 8x reduction.
 
 ---
 
@@ -465,8 +559,9 @@ It provides the same chapter-style commands as the rest of the book:
 - `eval`
 - `all`
 - `compare`
+- `record` (video recording from checkpoints)
 
-### E.10 Discover Candidate Insertion Environments
+### E.10 Discover Available Isaac Environments
 
 ```bash
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py discover-envs --headless
@@ -475,8 +570,9 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py discover-envs -
 **Note:** `--headless` is required on DGX and other headless systems. Without
 it, Isaac Sim attempts to open a Vulkan display and will segfault.
 
-The command also **probes the observation space** of the dense-first env
-(`Isaac-Reach-Franka-v0` by default). For the probed env, it reports:
+The command also **probes the observation space** of the specified env
+(`Isaac-Reach-Franka-v0` by default, or any env via `--dense-env-id`). For
+the probed env, it reports:
 
 - Observation type (Box or Dict) and shape
 - Whether the env is goal-conditioned
@@ -498,43 +594,48 @@ Output artifacts:
 ### E.11 Dense-First Smoke Check
 
 ```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke --headless --seed 0
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+    --headless --seed 0 --dense-env-id Isaac-Lift-Cube-Franka-v0
 ```
 
-This is the "do we have a valid learning loop" gate before insertion runs.
-With the default 10,000 steps, expect ~2-3 minutes of wall time (including
+This is the "do we have a valid learning loop" gate before full training.
+With the default 10,000 steps, expect ~1-2 minutes of wall time (including
 Isaac Sim boot).
 
-### E.12 Train on Insertion Task
+### E.12 Train on Lift-Cube
 
 ```bash
-# Auto-select peg/insertion-like env from registry
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train --headless --seed 0
-
-# Or select explicit env ID
+# Primary target: Lift-Cube with 256 parallel envs (8M steps, ~14 min)
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
-  --headless --env-id Isaac-Factory-PegInsert-Direct-v0 --seed 0
+    --headless --seed 0 \
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --num-envs 256 --total-steps 8000000
+
+# Or any other Isaac env
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+    --headless --env-id Isaac-Reach-Franka-v0 --seed 0
 ```
 
 Periodic checkpoints are saved every 100K steps by default (configurable via
-`--checkpoint-freq`). This ensures you do not lose progress on long runs.
-With 500K default steps, expect ~1-2 hours of wall time depending on GPU and
-environment complexity.
+`--checkpoint-freq`). At 256 parallel envs on a modern GPU, expect ~9,000-
+10,000 fps throughput -- 8M steps completes in approximately **14 minutes**.
+Compare this to Chapter 9's pixel-based Push training: ~40 hours on MuJoCo.
 
 ### E.13 Evaluate a Checkpoint
 
 ```bash
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py eval \
-  --headless \
-  --ckpt checkpoints/appendix_e_sac_Isaac-Factory-PegInsert-Direct-v0_seed0.zip
+    --headless \
+    --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
 ```
 
 ### E.14 Compare Multiple Result Files
 
 ```bash
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py compare \
-  --result results/appendix_e_sac_Isaac-Factory-PegInsert-Direct-v0_seed0_eval.json \
-  --result results/appendix_e_sac_Isaac-Factory-PegInsert-Direct-v0_seed1_eval.json
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --result results/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_eval.json \
+    --result results/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed1_eval.json
 ```
 
 ### E.15 Full Pipeline (Smoke -> Train -> Eval)
@@ -550,12 +651,427 @@ constraint at the cost of ~10 seconds of boot time per phase:
 
 ```bash
 bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py all \
-  --headless --seed 0 --smoke-steps 5000 --total-steps 50000
+    --headless --seed 0 \
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --num-envs 256 --total-steps 8000000
 ```
 
-If `--env-id` is not specified, the `all` command runs `discover-envs` as
-a preliminary subprocess to auto-resolve a peg/insertion candidate from
-the registry.
+### E.16 Record Video From Checkpoint
+
+```bash
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
+    --headless \
+    --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
+```
+
+The `record` subcommand creates the env with `render_mode="rgb_array"` and
+`--enable_cameras`, loads the checkpoint, runs one deterministic episode, and
+saves frames as MP4 via `imageio`. The env_id is inferred from the checkpoint
+filename or `.meta.json` if available. Output defaults to
+`videos/appendix_e_<env>_<ckpt_stem>.mp4`.
+
+---
+
+## Reproduce It
+
+This section documents actual training results on Lift-Cube, plus the
+debugging journey with PegInsert that led us to choose this benchmark.
+
+### SAC on Lift-Cube (Primary Result)
+
+Training command:
+
+```bash
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+    --headless --seed 0 \
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --num-envs 256 --total-steps 8000000 \
+    --checkpoint-freq 500000 \
+    --learning-rate 3e-4 --gamma 0.99
+```
+
+Configuration:
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| Algorithm | SAC | Off-policy, continuous actions (Ch3) |
+| Policy | MlpPolicy [256, 256] | 36D flat obs, fully observable MDP |
+| num_envs | 256 | GPU parallelism for throughput |
+| total_steps | 8,000,000 | Multi-phase task needs budget; NVIDIA uses 16.3M with PPO |
+| learning_rate | 3e-4 | SB3 default, works for dense reward |
+| gamma | 0.99 | Standard discount |
+| HER | off (auto-detected) | Env is not goal-conditioned |
+| frame_stack | 1 | MDP, no temporal reasoning needed |
+
+**Training progression (2M steps, seed 0):**
+
+| Timesteps | ep_rew_mean | Interpretation |
+|-----------|------------|----------------|
+| 64K | -29.7 | Reaching tier only |
+| 512K | -26.1 | Reaching improving |
+| 1.0M | -24.8 | Approaching grasping |
+| 1.5M | -23.4 | Partial grasping |
+| 2.0M | -21.8 | Grasping + some lifting |
+
+Throughput: **9,363 fps** at 256 envs. Total wall time: **213.6 seconds**
+(~3.6 minutes) for 2M steps.
+
+**Evaluation (100 episodes, deterministic policy):**
+
+| Metric | Value |
+|--------|-------|
+| return_mean | -4.73 +/- 4.53 |
+| ep_len_mean | 250 (always runs to timeout) |
+| Positive-return episodes | 41/100 (41%) |
+| Mean return (positive eps) | +0.69 |
+| Mean return (negative eps) | -8.50 |
+
+The evaluation reveals a **bimodal distribution**: 41% of episodes achieve
+positive returns (the agent reaches, grasps, lifts, and partially tracks the
+target), while 59% fail to complete the grasping phase. This is consistent
+with partial learning -- the agent has discovered the grasp-and-lift strategy
+but has not generalized it across all goal configurations.
+
+**Interpretation:** 2M steps showed steady improvement with no sign of
+plateau. The reward was still climbing at the final timestep, suggesting the
+agent would continue improving with more training. We extended to 8M steps.
+
+### Act 2: The Curriculum Crash (and What We Learned)
+
+Our first 8M run produced a **catastrophic reward collapse** at ~4.6M steps:
+
+```
+ts=4,624,128  rew=-4.14   <-- best ever
+ts=4,688,128  rew=-3,050  <-- 740x worse in one interval
+```
+
+The critic loss exploded 540x (0.05 -> 26.2) and the entropy coefficient
+loss flipped sign. The reward never recovered.
+
+**Root cause:** Isaac Lab's CurriculumManager scales the `action_rate` and
+`joint_vel` penalty weights from -0.0001 to -0.1 (a 1000x increase) when
+the agent crosses a performance threshold. This is designed for PPO
+(on-policy, no replay buffer). With SAC (off-policy), the replay buffer
+contains transitions collected under the OLD penalty scale. When the
+curriculum kicks in, new transitions have rewards 1000x larger in magnitude.
+The Q-function, calibrated for rewards in [-30, 0], suddenly receives
+Bellman targets computed from rewards in [-5000, 0].
+
+**The fix:** Disable the CurriculumManager for off-policy training. Our
+pipeline now sets all curriculum terms to `None` at env creation time,
+keeping penalties at their initial constant values (-0.0001). The penalty
+signals still exist -- they just don't change magnitude mid-training.
+
+**The lesson (Lesson 14):** Replay buffers assume the MDP is stationary.
+Curriculum learning that modifies reward weights violates this assumption.
+The combination of curriculum + off-policy is a known pitfall but rarely
+documented because most curriculum RL research uses on-policy methods.
+
+### Act 3: Clean Run (8M Steps, Curriculum Disabled)
+
+Training command (curriculum auto-disabled for SAC):
+
+```bash
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+    --headless --seed 0 \
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --num-envs 256 --total-steps 8000000 \
+    --checkpoint-freq 500000 \
+    --learning-rate 3e-4 --gamma 0.99
+```
+
+**Training progression (8M steps, seed 0, curriculum disabled):**
+
+| Timesteps | ep_rew_mean | Phase |
+|-----------|------------|-------|
+| 64K | -27.2 | Reaching only |
+| 1M | -24.8 | Reaching improving |
+| 2M | -21.8 | Approaching grasping |
+| 3M | -15.4 | Grasping beginning |
+| 4M | -6.4 | Lifting |
+| 5M | -1.7 | Goal tracking |
+| 6M | -1.5 | Tracking refinement |
+| 7M | -1.5 | Near convergence |
+| 8M | -1.4 | Converged |
+
+Throughput: **9,377 fps** at 256 envs. Total wall time: **853 seconds**
+(~14.2 minutes) for 8M steps.
+
+**Evaluation (100 episodes, deterministic policy):**
+
+| Metric | Value |
+|--------|-------|
+| return_mean | **+0.54 +/- 0.05** |
+| ep_len_mean | 250 |
+| Positive-return episodes | **100/100 (100%)** |
+| Min return | +0.46 |
+| Max return | +0.68 |
+
+Every episode achieves positive return -- the agent consistently reaches,
+grasps, lifts, and tracks the target across all goal configurations. The
+tight standard deviation (0.05) indicates robust generalization.
+
+**Compare with 2M checkpoint:** At 2M steps, only 41% of episodes achieved
+positive returns, with a bimodal distribution (mean -4.73 +/- 4.53). The
+extra 6M steps allowed SAC to generalize the grasp-lift-track sequence from
+a subset of goal configurations to all of them.
+
+### Wall-Clock Comparison
+
+| Setup | Env | Steps | fps | Wall time |
+|-------|-----|-------|-----|-----------|
+| Ch9 pixel Push (MuJoCo) | FetchPush-v4 | 8M | 30-50 | ~40 hours |
+| Ch4 state Push (MuJoCo) | FetchPush-v4 | 2M | 500-600 | ~1 hour |
+| **Appendix E Lift-Cube (Isaac, 2M)** | Isaac-Lift-Cube-Franka-v0 | 2M | ~9,363 | **~3.6 min** |
+| **Appendix E Lift-Cube (Isaac, 8M)** | Isaac-Lift-Cube-Franka-v0 | 8M | ~9,363 | **~14 min** |
+
+The speedup is dramatic: Isaac Lab at 256 envs runs **~15x faster** than
+MuJoCo state-based training and **~170x faster** than MuJoCo pixel-based
+training. This is the core value proposition of GPU-parallel physics: what
+takes hours on MuJoCo takes minutes on Isaac. Even the extended 8M run
+completes in under 15 minutes.
+
+### Video Progression: Seeing Learning Happen
+
+Numbers tell us the agent improved; videos show us *how*. We recorded one
+episode from three checkpoints spaced across the 8M training run to visualize
+the progression from random behavior to competent manipulation.
+
+| Stage | Checkpoint | Steps | Expected behavior |
+|-------|-----------|-------|-------------------|
+| Early | `*_199680_steps.zip` | ~200K | Random arm movements, occasionally approaching cube |
+| Mid | `*_2999808_steps.zip` | ~3M | Reaching cube reliably, attempting grasp, partial lifts |
+| Converged | `*_seed0.zip` | 8M (final) | Full reach-grasp-lift-track sequence, every episode |
+
+Recording uses Isaac Lab's viewport camera via `env.render()`:
+
+```bash
+# Each runs as a separate subprocess (SimulationContext singleton)
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
+    --headless --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_199680_steps.zip
+
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
+    --headless --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_2999808_steps.zip
+
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py record \
+    --headless --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
+```
+
+Output: `videos/appendix_e_Isaac-Lift-Cube-Franka-v0_*.mp4`
+
+The `record` subcommand creates the env with `render_mode="rgb_array"` and
+`--enable_cameras` (for headless Vulkan rendering), warms up the renderer
+(first few frames are often black during shader compilation), runs one
+deterministic episode, and saves frames as MP4 at 30 fps via `imageio`.
+
+**What to look for in the videos:**
+
+- **Early (200K):** The arm moves without purpose -- no reaching strategy.
+  Reward is deep negative (~-27). The agent is still in the random exploration
+  phase, collecting experience for the replay buffer.
+- **Mid (3M):** The arm reaches toward the cube and sometimes grasps it. You
+  may see partial lifts that fail (cube slips). Reward is around -15, meaning
+  the agent has learned reaching and is discovering grasping.
+- **Converged (8M):** Smooth, purposeful motion: approach, close gripper,
+  lift, track target. Reward is positive (+0.54). The entire manipulation
+  sequence is reliable across goal configurations.
+
+This progression mirrors the training curve: the jumps between phases
+(reaching -> grasping -> lifting -> tracking) are visible both in reward
+plots and in behavior.
+
+### PegInsert: What Came Before (Diagnostic Journey)
+
+Before Lift-Cube, we attempted Factory PegInsert -- a contact-rich insertion
+task that seemed like a natural target for manipulation RL. The debugging
+process is instructive because it demonstrates how to diagnose
+method-benchmark mismatches.
+
+**First attempt (500K steps, 64 envs):**
+
+| Metric | Start | End | Interpretation |
+|--------|-------|-----|---------------|
+| ep_rew_mean | 31.5 | 29.3 | Flat -- stuck at approach-tier reward |
+| ep_len_mean | 149 | 149 | Always times out, never inserts |
+| ent_coef | 0.89 | 0.10 | Policy becoming deterministic |
+
+SAC is "confidently failing" -- the same Phase 1 pattern from Lesson 9.
+The agent learns to approach the socket but cannot perform fine insertion.
+
+**Root cause:** Factory PegInsert is a **POMDP**. The actor sees 19D partial
+state (fingertip pose, velocities, previous actions) while the critic sees
+72D full state (including socket geometry, contact forces, peg orientation).
+Fine insertion requires temporal reasoning about contact sequences -- is the
+peg catching, sliding, or jamming? A memoryless MLP processes each frame
+independently and cannot distinguish these contact modes.
+
+NVIDIA's reference config uses LSTM (1024 units, 2 layers) + asymmetric
+actor-critic for exactly this reason. The LSTM gives the policy implicit
+memory of the recent force sequence.
+
+**What we tried:** Frame stacking (4 frames of 19D = 76D input), larger
+network ([512, 256, 128]), longer budget (3M steps). Frame stacking
+approximates temporal context but is fundamentally limited compared to
+learned recurrence -- it provides a fixed window rather than adaptive memory.
+
+**What we learned:** The diagnostic skill from Chapter 9 (recognizing the
+three-phase loss pattern) transferred perfectly. The method did not fail
+because SAC is wrong -- it failed because the problem structure (POMDP)
+does not match the algorithm's assumptions (Markov observations). This
+mismatch is exactly the kind of structural diagnosis the book teaches.
+
+---
+
+## Scope Boundary: PegInsert and the Limits of Transfer
+
+Factory PegInsert is documented as a **scope boundary** -- a case where our
+method does not work, and we can explain precisely why.
+
+### The Mismatch
+
+| Property | Lift-Cube | PegInsert |
+|----------|-----------|-----------|
+| Actor observation | 36D (full state) | 19D (partial state) |
+| Critic observation | 36D (same) | 72D (full state) |
+| Markov? | Yes | No (POMDP) |
+| NVIDIA reference | PPO, MlpPolicy | PPO + LSTM, asymmetric |
+| SAC+MLP result | Learns multi-phase control | Stuck at approach tier |
+
+### Why SAC+MLP Cannot Solve PegInsert
+
+The actor's 19D observation is a single-frame snapshot: fingertip position,
+velocity, and previous action. But fine insertion requires sensing how forces
+evolve over multiple timesteps. Consider three contact states:
+
+1. **Peg sliding into chamfer** -- forces are low, decreasing. Correct action: continue downward.
+2. **Peg catching on rim** -- lateral forces are rising. Correct action: retract and realign.
+3. **Peg jammed against sidewall** -- forces are high, stable. Correct action: wiggle.
+
+All three may produce identical single-frame observations (similar pose,
+similar forces). Only the *sequence* of forces distinguishes them. A
+memoryless MLP maps identical inputs to identical outputs -- it cannot
+distinguish these three states.
+
+### What Would Be Needed
+
+To solve PegInsert with our framework, we would need one of:
+
+1. **Enrich the observation** -- make it Markov by including contact forces,
+   peg orientation relative to socket, and enough history that a single
+   frame is sufficient. This effectively converts the POMDP into an MDP.
+2. **Add recurrence** -- LSTM or GRU layers in the policy, giving it learned
+   memory. This requires switching from SB3 (which does not support recurrent
+   SAC) to a framework like RL-Games or cleanrl.
+3. **Frame stacking** -- a coarser approximation that provides a fixed
+   temporal window. Our experiment with 4-frame stacking was inconclusive;
+   it may need more frames or a longer training budget.
+
+This is not a failure of SAC -- it is a mismatch between problem structure
+and algorithm assumptions. Recognizing this mismatch is exactly the
+diagnostic skill the book teaches (Lesson 13).
+
+---
+
+## Pixels on Isaac: Bridging to Chapter 9
+
+Chapter 9 showed that SAC could learn from pixels instead of state vectors
+on MuJoCo FetchPush. A natural question: can we do the same on Isaac Lab?
+
+### Approach: Render-Based Pixel Wrapper
+
+Rather than using Isaac Lab's native visuomotor environments (which have
+`subtask_terms` reward issues and are a harder Stack-Cube task), we add pixel
+observations to Lift-Cube using `env.render()` -- exactly the same pattern
+Chapter 9 used with FetchPush.
+
+**How it works:**
+
+1. Create Lift-Cube with `render_mode="rgb_array"` + `--enable_cameras`
+2. After `Sb3VecEnvWrapper`, the env exposes `Box(36,)` state observations
+   and supports `render()` for viewport frames
+3. `IsaacPixelObsWrapper` calls `render()` each step, resizes 1280x720 to
+   84x84 via PIL, transposes HWC to CHW, and creates a Dict observation:
+   `{"pixels": uint8(3, 84, 84), "state": float32(36,)}`
+4. SB3's `MultiInputPolicy` auto-detects the image key and routes it through
+   NatureCNN (CNN for pixels, Flatten for state vector, concatenated before
+   the policy/value MLP)
+
+This mirrors Chapter 9's `PixelObservationWrapper` but wraps a VecEnv
+(Isaac Lab) rather than a Gymnasium env. The observation design follows the
+same sensor separation principle (Lesson 1): the CNN processes world-state
+from pixels, while the state vector provides proprioception directly.
+
+### The Trade-Off: Parallelism vs Pixels
+
+Isaac Lab's viewport camera is **global** -- it renders the scene from a
+single viewport, not per-environment. This forces `num_envs=1` for pixel
+mode, collapsing the GPU parallelism advantage that made state-based training
+so fast.
+
+| Mode | num_envs | Expected fps | Wall time (2M steps) |
+|------|----------|-------------|---------------------|
+| State-based | 256 | ~9,000 | ~3.6 min |
+| Pixel-based | 1 | ~50-200 | hours |
+| Ch9 MuJoCo pixel Push | 4 | ~30-50 | ~40 hours |
+
+This is an honest trade-off: GPU physics helps state-based training
+enormously (256 envs, 9,000+ fps), but pixel rendering bottlenecks back to
+serial execution. The rendering pipeline (Vulkan viewport capture -> CPU
+resize -> numpy conversion) adds ~10-20ms per step.
+
+### Running Pixel Lift-Cube
+
+```bash
+# Smoke test: verify pixel wrapper + MultiInputPolicy initialization
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+    --headless --seed 0 --pixel \
+    --dense-env-id Isaac-Lift-Cube-Franka-v0 --smoke-steps 2000
+
+# Full training (2M steps, num_envs=1 forced by --pixel)
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
+    --headless --seed 0 --pixel \
+    --env-id Isaac-Lift-Cube-Franka-v0 \
+    --total-steps 2000000 \
+    --buffer-size 200000 \
+    --batch-size 256 \
+    --learning-starts 5000
+```
+
+Key choices:
+
+- **`--pixel`** injects `--enable_cameras` automatically and forces
+  `num_envs=1`
+- **buffer_size=200K**: 84x84x3 uint8 = 21KB per frame. At 200K
+  transitions (obs + next_obs), this is ~8GB -- fits in RAM
+- **batch_size=256**: Same as state-based training
+- **learning_starts=5000**: Collect some pixel experience before first
+  gradient update
+
+### What Isaac Lab Also Offers (Native Visuomotor)
+
+Isaac Lab has five visuomotor Stack-Cube variants with per-environment
+cameras (table-mounted + wrist-mounted, 200x200 RGB each). These are
+architecturally richer than our render-based approach but require
+non-trivial adapter work:
+
+- **Image normalization:** Isaac Lab provides float32 [0, 1] images; SB3
+  expects uint8 [0, 255]. Our `IsaacImageNormWrapper` handles this
+  conversion, but the visuomotor envs also use `subtask_terms` instead of
+  standard reward terms.
+- **Two cameras:** Processing two 200x200 streams doubles CNN computation.
+- **Stack-Cube vs Lift-Cube:** Stack-Cube is a harder task (stack two cubes)
+  with a different reward structure.
+
+We chose the render-based approach because it isolates the pixel observation
+question from the task difficulty question: same task (Lift-Cube), same
+reward, just different observations. This makes the comparison with
+state-based Lift-Cube clean and interpretable.
+
+For readers interested in the native visuomotor integration:
+
+- Isaac Lab's camera sensor documentation (`isaaclab.sensors.Camera`)
+- NVIDIA's RL-Games training scripts for visuomotor tasks
+- The `IsaacImageNormWrapper` in our pipeline (handles float32->uint8)
 
 ---
 
@@ -617,16 +1133,6 @@ headless system (DGX, CI), there is no display server.
 All example commands in this appendix include it. If you forget, the error
 appears before any Python code runs, which can be confusing.
 
-### Missing Peg/Insertion Environment
-
-**Symptom.** `SystemExit: No peg/insertion-like env ID found automatically.`
-
-**Cause.** Isaac Lab's available task IDs vary across releases. The
-auto-selection regex may not match any registered env in your version.
-
-**Resolution.** Run `discover-envs` to see what is actually registered, then
-pass `--env-id` explicitly.
-
 ### GPU Memory Exhaustion
 
 **Symptom.** `CUDA out of memory` error during env creation or training.
@@ -636,7 +1142,8 @@ shared with other workloads, the remaining memory may be insufficient for
 SB3's replay buffer and networks.
 
 **Resolution.** Monitor with `nvidia-smi` before launching. Free other GPU
-workloads, or use a GPU with more VRAM.
+workloads, or use a GPU with more VRAM. With 256 parallel Lift-Cube envs,
+expect ~12-15 GB total GPU memory usage.
 
 ### First-Run Shader Compilation
 
@@ -649,185 +1156,61 @@ initial startup logs.
 Docker volumes). If you deleted the Docker volumes (`docker volume rm
 isaac-cache-glcache`), the compilation will repeat.
 
+### Curriculum Reward Collapse (Off-Policy Only)
+
+**Symptom.** Training reward improves steadily for millions of steps, then
+catastrophically collapses (e.g., -4 to -3,050 in one interval). Critic loss
+explodes 100-500x. Reward never recovers.
+
+**Cause.** Isaac Lab's CurriculumManager scaled reward penalty weights
+mid-training. The replay buffer contains transitions collected under the old
+reward scale; new transitions use the new (much larger) scale. The Q-function
+cannot reconcile the two, causing Bellman target mismatch.
+
+**Resolution.** Our pipeline automatically disables the CurriculumManager for
+off-policy algorithms (SAC/TD3). If you see this on a new Isaac Lab env,
+check whether it has curriculum terms that modify reward weights:
+
+```bash
+# Look for CurriculumManager in the env startup logs
+bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
+    --headless --dense-env-id <your-env> --smoke-steps 100 2>&1 | grep -i curriculum
+```
+
+If it reports active curriculum terms, the pipeline should disable them
+automatically. If it does not (e.g., a custom env), override `env_cfg.curriculum`
+before `gym.make()`.
+
+**Note:** This only affects off-policy algorithms. PPO is immune because it
+discards experience after each update -- there is no replay buffer to become
+stale.
+
 ### Low num_envs Throughput
 
-**Symptom.** Training is much slower than expected (e.g., 3 fps on a powerful
-GPU).
+**Symptom.** Training is much slower than expected (e.g., 88 fps on a
+powerful GPU).
 
 **Cause.** Using `num_envs=1` on a GPU-parallel physics engine. NVIDIA PhysX
 is designed for batched execution -- `num_envs=1` wastes over 95% of compute
 on kernel launch overhead.
 
-**Resolution.** Use `--num-envs 64` or `--num-envs 128` (Factory's default).
-`Sb3VecEnvWrapper` supports batched envs natively. Note that `learning_starts`
-and `buffer_size` may need tuning to account for the higher data throughput
-(SB3 divides these by `num_envs` internally).
+**Resolution.** Use `--num-envs 256` for Lift-Cube (or `--num-envs 128` for
+heavier tasks like Factory). `Sb3VecEnvWrapper` supports batched envs
+natively. At `num_envs=256`, Lift-Cube achieves ~9,000-10,000 fps vs ~88 fps
+at `num_envs=1` -- a **~100x throughput improvement**.
 
 ---
 
 ## Deliverables
 
-A complete Appendix E run should produce:
+A complete Appendix E Lift-Cube run should produce:
 
-- `checkpoints/appendix_e_sac_<env>_seed<N>.zip`
-- `checkpoints/appendix_e_sac_<env>_seed<N>.meta.json`
-- `results/appendix_e_sac_<env>_seed<N>_eval.json`
-- `results/appendix_e_sac_<env>_comparison.json`
+- `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip`
+- `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.meta.json`
+- `results/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0_eval.json`
 - `results/appendix_e_isaac_env_catalog.json`
+- `videos/appendix_e_Isaac-Lift-Cube-Franka-v0_*.mp4` (from `record` command)
 
-The `.meta.json` includes `obs_space_type`, `is_goal_conditioned`, and
-`wrapper: "Sb3VecEnvWrapper"` fields, so you can verify after training
+The `.meta.json` includes `obs_space_type`, `is_goal_conditioned`, `pixel`,
+and `wrapper: "Sb3VecEnvWrapper"` fields, so you can verify after training
 which observation convention was detected and which SB3 integration was used.
-
----
-
-## Reproduce It
-
-This section documents the full debugging journey, including the initial
-failure and root cause analysis. We show the complete diagnostic process
-rather than just the final working recipe, because the diagnostic skills
-transfer to other environments.
-
-### Act 1: First Attempt (Vanilla SAC, 500K Steps)
-
-Our first run used default SAC hyperparameters with 64 parallel environments:
-
-```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
-    --headless --seed 0 \
-    --env-id Isaac-Factory-PegInsert-Direct-v0 \
-    --num-envs 64 --total-steps 500000
-```
-
-TensorBoard revealed a pattern we had seen before (Lesson 9):
-
-| Metric | Start | End | Interpretation |
-|--------|-------|-----|---------------|
-| ep_rew_mean | 31.5 | 29.3 | Flat -- stuck at approach-tier reward |
-| ep_len_mean | 149 | 149 | Always times out, never inserts |
-| ent_coef | 0.89 | 0.10 | Policy becoming deterministic |
-| actor_loss | -12.2 | -31.5 | Updating but no reward improvement |
-| critic_loss | 3.7 | 11.9 | Oscillating -- no clear value structure |
-
-**Diagnosis:** SAC is "confidently failing." Applying Lesson 9's three-phase
-framework: the flat reward combined with an increasingly deterministic policy
-(ent_coef 0.89 -> 0.10) and oscillating critic loss means the agent is stuck
-in Phase 1 -- memorizing failure. The policy becomes more certain about a bad
-strategy without ever discovering better trajectories.
-
-### Act 2: Root Cause Analysis
-
-**Why ~29 reward?** Factory PegInsert uses a multi-tier dense reward function
-with baseline (approach), coarse (alignment), and fine (insertion) tiers. The
-agent reaches the baseline tier -- it learns to move the arm toward the socket
--- but cannot progress to fine insertion. The ~29 reward corresponds to
-maximizing the approach-tier bonus while getting zero from the finer tiers.
-
-**Why can't it progress?** The 19D policy observation includes fingertip pose,
-velocities, and previous actions -- a single snapshot. But fine insertion
-requires sensing how forces change over multiple steps. Is the peg catching on
-the rim? Sliding into the chamfer? Jamming? A memoryless MLP processes each
-frame independently; it cannot reason about force trends.
-
-**Reference configuration comparison.** NVIDIA's own training config for
-Factory PegInsert uses RL-Games PPO with:
-
-- LSTM (1024 units, 2 layers) for temporal reasoning
-- Asymmetric actor-critic (policy sees 19D obs, critic sees 72D full state)
-- MLP layers [512, 128, 64]
-- gamma=0.995, 128 envs, ~3.27M total steps
-
-The LSTM is the critical difference -- it gives the policy implicit memory
-of the recent contact sequence.
-
-**Connection to Chapter 9.** The same pattern appeared in pixel-based Push:
-a representation bottleneck (there it was visual encoding, here it is temporal
-encoding) causes a flat initial phase. The fix follows the same principle --
-give the policy the information it needs.
-
-### Act 3: Adaptation (Frame Stacking + Architecture + Budget)
-
-We address the temporal gap with three changes:
-
-1. **Frame stacking (4 frames).** With 19D observations, 4 frames produce 76D
-   input, encoding ~0.27 seconds of position and velocity trends at 15 Hz.
-   This approximates the LSTM's sequential memory without changing the
-   algorithm.
-
-2. **Larger network ([512, 256, 128]).** The richer 76D input needs more
-   capacity than the default [256, 256]. This matches NVIDIA's [512, 128, 64]
-   but wider, since our MLP lacks the LSTM's compression.
-
-3. **Training budget and hyperparameters.** gamma=0.995 (longer effective
-   horizon), lr=1e-4 (more stable for harder tasks), 128 envs (Factory
-   default), 3M total steps (matching NVIDIA's budget).
-
-```bash
-bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
-    --headless --seed 0 \
-    --env-id Isaac-Factory-PegInsert-Direct-v0 \
-    --num-envs 128 \
-    --total-steps 3000000 \
-    --checkpoint-freq 100000 \
-    --frame-stack 4 \
-    --net-arch "512,256,128" \
-    --gamma 0.995 \
-    --learning-rate 1e-4
-```
-
-| Parameter | Failed Run | Adapted Run | Why |
-|-----------|-----------|-------------|-----|
-| frame_stack | 1 (none) | **4** | Temporal context for contact reasoning |
-| net_arch | [256, 256] | **[512, 256, 128]** | Larger capacity for richer input |
-| gamma | 0.99 | **0.995** | Longer effective horizon |
-| learning_rate | 3e-4 | **1e-4** | More stable for harder tasks |
-| num_envs | 64 | **128** | Factory default, better GPU utilization |
-| total_steps | 500K | **3M** | Matches NVIDIA's training budget |
-
-**What to expect:**
-
-- **Steps 0-500K:** Approach-tier reward (~29), similar to the first attempt.
-- **Steps 500K-1.5M:** If frame stacking provides sufficient temporal context,
-  reward should start climbing as the fine-insertion tier activates. Critic
-  loss may rise -- this is the Phase 2 signal from Lesson 9.
-- **Steps 1.5M-3M:** Convergence or plateau.
-
-If reward is still flat at 1M steps, the frame stacking is insufficient and
-the task genuinely requires recurrent architectures (LSTM/GRU via RL-Games
-PPO).
-
-!!! note "Results pending"
-    Training results will be added here once the 3M-step run completes
-    (~5.7 hours at 128 envs). Check for updated checkpoints and eval
-    artifacts in the standard locations.
-
----
-
-## Scope Boundary
-
-This appendix focuses on **method transfer**, not exhaustive Isaac tuning.
-
-Most Isaac Lab environments are **not** goal-conditioned in the
-Gymnasium-Robotics sense. They expose flat observation vectors under a
-`policy` key, with no separate `achieved_goal` / `desired_goal` structure.
-As a result:
-
-- **SAC without HER is the expected default** for most Isaac envs. With
-  `--her auto`, the pipeline detects this and skips HER automatically.
-- **If goal-conditioned envs are available**, HER activates automatically.
-  The pipeline checks for `{observation, achieved_goal, desired_goal}` keys
-  and a `compute_reward` method on the unwrapped env.
-- **Adding goal structure to a non-goal-conditioned env** is possible by
-  writing a thin Gymnasium wrapper that extracts achieved/desired goals from
-  the observation vector and implements `compute_reward`. We do not attempt
-  this here because it requires task-specific knowledge of which observation
-  dimensions correspond to gripper pose vs. object pose.
-
-We use `num_envs=64-128` for Factory tasks to achieve practical throughput.
-GPU-parallel physics is essential for contact-rich environments: Factory
-PegInsert at `num_envs=1` runs at ~3 fps; at `num_envs=64`, ~145 fps; at
-`num_envs=128`, ~170 fps. SB3's `VecEnv` interface supports batched envs
-natively through Isaac Lab's `Sb3VecEnvWrapper`. For readers interested in
-native Isaac Lab training loops (which bypass SB3 entirely and scale to
-thousands of parallel envs), we point to the `isaaclab_rl` extension and
-the Isaac Lab documentation (Mittal et al., 2023).

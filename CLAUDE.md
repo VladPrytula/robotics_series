@@ -518,30 +518,60 @@ Example (Ch4 bridge):
 > into learning signal by asking: 'what goal would this trajectory have
 > achieved?'"
 
-**Tone:**
-- Humble but rigorous. Acknowledge field-wide problems (reproducibility crisis, sensitivity to hyperparameters)
-- Explain failures as structural issues, not personal incompetence
-- "The problem formulation was ill-posed" not "I made a mistake"
-- Cite relevant literature when making claims (Henderson 2018 on reproducibility)
+**Tone and Prose Rhythm:**
 
-**Humble Writing Style:**
+The tone we aim for is humble but rigorous -- the voice of someone who has
+struggled with the same problems the reader faces and can describe what they
+learned without pretending the path was obvious. That means acknowledging
+field-wide difficulties (the reproducibility crisis, sensitivity to
+hyperparameters) as structural issues rather than personal failures, so that
+"the problem formulation was ill-posed" replaces "I made a mistake," and
+claims about algorithmic behavior are grounded in specific literature
+(Henderson et al. 2018 on reproducibility, for instance) rather than
+asserted from authority.
 
-We explain and invite, not command and preach. The goal is collaboration with the reader, not lecturing.
+Prose rhythm matters as much as word choice. When guidance is written as a
+sequence of short declarative bullets, the agent mirrors that rhythm in
+tutorial prose -- producing text that reads like a checklist rather than an
+argument. We prefer paragraphs that advance a single idea across several
+sentences connected by logical tissue: "so that," "which means," "since,"
+"provided that." Parentheticals woven into sentences (like this one) keep
+qualifications close to the claims they modify, rather than splitting them
+into separate bullet points. Lists remain useful for genuinely parallel
+items -- environment names, file paths, CLI flags -- but not for prose
+arguments that happen to have multiple parts.
 
-| Instead of... | Write... |
-|---------------|----------|
-| "You must do this" | "We find this useful because..." |
-| "The logic is..." | "The reasoning goes something like..." |
-| "This is the only way" | "This works well for us; alternatives exist" |
-| "Never do X" | "We avoid X because..." |
-| "This is obvious" | (just explain it) |
+A concrete example helps calibrate the difference:
 
-**Voice guidelines:**
-- First person plural ("we") invites collaboration; imperative mood ("do this") creates distance
-- Explain *why* we do things instead of commanding readers to do them
-- Acknowledge alternatives: "not the only way", "one approach is..."
-- When something is hard, say so: "this took us several attempts" not "simply do X"
-- Admit uncertainty: "we believe", "in our experience", "this seems to work"
+> *Staccato (before):* Humble but rigorous. Acknowledge field-wide problems.
+> Explain failures as structural issues. Cite literature.
+>
+> *Flowing (after):* The tone we aim for is humble but rigorous -- we
+> acknowledge field-wide problems like the reproducibility crisis as
+> structural issues rather than personal failures, and we ground claims
+> in specific literature rather than asserting them from authority.
+
+**Humble Writing Style and Voice:**
+
+We write in first person plural ("we") because it frames the text as
+collaboration rather than instruction -- "we find this useful because..."
+instead of "you must do this," "the reasoning goes something like..." instead
+of "the logic is...," "this works well for us; alternatives exist" instead of
+"this is the only way." When we want to discourage a practice, "we avoid X
+because..." is warmer than "never do X," and when something might seem
+self-evident, we just explain it rather than writing "this is obvious" (which
+helps no one and alienates anyone who did not find it obvious). The word
+"simply" deserves special vigilance: if something were truly simple, it would
+not need a sentence explaining it, so "simply configure the rendering backend"
+becomes "configure the rendering backend -- here is what each option does."
+
+The same principle extends to how we describe difficulty and uncertainty.
+Saying "this took us several attempts" is more honest (and more useful) than
+"simply do X," and phrases like "we believe," "in our experience," and "this
+seems to work" signal that the field is empirical and our results are situated,
+not universal. We acknowledge alternatives ("not the only way," "one approach
+is...") because the reader will encounter different advice elsewhere and
+deserves to know that reasonable people disagree.
 
 **Examples:**
 

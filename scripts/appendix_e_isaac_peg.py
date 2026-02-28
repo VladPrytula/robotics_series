@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""Appendix E: Isaac Lab Peg-In-Hole Pipeline (book-style Run It script).
+"""Appendix E: Isaac Lab Manipulation Pipeline (book-style Run It script).
 
 This script prepares a reproducible SAC (+ optional HER) pipeline for Appendix E
 without coupling to MuJoCo/Gymnasium-Robotics assumptions.
 
+Primary target: Isaac-Lift-Cube-Franka-v0 -- a manager-based manipulation task
+that mirrors the book's FetchPush work (approach, grasp, lift, track). The same
+SAC methodology from Chapters 3-4 transfers directly, with GPU-parallel physics
+providing dramatic speedups (500-800 fps at 256 envs vs 30-50 fps on MuJoCo).
+
+Scope boundary: Factory PegInsert is documented as a case study of method-problem
+mismatch (POMDP requiring recurrence; see tutorial for analysis).
+
 Design goals (aligned with the tutorial/book workflow):
 1) Dense-first debugging: run a short smoke train on a known-easy Isaac env
-   before long insertion runs.
+   before long manipulation runs.
 2) One-command reproducibility: train/eval artifacts are always written to
    checkpoints/*.zip + *.meta.json and results/*.json.
 3) Isaac-safe boot order: initialize AppLauncher BEFORE importing/registering
@@ -21,21 +29,31 @@ SB3 integration:
   This is the same wrapper used by Isaac Lab's own training scripts.
 
 Typical usage (inside Isaac container):
-    # Discover available Isaac env IDs and peg-like candidates
+    # Discover available Isaac env IDs
     python3 scripts/appendix_e_isaac_peg.py discover-envs --headless
 
-    # Dense-first smoke test (short Reach run)
-    python3 scripts/appendix_e_isaac_peg.py smoke --headless --seed 0
+    # Dense-first smoke test on Lift-Cube
+    python3 scripts/appendix_e_isaac_peg.py smoke --headless --seed 0 \
+        --dense-env-id Isaac-Lift-Cube-Franka-v0
 
-    # Train on auto-selected peg/insertion env (if available)
-    python3 scripts/appendix_e_isaac_peg.py train --headless --seed 0
+    # Train SAC on Lift-Cube (primary target)
+    python3 scripts/appendix_e_isaac_peg.py train --headless --seed 0 \
+        --env-id Isaac-Lift-Cube-Franka-v0 --num-envs 256 --total-steps 2000000
 
-    # Train on a specific env explicitly
-    python3 scripts/appendix_e_isaac_peg.py train --headless --env-id Isaac-Factory-PegInsert-Direct-v0
+    # Train on any other Isaac env explicitly
+    python3 scripts/appendix_e_isaac_peg.py train --headless --env-id Isaac-Reach-Franka-v0
 
     # Evaluate a checkpoint
     python3 scripts/appendix_e_isaac_peg.py eval --headless \
-        --ckpt checkpoints/appendix_e_sac_Isaac-Factory-PegInsert-Direct-v0_seed0.zip
+        --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
+
+    # Record video from a checkpoint
+    python3 scripts/appendix_e_isaac_peg.py record --headless \
+        --ckpt checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip
+
+    # Pixel-based training (native TiledCamera sensor, multi-env)
+    python3 scripts/appendix_e_isaac_peg.py train --headless --pixel \
+        --env-id Isaac-Lift-Cube-Franka-v0 --num-envs 16 --total-steps 2000000
 
 Run through wrapper (recommended):
     bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke --headless
@@ -95,6 +113,7 @@ class AppendixEConfig:
     tau: float = 0.005
     ent_coef: str = "auto"
 
+    pixel: bool = False  # Use native TiledCamera sensor for pixel observations
     frame_stack: int = 1  # Number of frames to stack (1 = no stacking)
     net_arch: str = "256,256"  # MLP hidden layer sizes (comma-separated)
 
@@ -241,18 +260,186 @@ def _resolve_train_env_id(cfg: AppendixEConfig) -> str:
     return chosen
 
 
-def _make_isaac_env(env_id: str, *, device: str, num_envs: int = 1, seed: int | None = None):
-    """Create an Isaac Lab gym env from registry config."""
-    _require_gym()
+def _ensure_enable_cameras(extra_args: list[str]) -> list[str]:
+    """Inject --enable_cameras if not already present (needed for rendering)."""
+    if "--enable_cameras" not in extra_args:
+        extra_args = ["--enable_cameras"] + extra_args
+    return extra_args
+
+
+def _create_visuomotor_lift_cfg(
+    env_id: str,
+    device: str,
+    num_envs: int,
+    seed: int,
+    image_height: int = 84,
+    image_width: int = 84,
+):
+    """Construct visuomotor env config: base env + per-env tiled camera.
+
+    Extends the registered env config (e.g., Isaac-Lift-Cube-Franka-v0) by:
+    1. Adding a TiledCamera sensor to the scene (per-env via {ENV_REGEX_NS})
+    2. Adding a camera ObsTerm with clip=(0,255) so the obs space has [0,255]
+       bounds -- required by Sb3VecEnvWrapper's image validation (Lesson 16)
+    3. Setting concatenate_terms=False so obs becomes a Dict (image + state)
+    4. Disabling curriculum (Lesson 14: reward scaling poisons off-policy buffers)
+
+    Rather than creating a new observation group class (which would require
+    importing task-specific mdp functions like object_position_in_robot_root_frame
+    from isaaclab_tasks.manager_based.manipulation.lift.mdp), we modify the
+    EXISTING parsed config. This inherits whatever obs terms the base config
+    already defines -- no import path fragility.
+
+    TiledCamera renders all envs into a single GPU-tiled image, then slices
+    per-env -- this is Isaac Lab's native approach to visuomotor RL, scaling
+    to 16-64+ parallel envs on a single GPU.
+
+    The resulting observation space after Sb3VecEnvWrapper is::
+
+        Dict({
+            "joint_pos":              Box(9,),
+            "joint_vel":              Box(9,),
+            "object_position":        Box(3,),
+            "target_object_position": Box(7,),
+            "actions":                Box(8,),
+            "tiled_camera":           Box(3, 84, 84), uint8
+        })
+    """
+    # All Isaac Lab imports are deferred -- only available inside container.
+    from isaaclab.managers import ObservationTermCfg as ObsTerm
+    from isaaclab.managers import SceneEntityCfg
+    from isaaclab.sensors import TiledCameraCfg
+    import isaaclab.envs.mdp as mdp
+    import isaaclab.sim as sim_utils
+
     try:
         from isaaclab_tasks.utils import parse_env_cfg
     except ModuleNotFoundError:
         from omni.isaac.lab_tasks.utils import parse_env_cfg  # type: ignore
 
+    # Start from the registered env config (preserves rewards, terminations,
+    # scene entities, action spaces, AND existing observation terms).
     env_cfg = parse_env_cfg(env_id, device=device, num_envs=num_envs)
-    if seed is not None:
-        env_cfg.seed = seed
-    return gym.make(env_id, cfg=env_cfg)
+    env_cfg.seed = seed
+
+    # --- Scene: add overhead tiled camera ---
+    # Camera at (0.5, 0.0, 0.5) in the env frame, angled down at the table.
+    # The rotation quaternion matches Isaac Lab's Stack-Cube table camera
+    # (ROS convention: x-forward, y-left, z-up at the camera).
+    env_cfg.scene.tiled_camera = TiledCameraCfg(
+        prim_path="{ENV_REGEX_NS}/Camera",
+        height=image_height,
+        width=image_width,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0,
+            focus_distance=400.0,
+            horizontal_aperture=20.955,
+            clipping_range=(0.1, 2.0),
+        ),
+        offset=TiledCameraCfg.OffsetCfg(
+            pos=(0.5, 0.0, 0.5),
+            rot=(0.35355, -0.61237, -0.61237, 0.35355),
+            convention="ros",
+        ),
+    )
+
+    # --- Observations: add camera to existing group, switch to Dict mode ---
+    # The base config already defines state obs terms (joint_pos, joint_vel,
+    # object_position, target_object_position, actions) using task-specific
+    # mdp functions. We add the camera term and set concatenate_terms=False
+    # so SB3 sees a Dict obs and routes the image through NatureCNN.
+    obs_policy = env_cfg.observations.policy
+    obs_policy.tiled_camera = ObsTerm(
+        func=mdp.image,
+        params={
+            "sensor_cfg": SceneEntityCfg("tiled_camera"),
+            "data_type": "rgb",
+            "normalize": False,
+        },
+        clip=(0, 255),
+    )
+    obs_policy.concatenate_terms = False
+    obs_policy.enable_corruption = False
+
+    # --- Disable curriculum (Lesson 14) ---
+    if hasattr(env_cfg, "curriculum") and env_cfg.curriculum is not None:
+        for attr_name in list(vars(env_cfg.curriculum)):
+            if not attr_name.startswith("_"):
+                setattr(env_cfg.curriculum, attr_name, None)
+        print("[appendix-e] Disabled CurriculumManager (off-policy compatibility)")
+
+    print(
+        f"[appendix-e] Created visuomotor config: "
+        f"tiled_camera {image_height}x{image_width} RGB, "
+        f"{num_envs} envs"
+    )
+    return env_cfg
+
+
+def _make_isaac_env(
+    env_id: str,
+    *,
+    device: str,
+    num_envs: int = 1,
+    seed: int | None = None,
+    disable_curriculum: bool = True,
+    render_mode: str | None = None,
+    pixel: bool = False,
+):
+    """Create an Isaac Lab gym env from registry config.
+
+    Args:
+        disable_curriculum: If True, disable the CurriculumManager by clearing
+            its term configs. This is critical for off-policy algorithms (SAC/TD3)
+            because reward scale changes mid-training cause catastrophic replay
+            buffer mismatch: old transitions have rewards at the old scale, new
+            transitions at the new scale, and the Q-function cannot reconcile
+            them. On-policy algorithms (PPO) don't have this problem because they
+            discard old experience after each update.
+        render_mode: If set (e.g., "rgb_array"), passed through to gym.make()
+            to enable rendering. Requires --enable_cameras in Isaac args.
+        pixel: If True, use native TiledCamera sensor for per-env pixel
+            observations. Creates a visuomotor config with Dict obs space
+            (state vectors + camera image). Multi-env compatible.
+    """
+    _require_gym()
+
+    if pixel:
+        # Native camera sensor: TiledCamera renders all envs in parallel.
+        # Curriculum is disabled inside _create_visuomotor_lift_cfg.
+        env_cfg = _create_visuomotor_lift_cfg(
+            env_id, device, num_envs, seed or 0,
+        )
+    else:
+        try:
+            from isaaclab_tasks.utils import parse_env_cfg
+        except ModuleNotFoundError:
+            from omni.isaac.lab_tasks.utils import parse_env_cfg  # type: ignore
+
+        env_cfg = parse_env_cfg(env_id, device=device, num_envs=num_envs)
+        if seed is not None:
+            env_cfg.seed = seed
+
+        # Disable curriculum for off-policy SAC compatibility.
+        # Isaac Lab's Lift-Cube env ramps action_rate/joint_vel penalties from
+        # -0.0001 to -0.1 (1000x) via CurriculumManager. This causes catastrophic
+        # reward scale mismatch in SAC's replay buffer (Lesson 14).
+        if disable_curriculum and hasattr(env_cfg, "curriculum"):
+            try:
+                curriculum_cfg = env_cfg.curriculum
+                if curriculum_cfg is not None:
+                    for attr_name in list(vars(curriculum_cfg)):
+                        if not attr_name.startswith("_"):
+                            setattr(curriculum_cfg, attr_name, None)
+                    print("[appendix-e] Disabled CurriculumManager (off-policy compatibility)")
+            except Exception as exc:
+                print(f"[appendix-e] Warning: could not disable curriculum: {exc}")
+
+    kwargs: dict[str, Any] = {"cfg": env_cfg}
+    if render_mode is not None:
+        kwargs["render_mode"] = render_mode
+    return gym.make(env_id, **kwargs)
 
 
 def _wrap_for_sb3(isaac_env):
@@ -276,7 +463,13 @@ def _maybe_frame_stack(env, n_stack: int):
     from stable_baselines3.common.vec_env import VecFrameStack
 
     env = VecFrameStack(env, n_stack=n_stack)
-    print(f"[appendix-e] Frame stacking: {n_stack} -> obs_shape={env.observation_space.shape}")
+    obs_space = env.observation_space
+    if hasattr(obs_space, "shape"):
+        print(f"[appendix-e] Frame stacking: {n_stack} -> obs_shape={obs_space.shape}")
+    else:
+        # Dict obs space (e.g., pixel mode): report per-key shapes
+        shapes = {k: v.shape for k, v in obs_space.spaces.items()}
+        print(f"[appendix-e] Frame stacking: {n_stack} -> obs_shapes={shapes}")
     return env
 
 
@@ -307,14 +500,32 @@ def _is_goal_conditioned_env(env) -> bool:
     return bool(has_keys and has_reward_fn)
 
 
+def _is_image_space(space) -> bool:
+    """Check if a Gymnasium space looks like an image (H, W, C) or (C, H, W)."""
+    if not isinstance(space, gym.spaces.Box):
+        return False
+    shape = space.shape
+    if len(shape) != 3:
+        return False
+    # (H, W, C) with C in {1, 3, 4} or (C, H, W) with C in {1, 3, 4}
+    return shape[-1] in (1, 3, 4) or shape[0] in (1, 3, 4)
+
+
 def _policy_name_for_env(env) -> str:
     """Pick SB3 policy class name based on observation space.
 
     After Sb3VecEnvWrapper extraction, Isaac Lab envs expose the inner
     observation space (typically a Box). Goal-conditioned envs with Dict
-    obs get MultiInputPolicy.
+    obs get MultiInputPolicy. Image observations get CnnPolicy.
     """
-    return "MultiInputPolicy" if isinstance(env.observation_space, gym.spaces.Dict) else "MlpPolicy"
+    obs_space = env.observation_space
+    if isinstance(obs_space, gym.spaces.Dict):
+        # Check if any value in the dict is an image
+        has_image = any(_is_image_space(v) for v in obs_space.spaces.values())
+        return "MultiInputPolicy" if not has_image else "MultiInputPolicy"
+    if _is_image_space(obs_space):
+        return "CnnPolicy"
+    return "MlpPolicy"
 
 
 def _build_sac_model(cfg: AppendixEConfig, env, is_goal_conditioned: bool):
@@ -371,15 +582,28 @@ def _do_train(
     """Train SAC on a single env. Assumes Isaac is already booted."""
     print(f"[appendix-e] Training SAC on {env_id}")
     print(f"[appendix-e] seed={cfg.seed}, total_steps={total_steps}, device={cfg.device}, num_envs={cfg.num_envs}")
-    print(f"[appendix-e] frame_stack={cfg.frame_stack}, net_arch={cfg.net_arch}")
+    print(f"[appendix-e] pixel={cfg.pixel}, frame_stack={cfg.frame_stack}, net_arch={cfg.net_arch}")
 
-    isaac_env = _make_isaac_env(env_id, device=cfg.device, num_envs=cfg.num_envs, seed=cfg.seed)
+    isaac_env = _make_isaac_env(
+        env_id, device=cfg.device, num_envs=cfg.num_envs,
+        seed=cfg.seed, pixel=cfg.pixel,
+    )
     env = _wrap_for_sb3(isaac_env)
     goal_conditioned = _is_goal_conditioned_env(env)
     env = _maybe_frame_stack(env, cfg.frame_stack)
 
     print(f"[appendix-e] obs_space: {env.observation_space}")
     print(f"[appendix-e] act_space: {env.action_space}")
+    if cfg.pixel and isinstance(env.observation_space, gym.spaces.Dict):
+        # Estimate replay buffer RAM: obs + next_obs for image key
+        for key, space in env.observation_space.spaces.items():
+            if _is_image_space(space):
+                pixel_shape = space.shape
+                pixel_bytes = int(np.prod(pixel_shape))
+                buffer_gb = 2 * cfg.buffer_size * pixel_bytes / (1024**3)
+                print(f"[appendix-e] Replay buffer estimate: {buffer_gb:.1f} GB "
+                      f"(buffer_size={cfg.buffer_size}, {key}={pixel_shape})")
+                break
     print(f"[appendix-e] goal_conditioned: {goal_conditioned}")
 
     steps_done = 0
@@ -443,12 +667,16 @@ def _do_train(
         "device": cfg.device,
         "used_her": bool(used_her),
         "obs_space_type": type(env.observation_space).__name__,
-        "obs_space_shape": list(env.observation_space.shape)
-        if hasattr(env.observation_space, "shape") else "dict",
+        "obs_space_shape": (
+            {k: list(v.shape) for k, v in env.observation_space.spaces.items()}
+            if hasattr(env.observation_space, "spaces")
+            else list(env.observation_space.shape)
+        ),
         "action_space_shape": list(env.action_space.shape)
         if hasattr(env.action_space, "shape") else "unknown",
         "is_goal_conditioned": bool(goal_conditioned),
         "wrapper": "Sb3VecEnvWrapper",
+        "pixel": bool(cfg.pixel),
         "hyperparameters": {
             "batch_size": cfg.batch_size,
             "buffer_size": cfg.buffer_size,
@@ -457,6 +685,7 @@ def _do_train(
             "gamma": cfg.gamma,
             "tau": cfg.tau,
             "ent_coef": cfg.ent_coef,
+            "pixel": cfg.pixel,
             "frame_stack": cfg.frame_stack,
             "net_arch": cfg.net_arch,
             "her_mode": cfg.her,
@@ -500,7 +729,10 @@ def _do_eval(
     print(f"[appendix-e] Evaluating {ckpt_path.name} on {env_id} ({episodes} episodes)")
 
     # Use num_envs=1 for deterministic sequential evaluation.
-    isaac_env = _make_isaac_env(env_id, device=cfg.device, num_envs=1, seed=cfg.seed)
+    isaac_env = _make_isaac_env(
+        env_id, device=cfg.device, num_envs=1, seed=cfg.seed,
+        pixel=cfg.pixel,
+    )
     env = _wrap_for_sb3(isaac_env)
     env = _maybe_frame_stack(env, cfg.frame_stack)
     model = SAC.load(str(ckpt_path), env=env, device="auto")
@@ -574,6 +806,8 @@ def _probe_env_obs_space(env_id: str, device: str) -> dict[str, Any] | None:
     """Probe a single env's observation and action spaces.
 
     Uses the official Sb3VecEnvWrapper to show the exact spaces SB3 will see.
+    For visuomotor envs, Sb3VecEnvWrapper auto-detects image keys and
+    handles HWC->CHW transpose + uint8 casting.
     """
     try:
         isaac_env = _make_isaac_env(env_id, device=device, num_envs=1)
@@ -592,6 +826,11 @@ def _probe_env_obs_space(env_id: str, device: str) -> dict[str, Any] | None:
         if isinstance(obs_space, gym.spaces.Dict):
             info["obs_keys"] = list(obs_space.spaces.keys())
             info["obs_shapes"] = {k: list(v.shape) for k, v in obs_space.spaces.items()}
+            info["obs_dtypes"] = {k: str(v.dtype) for k, v in obs_space.spaces.items()}
+            # Note which keys are images
+            info["image_keys"] = [
+                k for k, v in obs_space.spaces.items() if _is_image_space(v)
+            ]
         elif isinstance(obs_space, gym.spaces.Box):
             info["obs_shape"] = list(obs_space.shape)
             info["obs_dtype"] = str(obs_space.dtype)
@@ -599,6 +838,9 @@ def _probe_env_obs_space(env_id: str, device: str) -> dict[str, Any] | None:
         if isinstance(act_space, gym.spaces.Box):
             info["action_shape"] = list(act_space.shape)
             info["action_bounds"] = [float(act_space.low[0]), float(act_space.high[0])]
+
+        # Report policy class that would be selected
+        info["policy_class"] = _policy_name_for_env(env)
 
         env.close()
         return info
@@ -673,18 +915,30 @@ def cmd_discover_envs(cfg: AppendixEConfig, isaac_extra_args: list[str], pattern
 
 def cmd_smoke(cfg: AppendixEConfig, isaac_extra_args: list[str]) -> int:
     """Dense-first smoke run. Boots Isaac, trains briefly, closes."""
+    if cfg.pixel:
+        isaac_extra_args = _ensure_enable_cameras(isaac_extra_args)
     sim_app = _init_isaac(isaac_extra_args)
     _import_isaac_tasks()
     try:
         print("[appendix-e] Smoke run (dense-first wiring check)")
         _do_train(cfg, cfg.dense_env_id, cfg.smoke_steps)
         return 0
+    except Exception as exc:
+        # Print before sim_app.close() -- close() may call sys.exit(0)
+        # and swallow the traceback (Isaac Lab known behavior).
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        raise
     finally:
         sim_app.close()
 
 
 def cmd_train(cfg: AppendixEConfig, isaac_extra_args: list[str]) -> int:
     """Train SAC. Boots Isaac once -- resolves env_id if needed, then trains."""
+    if cfg.pixel:
+        isaac_extra_args = _ensure_enable_cameras(isaac_extra_args)
     sim_app = _init_isaac(isaac_extra_args)
     _import_isaac_tasks()
     try:
@@ -697,10 +951,15 @@ def cmd_train(cfg: AppendixEConfig, isaac_extra_args: list[str]) -> int:
 
 
 def _infer_env_from_ckpt_name(ckpt_name: str) -> str | None:
+    # Match final checkpoint: appendix_e_sac_<env>_seed0.zip
     m = re.match(r"appendix_e_sac_(.+)_seed\d+\.zip", ckpt_name)
-    if not m:
-        return None
-    return m.group(1)
+    if m:
+        return m.group(1)
+    # Match intermediate checkpoint: appendix_e_sac_<env>_seed0_199680_steps.zip
+    m = re.match(r"appendix_e_sac_(.+)_seed\d+_\d+_steps\.zip", ckpt_name)
+    if m:
+        return m.group(1)
+    return None
 
 
 def _load_env_from_meta(ckpt_path: Path) -> str | None:
@@ -729,10 +988,113 @@ def cmd_eval(cfg: AppendixEConfig, isaac_extra_args: list[str], ckpt: str) -> in
             "[appendix-e] Could not infer env_id. Pass --env-id explicitly or keep .meta.json next to checkpoint."
         )
 
+    if cfg.pixel:
+        isaac_extra_args = _ensure_enable_cameras(isaac_extra_args)
     sim_app = _init_isaac(isaac_extra_args)
     _import_isaac_tasks()
     try:
         _do_eval(cfg, ckpt_path, env_id)
+        return 0
+    finally:
+        sim_app.close()
+
+
+def cmd_record(cfg: AppendixEConfig, isaac_extra_args: list[str], ckpt: str, video_out: str) -> int:
+    """Record a video from a checkpoint. Boots Isaac with cameras enabled."""
+    ckpt_path = Path(ckpt).expanduser().resolve()
+    if not ckpt_path.exists():
+        raise SystemExit(f"[appendix-e] Checkpoint not found: {ckpt_path}")
+
+    env_id = cfg.env_id or _load_env_from_meta(ckpt_path)
+    if not env_id:
+        env_id = _infer_env_from_ckpt_name(ckpt_path.name)
+    if not env_id:
+        raise SystemExit(
+            "[appendix-e] Could not infer env_id. Pass --env-id explicitly."
+        )
+
+    # Determine output path
+    if not video_out:
+        videos_dir = _ensure_dir("videos")
+        video_out = str(videos_dir / f"appendix_e_{_safe_env(env_id)}_{ckpt_path.stem}.mp4")
+
+    # Cameras required for rendering
+    isaac_extra_args = _ensure_enable_cameras(isaac_extra_args)
+
+    sim_app = _init_isaac(isaac_extra_args)
+    _import_isaac_tasks()
+    try:
+        from stable_baselines3 import SAC
+
+        print(f"[appendix-e] Recording video: {ckpt_path.name} on {env_id}")
+        isaac_env = _make_isaac_env(
+            env_id, device=cfg.device, num_envs=1,
+            seed=cfg.seed, render_mode="rgb_array",
+        )
+        env = _wrap_for_sb3(isaac_env)
+        model = SAC.load(str(ckpt_path), env=env, device="auto")
+
+        # Reset + warm up renderer. Isaac Lab's Vulkan renderer requires the
+        # simulation to be active (reset + stepped) before render() produces
+        # frames. First few frames may also be black due to shader compilation.
+        # Use isaac_env.render() directly -- Sb3VecEnvWrapper.render() hangs
+        # because SB3's VecEnv.render() routes through get_images()/tile_images()
+        # which is incompatible with Isaac Lab's synchronous Vulkan renderer.
+        obs = env.reset()
+        for _ in range(5):
+            action, _ = model.predict(obs, deterministic=True)
+            obs, _, _, _ = env.step(action)
+            isaac_env.render()
+
+        # Fresh reset for the actual recorded episode
+        obs = env.reset()
+
+        # Run one episode and collect frames
+        frames: list[np.ndarray] = []
+        done = False
+        step_count = 0
+        ep_return = 0.0
+
+        while not done:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, rewards, dones, infos = env.step(action)
+            ep_return += float(rewards[0])
+            step_count += 1
+
+            frame = isaac_env.render()
+            if frame is not None:
+                frame = np.asarray(frame)
+                # Handle batched frames: (batch, H, W, C) -> (H, W, C)
+                if frame.ndim == 4:
+                    frame = frame[0]
+                # Normalize to uint8
+                if frame.dtype != np.uint8:
+                    if frame.max() <= 1.0:
+                        frame = (frame * 255).astype(np.uint8)
+                    else:
+                        frame = frame.astype(np.uint8)
+                frames.append(frame)
+
+            if dones[0]:
+                done = True
+
+        print(f"[appendix-e] Episode: {step_count} steps, return={ep_return:.3f}, frames={len(frames)}")
+
+        if frames:
+            import imageio.v3 as iio
+
+            out_path = Path(video_out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            iio.imwrite(out_path, frames, fps=30)
+            print(f"[appendix-e] Wrote video: {out_path} ({len(frames)} frames)")
+        else:
+            print("[appendix-e] WARNING: No frames captured")
+
+        try:
+            env.close()
+        except Exception:
+            pass
+
         return 0
     finally:
         sim_app.close()
@@ -762,6 +1124,8 @@ def _build_common_cli_args(cfg: AppendixEConfig) -> list[str]:
         "--results-dir", str(cfg.results_dir),
         "--dense-env-id", cfg.dense_env_id,
     ]
+    if cfg.pixel:
+        args.append("--pixel")
     if cfg.env_id:
         args += ["--env-id", cfg.env_id]
     if cfg.resume_ckpt:
@@ -902,14 +1266,18 @@ def cmd_compare(cfg: AppendixEConfig, env_id: str, result_paths: list[str]) -> i
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Appendix E Isaac Lab pipeline (discover, smoke, train, eval, compare)",
+        description=(
+            "Appendix E Isaac Lab manipulation pipeline. "
+            "Primary target: Isaac-Lift-Cube-Franka-v0 (SAC, 256 envs, ~774 fps). "
+            "Subcommands: discover-envs, smoke, train, eval, all, compare, record."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def add_common(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--env-id", default="", help="Target Isaac env id. Empty = auto-select peg/insertion candidate")
+        p.add_argument("--env-id", default="", help="Target Isaac env id (e.g., Isaac-Lift-Cube-Franka-v0). Empty = auto-select peg/insertion candidate")
         p.add_argument("--dense-env-id", default=DEFAULT_DENSE_ENV_ID, help="Known-easy env for dense-first smoke")
         p.add_argument("--seed", type=int, default=0)
         p.add_argument("--device", default="cuda:0", help="Isaac device for parse_env_cfg, e.g., cuda:0")
@@ -926,6 +1294,7 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("--her-goal-selection-strategy", choices=["future", "final", "episode"], default="future")
         p.add_argument("--frame-stack", type=int, default=1, help="Number of frames to stack (1 = no stacking)")
         p.add_argument("--net-arch", default="256,256", help="MLP hidden layer sizes (comma-separated)")
+        p.add_argument("--pixel", action="store_true", help="Use pixel observations via native TiledCamera sensor")
         p.add_argument("--checkpoint-freq", type=int, default=100_000, help="Save every N steps (0 = end only)")
         p.add_argument("--log-dir", default="runs")
         p.add_argument("--checkpoints-dir", default="checkpoints")
@@ -964,6 +1333,11 @@ def _build_parser() -> argparse.ArgumentParser:
     add_common(p_cmp)
     p_cmp.add_argument("--result", action="append", required=True, help="Path to eval JSON (repeatable)")
 
+    p_rec = sub.add_parser("record", help="Record a video from a checkpoint")
+    add_common(p_rec)
+    p_rec.add_argument("--ckpt", required=True, help="Path to SB3 checkpoint")
+    p_rec.add_argument("--video-out", default="", help="Output video path (default: videos/appendix_e_<env>_<ckpt>.mp4)")
+
     return parser
 
 
@@ -974,6 +1348,7 @@ def _cfg_from_args(args: argparse.Namespace) -> AppendixEConfig:
         seed=args.seed,
         device=args.device,
         num_envs=getattr(args, "num_envs", 1),
+        pixel=getattr(args, "pixel", False),
         frame_stack=args.frame_stack,
         net_arch=args.net_arch,
         smoke_steps=getattr(args, "smoke_steps", 10_000),
@@ -1022,6 +1397,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "compare":
         env_id = cfg.env_id or "unknown_env"
         return cmd_compare(cfg, env_id=env_id, result_paths=args.result)
+    if args.cmd == "record":
+        return cmd_record(cfg, isaac_extra_args, ckpt=args.ckpt, video_out=args.video_out)
 
     raise SystemExit(f"Unknown command: {args.cmd}")
 

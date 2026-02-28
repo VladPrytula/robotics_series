@@ -441,6 +441,220 @@ batched envs natively.
 
 ---
 
+## Lesson 13: Pick the Right Benchmark for Your Method
+
+**Context:** Appendix E v1 targeted Factory PegInsert because it was a
+contact-rich manipulation task -- a natural domain match for our SAC pipeline.
+SAC+MLP achieved approach-tier reward (~29) but flat-lined on fine insertion
+after 500K steps.
+
+**Pattern:** Choosing a benchmark task by domain ("manipulation") rather than
+by problem structure (MDP vs POMDP) leads to method-problem mismatch. The
+algorithm appears to fail at the task, but the real failure is in the choice
+of benchmark.
+
+**Root cause:** Factory PegInsert is a POMDP: the actor sees 19D partial state
+(fingertip pose, velocities, previous actions) while the critic sees 72D full
+state (including socket geometry, contact forces, peg orientation). Fine
+insertion requires temporal reasoning about contact sequences -- is the peg
+catching, sliding, or jamming? NVIDIA's reference config uses LSTM (1024 units,
+2 layers) + asymmetric actor-critic for exactly this reason.
+
+Our SAC+MLP pipeline assumes the observation is Markov (full state in one
+frame). When the observation is partial, a memoryless MLP cannot distinguish
+contact modes that look identical in a single frame.
+
+**Fix:** Isaac-Lift-Cube-Franka-v0 is a better benchmark for our method:
+- 36D fully-observable state (joint positions, velocities, object pose, target)
+- Dense staged reward (reaching 1.0, lifting 15.0, tracking 16.0+5.0)
+- MLP-compatible (no recurrence needed)
+- Same manipulation complexity (approach, grasp, lift, track)
+
+**Rule:** Before porting a method to a new environment, check three things:
+1. Is the actor's observation Markov? (Full state -> MDP -> MLP works)
+2. Does the reference config use recurrence? (LSTM/GRU -> likely POMDP)
+3. Is there an asymmetric actor-critic? (Different obs for actor/critic -> partial observability)
+
+If any of these indicate a POMDP, either enrich the observation to make it
+Markov, add recurrence to the policy, or choose a different benchmark that
+matches your method's assumptions.
+
+**Generalization:** Method-benchmark matching should be driven by problem
+structure (information structure, reward type, action space), not by domain
+similarity. A manipulation task with full observability is a better match for
+SAC+MLP than a manipulation task with partial observability, regardless of
+how similar the tasks look in videos.
+
+---
+
+## Lesson 14: Curriculum Reward Scaling Poisons Off-Policy Replay Buffers
+
+**Context:** SAC on Isaac-Lift-Cube-Franka-v0 (256 envs). Reward improved
+steadily from -29.7 to -4.14 over 4.6M steps, then catastrophically
+collapsed to -3,050 in a single 64K-step interval. Critic loss exploded
+540x (0.05 -> 26.2). Entropy coef loss flipped sign (-19.9 -> +37.6).
+
+**Pattern:** Isaac Lab's Lift-Cube env has a CurriculumManager that scales
+`action_rate` and `joint_vel` penalty weights from -0.0001 to -0.1 (a 1000x
+increase) based on the agent's performance. When this threshold is crossed
+mid-training, the reward signal changes dramatically.
+
+**Root cause:** Off-policy replay buffer mismatch. SAC's replay buffer stores
+past transitions with rewards computed under the OLD penalty scale (~-0.0001).
+When the curriculum kicks in, NEW transitions use the new scale (~-0.1). The
+Bellman target mixes old and new transitions: the Q-function was calibrated
+for rewards in [-30, 0] but now receives targets in [-5000, 0]. The 540x
+critic loss explosion is the Q-function trying to reconcile two incompatible
+reward scales.
+
+**Why PPO doesn't have this problem:** PPO is on-policy -- it discards all
+experience after each update. There is no replay buffer to become stale.
+When the curriculum changes the reward, PPO's next batch is collected entirely
+under the new scale. This is why NVIDIA's reference config uses PPO for
+Lift-Cube: the CurriculumManager was designed for on-policy algorithms.
+
+**Fix:** Disable the CurriculumManager when using off-policy algorithms:
+```python
+for attr_name in list(vars(env_cfg.curriculum)):
+    if not attr_name.startswith("_"):
+        setattr(env_cfg.curriculum, attr_name, None)
+```
+
+**Alternative fixes (not tried):**
+1. Set penalty weights to their final values (-0.1) from the start --
+   harder for early exploration but avoids the discontinuity.
+2. Flush/shrink the replay buffer when curriculum changes -- complex, and
+   SB3 doesn't support this natively.
+3. Gradually increase buffer_size to dilute old transitions -- impractical
+   for a 1000x reward scale change.
+
+**Rule:** Before using an off-policy algorithm on an Isaac Lab env, check for
+CurriculumManager terms. If the curriculum modifies reward weights, either
+disable it or set the weights to their final values from the start. This is
+a general principle: any system that changes the reward function mid-training
+is incompatible with off-policy replay buffers.
+
+**Generalization:** Replay buffers assume the MDP is stationary -- the
+transition dynamics and reward function don't change over time. Curriculum
+learning violates this assumption. The combination of curriculum + off-policy
+is a known pitfall but rarely documented because most curriculum RL research
+uses on-policy methods.
+
+---
+
+## Lesson 15: Isaac Lab Rendering -- Two Required Rules
+
+**Context:** Pixel smoke test and video recording on Isaac-Lift-Cube-Franka-v0
+hung indefinitely (40+ minutes) after "Using cuda device" with no error output.
+Process was alive at 120% CPU, 9.5% memory, no GPU activity.
+
+**Two bugs were at play:**
+
+### Rule 1: render() must bypass Sb3VecEnvWrapper
+
+`Sb3VecEnvWrapper` extends SB3's `VecEnv` base class. For `rgb_array` mode,
+`VecEnv.render()` calls `self.get_images()` -> `tile_images()`, which conflicts
+with Isaac Lab's singleton viewport camera / synchronous Vulkan renderer. The
+call never returns.
+
+Always call `render()` on the raw Isaac Gymnasium env (before SB3 wrapping),
+never through `Sb3VecEnvWrapper`. When writing wrappers that need rendering
+(pixel wrappers, video recording), accept and store the raw `isaac_env`
+separately from the SB3-wrapped env.
+
+### Rule 2: reset() + step() must precede the first render()
+
+Isaac Lab's Vulkan headless renderer requires the simulation to be "active"
+before `render()` can produce frames. Calling `render()` before `reset()`
+blocks forever -- the renderer waits for simulation state that doesn't exist.
+
+The correct warmup sequence is: `reset()` -> `step()` -> `render()`.
+First few frames may still be black (shader compilation); warm up by
+stepping+rendering 5 times before capturing frames.
+
+**Combined fix pattern:**
+```python
+isaac_env = _make_isaac_env(env_id, render_mode="rgb_array")
+env = _wrap_for_sb3(isaac_env)  # SB3 VecEnv for step/reset/obs
+obs = env.reset()               # MUST reset before render
+for _ in range(5):              # Warm up renderer
+    action, _ = model.predict(obs)
+    obs, _, _, _ = env.step(action)
+    isaac_env.render()           # Use raw env, not SB3 wrapper
+```
+
+**Debugging signal:** Any Isaac container that hangs silently after "Using cuda
+device" or "Completed setting up the environment..." -- check (1) whether
+render() is called through the SB3 wrapper, and (2) whether reset() + step()
+happened before the first render().
+
+---
+
+## Lesson 16: Sb3VecEnvWrapper Image Space Bounds
+
+**Context:** Isaac Lab native visuomotor pipeline (TiledCamera + Dict obs) fails
+at Sb3VecEnvWrapper._process_spaces() with ValueError about image normalization.
+
+**Pattern:** Isaac Lab's ObservationManager creates observation spaces with
+`(-inf, inf)` bounds by default (when no `clip` is set on ObservationTermCfg).
+Sb3VecEnvWrapper's image validation requires bounds to be EITHER `[-1, 1]`
+(pre-normalized float) or `[0, 255]` (raw uint8). The `(-inf, inf)` default
+falls into a gap between these two checks.
+
+**Root cause:** Isaac Lab's reference visuomotor envs (e.g., Stack-Cube) are
+designed for RL Games/SKRL/COSMOS, NOT SB3. The `clip` parameter on
+ObservationTermCfg controls BOTH tensor clamping AND obs space bounds (via
+`_configure_gym_env_spaces`). Without `clip`, the space defaults to `(-inf, inf)`.
+
+**Rule:** When using `Sb3VecEnvWrapper` with camera observations and
+`concatenate_terms=False`, always set `clip` on the image ObsTerm:
+- `clip=(0, 255)` with `normalize=False` → SB3 handles uint8 conversion + normalization
+- `clip=(-1.0, 1.0)` with `normalize=True` → SB3 skips normalization, transposes only
+
+**Code fix:**
+```python
+obs_policy.tiled_camera = ObsTerm(
+    func=mdp.image,
+    params={"sensor_cfg": SceneEntityCfg("tiled_camera"), ...},
+    clip=(0, 255),  # Required for Sb3VecEnvWrapper
+)
+```
+
+**Also learned:** sim_app.close() calls sys.exit(0) internally, swallowing
+any Python exception. Always wrap training code in try/except that prints the
+traceback BEFORE the finally: sim_app.close() block.
+
+---
+
+## Lesson 17: Isaac Lab Import Path Fragility
+
+**Context:** Building visuomotor env config required importing observation
+functions and config classes from Isaac Lab.
+
+**Pattern:** Import paths differ between `isaaclab.scene` and
+`isaaclab.managers` for the same concept name. Task-specific observation
+functions (like `object_position_in_robot_root_frame`) live in
+`isaaclab_tasks.manager_based.manipulation.lift.mdp`, not in the generic
+`isaaclab.envs.mdp` module.
+
+**Root cause:** Isaac Lab's module hierarchy separates core framework
+(`isaaclab.*`) from task-specific implementations (`isaaclab_tasks.*`).
+`SceneEntityCfg` is in `isaaclab.managers`, NOT `isaaclab.scene`.
+
+**Rule:** When building visuomotor configs for Isaac Lab:
+1. Modify the EXISTING parsed config (from `parse_env_cfg`) instead of
+   creating a new @configclass -- this inherits task-specific obs terms
+   without needing to import them
+2. Verify imports inside the Isaac container: `python3 -c "from X import Y"`
+3. Key import map:
+   - `SceneEntityCfg` → `isaaclab.managers`
+   - `ObservationTermCfg` → `isaaclab.managers`
+   - `TiledCameraCfg` → `isaaclab.sensors`
+   - `PinholeCameraCfg` → `isaaclab.sim`
+   - `mdp.image` → `isaaclab.envs.mdp`
+
+---
+
 ## Reference Notes
 
 - See `tasks/ch09_pixel_pixels_stack_notes.md` for a concise mapping of research to our code (84x84 sufficiency with stacking, encoder/aug choices, flags to check, and targeted experiments).
