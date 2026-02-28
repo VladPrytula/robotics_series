@@ -26,10 +26,7 @@ PickAndPlace (`FetchPickAndPlace-v4`) differs from Push (`FetchPush-v4`) in thre
 | `target_in_the_air` | `False` | `True` | ~50% of goals are elevated |
 | `gripper_extra_height` | 0.0 | 0.2 | Gripper starts higher, can reach above table |
 
-These are not hyperparameter differences -- they change the **problem structure**:
-
-- **Push:** The gripper is always open (cannot grasp). All goals are on the table. The only skill is pushing.
-- **PickAndPlace:** The gripper can close. Goals may be in the air. The agent must learn to grasp, lift, carry, *and* place.
+These are not hyperparameter differences -- they change the **problem structure**. In Push, the gripper is always open (it cannot grasp), all goals are on the table, and the only skill required is pushing. PickAndPlace removes these constraints: the gripper can close, goals may be in the air, and the agent must learn to grasp, lift, carry, *and* place.
 
 Note that the **action space** also changes in practice. While both environments have 4D Cartesian actions (`dx, dy, dz, gripper`), Push ignores the gripper dimension entirely (`block_gripper=True` clamps it). In PickAndPlace, the fourth action dimension controls finger position -- an entirely new degree of freedom the agent must learn to coordinate with the other three.
 
@@ -73,10 +70,7 @@ $$
 
 where $z_{\text{table}} \approx 0.42$m is the table surface height and 0.02m is a small margin to avoid classifying table-surface goals as air.
 
-This classification matters because the two goal types require **qualitatively different skills**:
-
-- **Table goals** can sometimes be solved by pushing (similar to ch04's Push task). The agent does not need to grasp -- sliding the object along the table surface to the goal position is sufficient.
-- **Air goals** always require grasping and lifting -- no pushing shortcut exists. The object must leave the table.
+This classification matters because the two goal types require **qualitatively different skills**. Table goals can sometimes be solved by pushing (similar to ch04's Push task), since the agent does not need to grasp -- sliding the object along the table surface to the goal position is sufficient. Air goals, by contrast, always require grasping and lifting because no pushing shortcut exists; the object must leave the table.
 
 We expect air-goal success to lag table-goal success during training. An agent that has learned pushing but not grasping will score well on table goals and poorly on air goals. Reporting only the aggregate success rate would hide this important gap -- the agent might appear to have 50% success when it has actually mastered only one of the two sub-tasks.
 
@@ -86,13 +80,7 @@ Our dense-debug run (section 5.10) confirms this prediction empirically: even at
 
 Before committing to a 5M-step sparse training run (~1-1.5 hours), we validate the pipeline on `FetchPickAndPlaceDense-v4` with 500k steps (~13 minutes).
 
-**Why this matters:** Dense rewards provide continuous feedback proportional to goal distance. If the agent cannot learn *anything* with dense rewards, there is likely a bug in the pipeline -- not a hyperparameter issue. Dense-first debugging catches problems like:
-
-- Wrong observation preprocessing
-- Action clipping issues
-- HER misconfiguration
-- Environment version mismatches
-- Rendering backend failures (which silently break physics)
+**Why this matters:** Dense rewards provide continuous feedback proportional to goal distance. If the agent cannot learn *anything* with dense rewards, there is likely a bug in the pipeline -- not a hyperparameter issue. Dense-first debugging catches problems like wrong observation preprocessing, action clipping issues, HER misconfiguration, environment version mismatches, and rendering backend failures (which silently break physics).
 
 **Why 500k steps, not 200k?** This is a lesson we learned the hard way. PickAndPlace is qualitatively harder than Reach or Push -- the agent must discover grasping, lifting, and placing. Our first attempt used 200k steps and saw 0% eval success, which looked like a pipeline failure. But the training logs told a different story: reward had improved from -14.3 to -12.3 and rolling success reached 4%. The pipeline was fine -- the task genuinely needed more time.
 
@@ -123,11 +111,7 @@ Chapter 4's 120-run sweep identified the winning configuration for sparse Push:
 | `learning_starts` | 1000 | Early start helps on sparse tasks |
 | `batch_size` | 256 | Default, works well |
 
-We start PickAndPlace with these exact values. The hypothesis is that these hyperparameters are not Push-specific -- they address general properties of sparse-reward goal-conditioned learning:
-
-- $\gamma = 0.95$ works because Fetch episodes are 50 steps. With $\gamma = 0.95$, the effective horizon $T_{\text{eff}} = 1/(1 - \gamma) = 20$ -- long enough to propagate reward information across an episode but short enough to avoid vanishing gradients. This property depends on episode length, not task content.
-- `ent_coef = 0.05` prevents the entropy collapse that auto-tuning causes with sparse rewards (ch04, section 4.3). Sparse rewards create an uninformative loss landscape for the entropy coefficient -- $\alpha$ collapses to near-zero, killing exploration. This problem exists regardless of which Fetch task we train on.
-- HER with `future` strategy and `n_sampled_goal = 4` creates 5x data amplification. The `future` strategy is particularly effective because PickAndPlace trajectories -- even failed ones -- visit many distinct positions that serve as valid relabeled goals.
+We start PickAndPlace with these exact values. The hypothesis is that these hyperparameters are not Push-specific -- they address general properties of sparse-reward goal-conditioned learning. Consider each in turn: $\gamma = 0.95$ works because Fetch episodes are 50 steps, so the effective horizon $T_{\text{eff}} = 1/(1 - \gamma) = 20$ is long enough to propagate reward information across an episode but short enough to avoid vanishing gradients -- a property that depends on episode length, not task content. Fixed `ent_coef = 0.05` prevents the entropy collapse that auto-tuning causes with sparse rewards (ch04, section 4.3), since sparse rewards create an uninformative loss landscape for the entropy coefficient where $\alpha$ collapses to near-zero and kills exploration -- a problem that exists regardless of which Fetch task we train on. Finally, HER with `future` strategy and `n_sampled_goal = 4` creates 5x data amplification, and the `future` strategy is particularly effective because PickAndPlace trajectories -- even failed ones -- visit many distinct positions that serve as valid relabeled goals.
 
 The main change is `total_steps`: we increase from 2M (Push) to 5M (PickAndPlace), anticipating that the multi-phase control problem needs more experience. If Push required 2M steps for 99.4% success on a single-phase task, PickAndPlace's six phases should need at least 2-3x more.
 
@@ -373,7 +357,8 @@ This trains SAC+HER on `FetchPickAndPlaceDense-v4` for 500k steps and evaluates 
 - **PASS** (success >= 20%): Pipeline validated, proceed to sparse training
 - **LEARNING** (some success or return above random): Pipeline works, task is just harder than Push
 - **WARNING** (no learning at all): Check for bugs, wrong env version, or rendering issues
-- Table-goal return should be better (less negative) than air-goal return
+
+In all cases, table-goal return should be better (less negative) than air-goal return, since the agent learns pushing-like behaviors before discovering grasping.
 
 #### Our Dense Debug Results
 
@@ -390,11 +375,7 @@ This trains SAC+HER on `FetchPickAndPlaceDense-v4` for 500k steps and evaluates 
 
 The verdict is LEARNING: the mean return of -13.77 is above the random-policy baseline of approximately -15, confirming the agent learned to approach objects.
 
-**Why 0% eval success despite 3-8% training success?** This gap is common in RL and worth understanding:
-
-1. **Training success** is a rolling average across many episodes using stochastic (exploratory) actions. Occasional lucky grasps from random exploration inflate the number.
-2. **Deterministic eval** uses the policy's mode (no exploration noise). At ~4% true success rate, 50 episodes give an expected ~2 successes -- but the variance is high. The probability of seeing exactly zero successes is $0.96^{50} \approx 13\%$, so our result is within statistical noise.
-3. **Mean return is the more reliable signal.** It averages over all episodes rather than thresholding a binary outcome, so it has much lower variance. The improvement from -15 (random) to -13.77 reliably indicates learning even when the success count happens to be zero.
+**Why 0% eval success despite 3-8% training success?** This gap is common in RL and worth understanding. Training success is a rolling average across many episodes using stochastic (exploratory) actions, so occasional lucky grasps from random exploration inflate the number. Deterministic eval, by contrast, uses the policy's mode (no exploration noise), which means that at a ~4% true success rate, 50 episodes give an expected ~2 successes -- but the variance is high, and the probability of seeing exactly zero successes is $0.96^{50} \approx 13\%$, placing our result within statistical noise. Mean return is the more reliable signal because it averages over all episodes rather than thresholding a binary outcome, giving it much lower variance. The improvement from -15 (random) to -13.77 reliably indicates learning even when the success count happens to be zero.
 
 The stratified breakdown reveals exactly the learning progression predicted in section 5.3. Table goals (return -9.78, distance 0.196m) are nearly **2x closer** to success than air goals (return -16.22, distance 0.324m). The agent has learned to move toward objects on the table -- a behavior similar to Push -- but has not yet discovered grasping and lifting. This is the expected order: pushing is a simpler behavior that the agent discovers first through random exploration.
 
@@ -455,12 +436,7 @@ Evaluation Results: FetchPickAndPlace-v4
 
 Action smoothness measures how much consecutive actions differ (we will define this formally in Chapter 6). Lower values indicate smoother, more physically plausible motion.
 
-**What to look for:**
-
-- Overall success rate: target >60% (good), >80% (strong). We achieved **100%**.
-- Air gap: table success - air success. If >20%, the agent pushes well but grasps poorly. Ours: **0%**.
-- Time to success: should be shorter for table goals (simpler behavior, fewer phases). Confirmed: **8.2 vs 12.6 steps**.
-- Final distance: air goals achieve tighter placement (0.009m) than table goals (0.018m) -- grasping gives more precise control than pushing.
+**What to look for:** The overall success rate target is >60% (good) or >80% (strong) -- we achieved **100%**. The air gap (table success minus air success) measures whether the agent pushes well but grasps poorly; a gap >20% would signal incomplete learning, and ours is **0%**. Time to success should be shorter for table goals since they involve simpler behavior with fewer phases, which we confirmed at **8.2 vs 12.6 steps**. Finally, air goals achieve tighter final placement (0.009m) than table goals (0.018m) because grasping gives more precise control than pushing, where the object can slide unpredictably.
 
 ### 5.13 Stress Evaluation
 
@@ -484,11 +460,7 @@ Stress Test Results: FetchPickAndPlace-v4
   Verdict: ROBUST -- less than 10% degradation under noise
 ```
 
-**What to look for:**
-
-- Degradation < 10%: robust policy. We achieved **1.7% mean degradation** -- well within ROBUST.
-- Air degradation vs table degradation: grasping is more noise-sensitive. Confirmed: **up to 7.1% air degradation vs 0% table degradation** (seed 2).
-- If fragile: the policy relies on precise trajectories. Our policies are robust -- even the worst seed under noise achieves 96% overall and 92.9% on air goals.
+**What to look for:** Degradation below 10% indicates a robust policy, and we achieved **1.7% mean degradation** -- well within the ROBUST threshold. As predicted, grasping is more noise-sensitive than pushing: air degradation reached **up to 7.1%** (seed 2) while table degradation remained at **0%**. A fragile policy would suggest reliance on precise trajectories, but our policies are robust -- even the worst seed under noise achieves 96% overall and 92.9% on air goals.
 
 ### 5.14 Full Pipeline
 
@@ -545,10 +517,7 @@ The inflection around 2-3M steps marks where the agent transitions from primaril
 
 Success rates are mean +/- 95% CI across 3 seeds. Time-to-success and final distance are averaged across all episodes of seed 0 (100 episodes); cross-seed variation is negligible (< 0.3 steps).
 
-The air gap is **zero** -- the agent has fully mastered grasping. Two observations:
-
-1. **Air goals take longer** (12.6 vs 8.2 steps) because they require the full multi-phase sequence (approach, grasp, lift, carry, place) while table goals can be solved by shorter pushing trajectories.
-2. **Air goals achieve tighter final distance** (0.009m vs 0.018m). This seems counterintuitive, but makes sense: once the agent has grasped the object, it has precise control over placement. Pushing is inherently less precise because the object can slide unpredictably.
+The air gap is **zero** -- the agent has fully mastered grasping. Two observations are worth noting. Air goals take longer (12.6 vs 8.2 steps) because they require the full multi-phase sequence (approach, grasp, lift, carry, place) while table goals can be solved by shorter pushing trajectories. Perhaps counterintuitively, air goals also achieve tighter final distance (0.009m vs 0.018m), which makes sense once we consider that grasping gives the agent precise control over placement, whereas pushing is inherently less precise because the object can slide unpredictably.
 
 #### Stress Test Summary (3 seeds)
 

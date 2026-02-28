@@ -12,15 +12,11 @@ You're about to train a neural network to control a robot arm. The arm will lear
 
 *No inverse kinematics. No trajectory planning. The robot learned this through 500,000 training steps--watch the distance counter drop to zero.*
 
-That's remarkable. But here's the uncomfortable truth: **most RL implementations don't work on the first try.** The field has a reproducibility crisis (Henderson et al., 2018). Hyperparameters matter more than they should. Small bugs can silently cause complete failure.
+That's remarkable. But here's the uncomfortable truth: **most RL implementations don't work on the first try.** The field has a reproducibility crisis (Henderson et al., 2018), hyperparameters matter more than they should, and small bugs can silently cause complete failure.
 
-This chapter is about building confidence that your infrastructure is correct *before* you add complexity. We use **Proximal Policy Optimization (PPO)**--a widely-used RL algorithm that learns by repeatedly trying actions and adjusting based on outcomes--on a dense-reward task as a **diagnostic**. If this doesn't work, something is broken in your setup, not your algorithm.
+This chapter is about building confidence that your infrastructure is correct *before* you add complexity. We use **Proximal Policy Optimization (PPO)**--a widely-used RL algorithm that learns by repeatedly trying actions and adjusting based on outcomes--on a dense-reward task as a **diagnostic**, so that failure becomes informative: if this doesn't work, the problem is in your setup, not your algorithm.
 
-By the end, you will have:
-1. A trained policy achieving >90% success rate (we got 100% in our test run)
-2. An understanding of *why* PPO works (not just *that* it works)
-3. Diagnostic skills to identify common training failures
-4. Confidence to move to harder problems
+By the end, you will have a trained policy achieving >90% success rate (we got 100% in our test run), an understanding of *why* PPO works (not just *that* it works), diagnostic skills to identify common training failures, and the confidence to move to harder problems.
 
 If you want to run first and read later, jump to Part 3:
 
@@ -62,15 +58,7 @@ Here's a scenario that happens more often than anyone admits:
 
 > You implement an advanced algorithm on a difficult task. Train for 10 hours. Success rate: 0%. What went wrong?
 
-The honest answer: **you have no idea.** It could be:
-- Environment misconfiguration
-- Wrong network architecture
-- Bad hyperparameters
-- Bug in your algorithm implementation
-- The task simply needing more training time
-- A subtle numerical issue
-
-You're debugging in the dark with too many variables.
+The honest answer: **you have no idea.** It could be an environment misconfiguration, a wrong network architecture, bad hyperparameters, a bug in your algorithm implementation, the task simply needing more training time, or a subtle numerical issue. You're debugging in the dark with too many variables.
 
 **The solution:** Establish a baseline where failure is informative. Start with the simplest algorithm (PPO) on the easiest task (Reach with dense rewards). If this doesn't work, the problem is in your infrastructure, not your algorithm choice.
 
@@ -140,15 +128,11 @@ Read this as: "Adjust $\theta$ to make good actions more likely and bad actions 
 
 ### 1.3 The Problem: Policy Gradient Is Unstable
 
-In theory, you can just follow this gradient and improve. In practice, **vanilla policy gradient is notoriously unstable**. Here's why:
+In theory, you can just follow this gradient and improve. In practice, **vanilla policy gradient is notoriously unstable**, for two reinforcing reasons.
 
-**Problem 1: Advantage estimates are noisy.**
+First, advantage estimates are noisy. We don't know the true advantage--we estimate it from sampled trajectories, and with a finite batch these estimates have high variance. Sometimes they're way off, which means we make bad updates.
 
-We don't know the true advantage--we estimate it from sampled trajectories. With a finite batch, these estimates have high variance. Sometimes they're way off, and we make bad updates.
-
-**Problem 2: Big updates break everything.**
-
-Suppose we estimate that some action is great ($A >> 0$) and crank up its probability. But if our estimate was wrong, we've now committed to a bad action. Worse, the new policy visits different states, making our old advantage estimates invalid. The whole thing can spiral into catastrophic collapse.
+Second, big updates break everything. Suppose we estimate that some action is great ($A >> 0$) and crank up its probability. If our estimate was wrong, we've now committed to a bad action. Worse, the new policy visits different states, which makes our old advantage estimates invalid, so the whole thing can spiral into catastrophic collapse.
 
 This isn't hypothetical--it happens all the time. Training curves that look promising suddenly crash to zero and never recover.
 
@@ -164,10 +148,7 @@ Define the likelihood ratio:
 \rho_t(\theta) = \frac{\pi_\theta(a_t \mid x_t)}{\pi_{\theta_{\text{old}}}(a_t \mid x_t)}
 ```
 
-This measures how the action likelihood changed:
-- $\rho = 1$: same likelihood as before
-- $\rho = 2$: action is now twice as likely
-- $\rho = 0.5$: action is now half as likely
+This measures how the action likelihood changed: $\rho = 1$ means the likelihood is unchanged, $\rho = 2$ means the action is now twice as likely, and $\rho = 0.5$ means it is now half as likely.
 
 **Note (continuous actions).** For Fetch, actions are continuous, so $\pi_\theta(a \mid x)$ is a probability density. The ratio is still well-defined as a likelihood ratio, and implementations compute it via log-probabilities: $\rho_t = \exp(\log \pi_\theta(a_t \mid x_t) - \log \pi_{\text{old}}(a_t \mid x_t))$.
 
@@ -207,17 +188,9 @@ The gradient only flows through the clipped version. We still increase the actio
 
 FetchReachDense-v4 gives reward $R = -\|achieved - goal\|_2$ at every step. This is the negative distance to the goal.
 
-**Why this helps:**
-- Every action provides signal: "you got 2cm closer" or "you drifted 1cm away"
-- The learning algorithm always has gradient information
-- Exploration isn't a bottleneck--even random actions provide useful data
+This helps because every action provides signal ("you got 2cm closer" or "you drifted 1cm away"), which means the learning algorithm always has gradient information and exploration isn't a bottleneck--even random actions provide useful data. Compare this to sparse rewards ($R = 0$ if success, $-1$ otherwise), where you only learn when you succeed, a random policy almost never succeeds, and most of your data is uninformative.
 
-Compare to sparse rewards ($R = 0$ if success, $-1$ otherwise):
-- You only learn when you succeed
-- Random policy almost never succeeds
-- Most of your data is uninformative
-
-Dense rewards decouple the exploration problem from the learning problem. If PPO fails on dense Reach, the issue is definitely in your implementation, not in insufficient exploration.
+Dense rewards therefore decouple the exploration problem from the learning problem. If PPO fails on dense Reach, the issue is definitely in your implementation, not in insufficient exploration.
 
 ---
 
@@ -231,13 +204,7 @@ PPO maintains two neural networks:
 
 **Critic** $V_\phi(x)$: Given the same input, estimate the expected return. This helps compute advantages.
 
-**Why two networks, not one?** A natural question: why not have a single network output both actions and value estimates? Three reasons:
-
-1. **Different objectives.** The actor maximizes expected return (wants to find good actions). The critic minimizes prediction error (wants accurate value estimates). These gradients can conflict--improving one may hurt the other.
-
-2. **Different output types.** The actor outputs a probability distribution (mean and variance for continuous actions). The critic outputs a single scalar. Forcing these through the same final layers creates unnecessary coupling.
-
-3. **Stability.** The critic's value estimates are used to compute advantages, which then train the actor. If actor updates destabilize the critic, the advantages become noisy, which destabilizes the actor further--a vicious cycle.
+**Why two networks, not one?** A natural question: why not have a single network output both actions and value estimates? The short answer is that the two objectives pull in different directions. The actor maximizes expected return (it wants to find good actions), while the critic minimizes prediction error (it wants accurate value estimates), and these gradients can conflict so that improving one hurts the other. The output types also differ--the actor produces a probability distribution (mean and variance for continuous actions) whereas the critic produces a single scalar, so forcing both through the same final layers creates unnecessary coupling. Finally, separation improves stability: since the critic's value estimates feed into advantage computation, which in turn trains the actor, any destabilization of the critic makes advantages noisy, which destabilizes the actor further--a vicious cycle that separate networks help prevent.
 
 <details>
 <summary>Optional aside: a geometric perspective (out of scope)</summary>
@@ -290,10 +257,7 @@ where the TD residual (with termination masking) is:
 
 Here $d_t \in \{0, 1\}$ indicates whether the episode terminated at timestep $t$ (if it did, we do not bootstrap from $x_{t+1}$). The value terms are computed when collecting the rollout and treated as constants while optimizing this batch.
 
-The parameter $\lambda$ interpolates between:
-- $\lambda = 0$: One-step TD (high bias, low variance)
-- $\lambda = 1$: Monte Carlo (low bias, high variance)
-- $\lambda = 0.95$: Typical default
+The parameter $\lambda$ interpolates between two extremes: $\lambda = 0$ gives one-step TD estimates (high bias, low variance), while $\lambda = 1$ recovers Monte Carlo returns (low bias, high variance). The typical default of $\lambda = 0.95$ sits close to Monte Carlo but gains some variance reduction from the value baseline.
 
 **Compact equation summary (goal-conditioned PPO)**
 
@@ -309,11 +273,7 @@ L^{\text{CLIP}}(\theta) = \mathbb{E}_t\left[\min\left(\rho_t\hat{A}_t,\text{clip
 
 **Steps 3-4: Update Networks**
 
-Unlike supervised learning, we do multiple passes over the same data:
-- `n_epochs = 10` is typical for PPO
-- Each pass uses minibatches of size `batch_size`
-
-This reuses our expensive-to-collect trajectory data while the clipping prevents us from overfitting to it.
+Unlike supervised learning, we do multiple passes over the same data--`n_epochs = 10` is typical for PPO, with each pass using minibatches of size `batch_size`. This reuses our expensive-to-collect trajectory data while the clipping prevents us from overfitting to it.
 
 **Step 5: Discard and Repeat**
 
@@ -463,10 +423,7 @@ $$L_{\text{value}} = \frac{1}{2} \mathbb{E}\left[ \left( V_\phi(x_t) - \hat{G}_t
 
 ### 2.5.5 Wiring It Together: The PPO Update
 
-The individual components above are combined into a single update step. PPO combines:
-- a clipped policy objective (maximize)
-- a value prediction loss (minimize)
-- an entropy bonus (maximize, to encourage exploration)
+The individual components above are combined into a single update step. PPO's total loss weaves together three terms: a clipped policy objective (which we maximize), a value prediction loss (which we minimize), and an entropy bonus (which we maximize to encourage exploration).
 
 One common convention is to *minimize* the following total loss:
 
@@ -600,13 +557,7 @@ bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --demo
 | 15 | 31k | 129 | 32.0 | Getting close |
 | 18 | 37k | **254** | 14.2 | **[SOLVED]** |
 
-**Key observations:**
-
-1. **Solves in ~37k steps:** The 195+ threshold (solved) is crossed around iteration 18.
-2. **Value loss trajectory:** High initially (learning), decreases as predictions improve.
-3. **KL stays bounded:** Typically < 0.05, showing clipping is working.
-
-This is the same algorithm SB3 uses--the from-scratch version just makes every step explicit.
+**Key observations:** The 195+ threshold (solved) is crossed around iteration 18 at roughly 37k steps. The value loss starts high as the critic learns and decreases as predictions improve, while the approximate KL divergence stays bounded (typically < 0.05), confirming that the clipping mechanism is working as intended. This is the same algorithm SB3 uses--the from-scratch version just makes every step explicit.
 
 **Exercise 2.5.4: Record a GIF of the Trained Policy**
 
@@ -662,10 +613,7 @@ Training progress (watch for these milestones):
 | 100k-200k | 70-90% | Rapid improvement |
 | 200k-500k | 95-100% | Fine-tuning, convergence |
 
-Our test run achieved:
-- **100% success rate** after 500k steps
-- **4.6mm average goal distance** (environment considers <50mm as success)
-- **~1300 steps/second** throughput on NVIDIA GB10
+Our test run achieved **100% success rate** after 500k steps, with a **4.6mm average goal distance** (the environment considers <50mm as success) and **~1300 steps/second** throughput on an NVIDIA GB10.
 
 ### 3.3 Reading the TensorBoard Logs
 
@@ -715,10 +663,7 @@ Key fields:
 }
 ```
 
-**Passing criteria:**
-- Success rate > 90%
-- Mean return > -10
-- Final distance < 0.02m
+**Passing criteria:** success rate above 90%, mean return above -10, and final distance below 0.02m.
 
 ---
 
@@ -728,39 +673,19 @@ Key fields:
 
 The trained policy maps observations to actions:
 
-**Input** (goal-conditioned dict observation):
-- `observation`: shape (10,)
-- `achieved_goal`: shape (3,)
-- `desired_goal`: shape (3,)
+**Input** (goal-conditioned dict observation): `observation` with shape (10,), `achieved_goal` with shape (3,), and `desired_goal` with shape (3,). Stable Baselines 3 uses `MultiInputPolicy` to flatten and concatenate these inputs before feeding them to an MLP.
 
-Stable Baselines 3 uses `MultiInputPolicy` to flatten/concatenate these inputs and feed them to an MLP.
-
-**Output** (4 dimensions):
-- dx, dy, dz: Cartesian velocity commands
-- gripper: open/close command
+**Output** (4 dimensions): three Cartesian velocity commands (dx, dy, dz) plus a gripper open/close command.
 
 The network learned that to reach a goal, it should output velocities that point toward the goal. This seems obvious, but the network discovered it purely from trial and error.
 
 ### 4.2 The Clipping in Action
 
-During training, you can observe the clipping mechanism working:
-
-- `clip_fraction = 0.15` means 15% of updates were clipped
-- This is healthy--some updates are constrained, preventing instability
-- `clip_fraction = 0` would mean the policy isn't learning aggressively enough
-- `clip_fraction = 1.0` would mean all updates are being constrained (too aggressive)
+During training, you can observe the clipping mechanism working. A `clip_fraction` of 0.15 means 15% of updates were clipped, which is healthy--it shows that some updates are being constrained, preventing instability. By contrast, `clip_fraction = 0` would mean the policy isn't learning aggressively enough to trigger any clipping, while `clip_fraction = 1.0` would mean all updates are being constrained, indicating that the policy is changing too aggressively between updates.
 
 ### 4.3 Why This Validates Your Pipeline
 
-If PPO succeeds on dense Reach, you know:
-
-1. **Environment is configured correctly** - Observations and actions have the right shapes and semantics
-2. **Network architecture works** - MultiInputPolicy correctly processes dict observations
-3. **GPU acceleration works** - Training completes in reasonable time
-4. **Evaluation protocol is sound** - You can load checkpoints and run deterministic rollouts
-5. **Metrics are computed correctly** - Success rate matches what you observe
-
-Now you can add complexity (SAC, HER, harder tasks) with confidence that failures are algorithmic, not infrastructural.
+If PPO succeeds on dense Reach, you know that your environment is configured correctly (observations and actions have the right shapes and semantics), that the network architecture works (MultiInputPolicy correctly processes dict observations), that GPU acceleration works (training completes in reasonable time), that your evaluation protocol is sound (you can load checkpoints and run deterministic rollouts), and that metrics are computed correctly (success rate matches what you observe). With all of these validated, you can add complexity--SAC, HER, harder tasks--with confidence that failures are algorithmic, not infrastructural.
 
 ---
 
@@ -768,11 +693,7 @@ Now you can add complexity (SAC, HER, harder tasks) with confidence that failure
 
 ### Exercise 2.1: Reproduce the Baseline
 
-Run training with seed 0 and verify you achieve > 90% success rate. Record:
-- Final success rate
-- Final mean return
-- Training time
-- Steps per second
+Run training with seed 0 and verify you achieve > 90% success rate. Record the final success rate, final mean return, training time, and steps per second.
 
 ### Exercise 2.2: Multi-Seed Validation
 
@@ -795,10 +716,7 @@ Answer these questions in your own words:
 
 ### Exercise 2.4: Ablation Study
 
-Train with `clip_range` values of 0.1, 0.2, and 0.4. For each:
-- Does final performance change?
-- Does training stability change?
-- How does `clip_fraction` in TensorBoard differ?
+Train with `clip_range` values of 0.1, 0.2, and 0.4. For each setting, note whether final performance changes, whether training stability changes, and how `clip_fraction` in TensorBoard differs across the three runs.
 
 ---
 
@@ -853,12 +771,7 @@ This chapter established something more important than a trained policy: **confi
 
 The "truth serum" principle says: before tackling hard problems, verify that easy problems work. PPO on dense Reach is that easy problem. With 100% success rate achieved, we know our environment, training loop, evaluation protocol, and GPU setup are correct.
 
-**Key takeaways:**
-
-1. **PPO prevents catastrophic updates** through clipped likelihood ratios
-2. **Dense rewards provide continuous signal**, decoupling exploration from learning
-3. **Diagnostics reveal problems early**--watch TensorBoard, not just final metrics
-4. **Infrastructure bugs are silent killers**--validate before adding complexity
+The key takeaways are that PPO prevents catastrophic updates through clipped likelihood ratios, that dense rewards provide continuous signal by decoupling exploration from learning, that diagnostics reveal problems early (which is why watching TensorBoard matters more than waiting for final metrics), and that infrastructure bugs are silent killers--validating before adding complexity saves far more time than it costs.
 
 **What's Next:**
 

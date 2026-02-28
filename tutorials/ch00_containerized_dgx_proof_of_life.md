@@ -37,7 +37,7 @@ In the tradition of Hadamard, we ask: Is the reproducibility problem *well-posed
 
 Condition (1) requires that we can *specify* an environment precisely enough to guarantee consistency. Condition (2) requires that the specification be *canonical*--that there not be multiple incompatible specifications claiming to represent the same environment. Condition (3) requires *stability*--that the result not be arbitrarily sensitive to minor environmental variations.
 
-Containerization addresses all three conditions. A Docker image provides a complete, self-contained specification of the computational environment. The image is identified by a content-addressable hash, ensuring uniqueness. And the layered filesystem ensures that small changes to the specification (adding a package, changing a configuration) produce small changes to the resulting environment.
+Containerization addresses all three conditions: a Docker image provides a complete, self-contained specification of the computational environment; the image is identified by a content-addressable hash, ensuring uniqueness; and the layered filesystem ensures that small changes to the specification (adding a package, changing a configuration) produce small changes to the resulting environment.
 
 This is why we containerize: not for convenience, but for *scientific validity*.
 
@@ -47,7 +47,7 @@ Within the general reproducibility framework, this chapter addresses a specific 
 
 **Problem (Environment Verification).** *Construct and verify a containerized environment $S$ such that: (1) GPU computation is available within $S$; (2) MuJoCo physics simulation runs correctly within $S$; (3) headless rendering produces valid images within $S$; (4) a complete training loop executes without error within $S$.*
 
-Each condition is necessary for the reinforcement learning experiments that follow. GPU access accelerates training for pixel-based chapters (Ch9) and is required for GPU-physics chapters (Appendix E); for state-based chapters (Ch1-8), CPU is the actual bottleneck and GPU adds little. Without MuJoCo, we cannot simulate the Fetch robot. Without rendering, we cannot generate evaluation videos. Without a working training loop, we cannot learn policies.
+Each condition is necessary for the reinforcement learning experiments that follow. GPU access accelerates training for pixel-based chapters (Ch9) and is required for GPU-physics chapters (Appendix E), though for state-based chapters (Ch1-8) the CPU is the actual bottleneck and GPU adds little. MuJoCo is the physics engine underlying our Fetch robot, rendering is how we generate evaluation videos, and the training loop is the pipeline through which policies are learned -- so a failure in any one of these blocks an entire class of experiments.
 
 We recommend completing all verification steps before proceeding. In our experience, skipping this chapter and proceeding directly to training eventually surfaces as rendering errors, CUDA misconfigurations, or import failures -- and debugging those in context takes longer than verifying the environment systematically from the start.
 
@@ -69,7 +69,7 @@ The key property of containers for our purposes is *isolation with specification
 
 ### 2.2 The Verification Protocol
 
-Verification is not bureaucracy. It is the empirical side of our well-posedness analysis. Each test corresponds to a necessary condition for the experiments that follow. If any test fails, some class of experiments becomes impossible. Understanding *why* each test matters--not just *what* it checks--is essential for diagnosing failures when they occur.
+Verification is not bureaucracy -- it is the empirical side of our well-posedness analysis. Each test corresponds to a necessary condition for the experiments that follow, so that if any test fails, some class of experiments becomes impossible. Understanding *why* each test matters (not just *what* it checks) is essential for diagnosing failures when they occur.
 
 #### Test 1: GPU Access
 
@@ -95,7 +95,7 @@ But GPU access inside a container is not automatic. The container runs in an iso
 3. Docker was not invoked with `--gpus all`
 4. The GPU is in use by another process with exclusive access
 
-Training will still *run* on CPU -- and for Chapters 0-8, CPU is perfectly adequate. For Chapter 9, training will be 2-3x slower but workable. Appendix E (Isaac Lab) has no CPU path and requires an NVIDIA GPU.
+Training will still *run* on CPU -- and for Chapters 0-8 CPU is perfectly adequate, while for Chapter 9 training will be 2-3x slower but workable. Only Appendix E (Isaac Lab) has no CPU path and requires an NVIDIA GPU.
 
 **The test.** The script checks `torch.cuda.is_available()` inside the container. If CUDA is available, it reports the device name and count. If not, it prints a warning but does not halt the test sequence -- training can still proceed on CPU (this is the expected path on Mac). On a DGX system where CUDA *should* be available, treat a "CUDA not available" warning as a real problem: check that Docker was invoked with `--gpus all` and that the NVIDIA Container Toolkit is installed.
 
@@ -105,7 +105,7 @@ Training will still *run* on CPU -- and for Chapters 0-8, CPU is perfectly adequ
 
 **Why this matters.** The Fetch environments are implemented on top of MuJoCo, a physics engine that simulates rigid body dynamics with contact. MuJoCo is not a pure Python library; it includes compiled C code that interfaces with system libraries. If these libraries are missing or incompatible, MuJoCo fails to initialize.
 
-Furthermore, Gymnasium-Robotics must register its environments with Gymnasium's registry. This registration happens at import time. If the import fails silently or the registration is incomplete, `gym.make("FetchReach-v4")` will raise `EnvironmentNameNotFound`.
+Furthermore, Gymnasium-Robotics must register its environments with Gymnasium's registry at import time, which means that if the import fails silently or the registration is incomplete, `gym.make("FetchReach-v4")` will raise `EnvironmentNameNotFound`.
 
 **What failure means.** If this test fails, either:
 1. MuJoCo's compiled extensions cannot find required system libraries
@@ -124,7 +124,7 @@ Without functional Fetch environments, the entire curriculum is blocked.
 
 But DGX systems are headless--they have no monitor attached. Rendering typically requires a display server (X11) to manage the graphics context. On a headless system, we must use *offscreen* rendering: EGL (hardware-accelerated via the GPU) or OSMesa (software rasterization).
 
-This is where many setups fail. EGL requires specific driver support and library versions. OSMesa requires Mesa to be compiled with offscreen support. If neither works, rendering is impossible.
+This is where many setups fail, because EGL requires specific driver support and library versions while OSMesa requires Mesa to be compiled with offscreen support -- and if neither backend works, rendering is impossible.
 
 **What failure means.** If this test fails, either:
 1. EGL libraries (`libEGL.so`) are missing or incompatible
@@ -142,9 +142,9 @@ Training can proceed without rendering, but evaluation will be limited to numeri
 
 **What we verify.** A complete training loop--environment interaction, gradient computation, parameter updates, checkpoint saving--executes without error.
 
-**Why this matters.** The previous tests verified components in isolation: GPU access, physics simulation, rendering. But reinforcement learning combines these components in complex ways. Data flows from the environment to the replay buffer to the neural network and back. Shapes must match. Dtypes must be compatible. Memory must not leak.
+**Why this matters.** The previous tests verified components in isolation -- GPU access, physics simulation, rendering -- but reinforcement learning combines these components in ways that create new failure modes. Data flows from the environment to the replay buffer to the neural network and back, which means that shapes must match, dtypes must be compatible, and memory must not leak across the entire pipeline.
 
-Many bugs only manifest when components interact. A shape mismatch between the observation space and the policy network. A dtype incompatibility between numpy arrays and PyTorch tensors. A memory leak that only appears after thousands of environment steps. These bugs do not appear in unit tests; they appear when you run training.
+Many bugs only manifest when components interact: a shape mismatch between the observation space and the policy network, a dtype incompatibility between numpy arrays and PyTorch tensors, or a memory leak that only appears after thousands of environment steps. These bugs do not surface in unit tests; they appear when you run training.
 
 **What failure means.** If this test fails, either:
 1. The policy network architecture is incompatible with the observation space
@@ -166,7 +166,7 @@ The four tests form a dependency chain:
 GPU Access -> MuJoCo Functionality -> Headless Rendering -> Training Loop
 ```
 
-Each test assumes the previous tests pass. It helps to diagnose in order -- rendering issues are harder to debug if MuJoCo itself cannot initialize, and training performance is hard to evaluate without verifying the compute environment.
+Each test assumes the previous tests pass, so it helps to diagnose in order -- rendering issues are harder to debug if MuJoCo itself cannot initialize, and training performance is hard to evaluate without verifying the compute environment.
 
 **Run the tests in order.** If a test fails, diagnose and fix it before proceeding. The `all` subcommand respects this ordering and stops at the first failure. The one exception is `gpu-check`, which always exits with status 0 even when CUDA is unavailable, so it warns but does not block subsequent tests. This is intentional: CPU-only operation is valid on Mac and other non-NVIDIA platforms.
 
@@ -183,7 +183,7 @@ Our container architecture consists of two layers:
 - **System packages:** `libegl1`, `libgl1`, `libosmesa6` (headless rendering), `libglfw3` (windowed rendering), `ffmpeg` (video encoding)
 - **Python packages:** `gymnasium`, `gymnasium-robotics`, `mujoco`, `stable-baselines3`, `tensorboard`, `imageio`
 
-The `docker/dev.sh` script automatically builds this image on first run if it does not exist locally. If the build fails (e.g., network issues), it falls back to the raw NVIDIA base image--but rendering may be unavailable in that case.
+The `docker/dev.sh` script automatically builds this image on first run if it does not exist locally, falling back to the raw NVIDIA base image if the build fails (e.g., due to network issues) -- though rendering may be unavailable in that case.
 
 **Remark (On Version Pinning).** *The `requirements.txt` file specifies minimum version constraints (e.g., `stable-baselines3>=2.4.0`) rather than exact pins. For strict reproducibility, the Docker image digest is the true specification--it freezes the entire dependency tree. Readers who want to capture exact versions for a paper can run `pip freeze` inside the container and save the output.*
 
@@ -191,7 +191,7 @@ The `docker/dev.sh` script automatically builds this image on first run if it do
 
 ### 2.4 The Virtual Environment Within the Container
 
-A subtle point deserves elaboration. We use a Python virtual environment *inside* the container, even though the container already provides isolation.
+A subtle point deserves elaboration: we use a Python virtual environment *inside* the container, even though the container already provides isolation.
 
 **Proposition.** *A virtual environment inside a container provides additional benefits: (1) it enables `pip install -e .` for editable installs of the project; (2) it allows project dependencies to shadow container dependencies when necessary; (3) it makes the dependency specification explicit in `requirements.txt` rather than implicit in the Dockerfile.*
 
@@ -259,7 +259,7 @@ python scripts/ch00_proof_of_life.py render --out smoke_frame.png
 
 **Expected Output.** A message indicating successful rendering and the creation of `smoke_frame.png`.
 
-**Failure Mode.** If rendering fails with EGL errors, the script attempts fallback to OSMesa. If both fail, rendering is disabled. You can still train policies, but you cannot generate videos.
+**Failure Mode.** If rendering fails with EGL errors, the script attempts a fallback to OSMesa; if both fail, rendering is disabled entirely, which means you can still train policies but cannot generate evaluation videos.
 
 **Remark (Rendering Backend Hierarchy).** *The script implements a fallback chain: EGL (hardware-accelerated) -> OSMesa (software) -> disabled. EGL requires NVIDIA drivers and EGL libraries; OSMesa requires the Mesa library. The `robotics-rl:latest` image includes both.*
 
@@ -273,7 +273,7 @@ python scripts/ch00_proof_of_life.py ppo-smoke --n-envs 8 --total-steps 50000 --
 
 **Remark (Hyperparameters).** *The smoke test uses `n_steps=1024` (half of SB3's default of 2048, to keep the test short) and `batch_size=256`. These are configurable via `--n-steps` and `--batch-size` but the defaults are fine for verification. Chapter 2 discusses how these parameters affect learning.*
 
-**Failure Mode.** CUDA errors indicate GPU misconfiguration. Shape mismatch errors indicate problems with observation space handling. Import errors indicate missing dependencies.
+**Failure Mode.** CUDA errors indicate GPU misconfiguration, shape mismatch errors point to problems with observation space handling, and import errors indicate missing dependencies.
 
 #### Step 6: Combined Verification
 
@@ -303,7 +303,7 @@ The platform also supports development on Apple Silicon Macs (M4, M3, M2, M1). T
 
 #### Why CPU-Only on Mac?
 
-Apple's Metal Performance Shaders (MPS) backend for PyTorch exists but has edge cases with certain operations. For maximum compatibility and to avoid subtle bugs, we use CPU on Mac. This is perfectly adequate for development and debugging--the physics simulation in MuJoCo is CPU-bound anyway.
+Apple's Metal Performance Shaders (MPS) backend for PyTorch exists but has edge cases with certain operations, so for maximum compatibility we default to CPU on Mac -- which is perfectly adequate for development and debugging, since the physics simulation in MuJoCo is CPU-bound anyway.
 
 **Remark (On Performance).** *The 6-10x throughput gap between Mac and DGX is mostly about faster CPUs and more cores on DGX, not GPU acceleration. For state-based RL (Ch1-8), both platforms are CPU-bound -- MuJoCo physics dominates, and the 256x256 MLP completes in microseconds regardless of device. Mac is fully viable for Chapters 1-8; training runs that take seconds on DGX take tens of minutes on Mac, which is fine for learning and iteration. For pixel-based RL (Ch9), the gap widens because CNNs benefit from GPU parallelism -- but RAM, not GPU speed, is usually the binding constraint there (see Ch9 for buffer-size guidance).*
 
@@ -341,13 +341,13 @@ All tests should pass on both platforms, and all artifacts should be generated c
 
 #### Known Limitations
 
-1. **State-based RL (Ch1-8)**: Mac is fully viable. Training runs complete in tens of minutes rather than seconds, which is fine for learning and iteration. No GPU needed.
+1. **State-based RL (Ch1-8)**: Mac is fully viable -- training runs complete in tens of minutes rather than seconds, which is fine for learning and iteration, and no GPU is needed.
 
 2. **Pixel-based RL (Ch9)**: RAM is the binding constraint, not GPU speed. A 500K-transition pixel buffer uses ~80 GB; Mac laptops with 32 GB should use `--buffer-size 100000` (see Ch9 for per-tier guidance). Training is 2-3x slower without a GPU but workable.
 
-3. **Isaac Lab (Appendix E)**: Not available on Mac. Isaac Lab requires Linux + NVIDIA GPU for GPU-accelerated physics (PhysX). There is no CPU fallback.
+3. **Isaac Lab (Appendix E)**: Not available on Mac, since Isaac Lab requires Linux + NVIDIA GPU for GPU-accelerated physics (PhysX) and has no CPU fallback.
 
-4. **Rendering quality**: OSMesa (software rendering) produces identical images to EGL but is slower. This matters only for video generation, not for training.
+4. **Rendering quality**: OSMesa (software rendering) produces identical images to EGL but is slower, which matters only for video generation, not for training.
 
 5. **Docker Desktop memory**: You may need to increase Docker Desktop's memory allocation (Settings -> Resources -> Memory) to 8GB+ for large batch sizes or long training runs.
 
@@ -423,7 +423,7 @@ We recommend satisfying all four conditions before proceeding. Skipping ahead te
 
 **Cause.** The container is running as your numeric UID, which has no entry in `/etc/passwd` inside the container.
 
-**Impact.** None. This is cosmetic. File permissions work correctly.
+**Impact.** None -- this is purely cosmetic, and file permissions work correctly regardless.
 
 ### A.3 EGL Initialization Failures
 

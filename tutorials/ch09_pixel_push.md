@@ -19,18 +19,17 @@ augmentation partially closed the gap. But Reach is a single-phase task: move
 the end-effector to a target in free space. No object interaction, no contact
 dynamics, no spatial reasoning about small objects.
 
-Push is qualitatively different. The robot must locate a puck (~5 pixels wide
+Push is qualitatively different: the robot must locate a puck (~5 pixels wide
 at 84x84), approach it, make contact, and push it to a goal position -- all
 from pixel observations, with sparse binary rewards. This chapter discovers
 that solving pixel Push requires three innovations beyond what worked for pixel
 Reach: a manipulation-appropriate CNN encoder, correct gradient routing from
 critic to encoder, and the patience to let the representation learning phase
-complete.
-
-This chapter is structured as a progressive debugging journey. We start with
-the obvious approach (drop in pixels), watch it fail, diagnose why, fix one
-thing at a time, and arrive at a working solution. The reader should feel they
-are discovering the solution, not being handed a recipe.
+complete. The chapter is structured as a progressive debugging journey in which
+we start with the obvious approach (drop in pixels), watch it fail, diagnose
+why, fix one thing at a time, and arrive at a working solution -- so that the
+reader feels they are discovering the solution rather than being handed a
+recipe.
 
 ---
 
@@ -39,34 +38,30 @@ are discovering the solution, not being handed a recipe.
 ### 9.1 Why Push from Pixels Is Harder Than Reach
 
 Every pixel RL challenge from Chapter 10 compounds when we add object
-interaction:
+interaction, and the compounding is worse than additive.
 
-1. **Tiny objects.** The puck in FetchPush is ~5 pixels wide at 84x84
-   resolution. The gripper is ~3-4 pixels. The spatial relationship between
-   gripper and puck -- the ONE thing the policy needs to act on -- occupies
-   a tiny fraction of the image.
+The first difficulty is **object scale**: the puck in FetchPush is ~5 pixels
+wide at 84x84 resolution, the gripper is ~3-4 pixels, and the spatial
+relationship between them -- the ONE thing the policy needs to act on --
+occupies a tiny fraction of the image. This is compounded by **sparse rewards
+in pixel space**: FetchReachDense gave continuous distance feedback so that
+every arm movement changed the reward, but FetchPush with sparse rewards
+($R = 0$ on success, $R = -1$ otherwise) means the CNN must learn useful
+spatial features with almost no reward signal. HER helps by relabeling goals,
+but the CNN still needs to extract spatial coordinates from pixels before
+HER's relabeled rewards become useful.
 
-2. **Sparse rewards + pixels.** FetchReachDense gave continuous distance
-   feedback -- every arm movement changed the reward. FetchPush with sparse
-   rewards ($R = 0$ on success, $R = -1$ otherwise) means the CNN must learn
-   useful spatial features with almost no reward signal. HER helps by
-   relabeling goals, but the CNN still needs to extract spatial coordinates
-   from pixels before HER's relabeled rewards become useful.
-
-3. **Two learning problems at once.** The agent must simultaneously:
-   - **Learn visual representations** (CNN: pixels -> spatial features)
-   - **Learn a control policy** (actor-critic: spatial features -> push actions)
-
-   In state-based Push, problem (a) does not exist -- the observation IS the
-   spatial features. Adding pixels means the agent must solve representation
-   learning AND policy learning from scratch, using the same sparse reward
-   signal.
-
-4. **Contact dynamics from images.** Pushing requires understanding what
-   happens AFTER contact: does the puck move in the right direction? How far?
-   This temporal reasoning must be inferred from sequences of pixel
-   observations. Frame stacking (4 frames) helps, but the motion signal is
-   subtle at 84x84.
+These two difficulties feed into a deeper structural problem: the agent must
+solve **two learning problems simultaneously** -- learning visual
+representations (CNN: pixels -> spatial features) and learning a control policy
+(actor-critic: spatial features -> push actions). In state-based Push, the
+first problem does not exist because the observation IS the spatial features;
+adding pixels means the agent must solve representation learning AND policy
+learning from scratch, using the same sparse reward signal. Finally, pushing
+requires understanding **contact dynamics from images** -- does the puck move
+in the right direction after contact? How far? This temporal reasoning must be
+inferred from sequences of pixel observations, and while frame stacking
+(4 frames) helps, the motion signal is subtle at 84x84.
 
 ### 9.2 Visual HER: Two Different Things
 
@@ -78,15 +73,14 @@ interaction:
 | **Full visual HER** (Nair et al. 2018, RIG) | Pixels + goal *images* | Goal images (requires VAE) | High |
 
 We use the first approach: the policy sees pixel observations, but HER
-operates on 3D goal vectors (`achieved_goal`, `desired_goal`). Relabeling is
-trivial -- swap the 3D desired\_goal with the 3D achieved\_goal. No image-space
-goal representation is needed.
-
-This creates an intentional **information asymmetry**: the policy must learn to
-CONTROL from pixels, but it does not need to learn to SPECIFY GOALS from pixels.
-We are testing whether a CNN can learn spatial features good enough for
-manipulation, not whether it can learn a visual goal representation. This is
-a meaningful middle ground between full-state and full-visual RL.
+operates on 3D goal vectors (`achieved_goal`, `desired_goal`), which means
+relabeling is trivial -- swap the 3D desired\_goal with the 3D achieved\_goal,
+with no image-space goal representation needed. This creates an intentional
+**information asymmetry**: the policy must learn to CONTROL from pixels, but it
+does not need to learn to SPECIFY GOALS from pixels. In other words, we are
+testing whether a CNN can learn spatial features good enough for manipulation,
+not whether it can learn a visual goal representation -- a meaningful middle
+ground between full-state and full-visual RL.
 
 ### 9.3 The Observation Structure
 
@@ -114,11 +108,11 @@ desired_goal (3D)        -> passthrough
 ```
 
 **Why proprioception?** The CNN should only learn about the WORLD -- where the
-puck is, where obstacles are. The robot's own state (joint positions,
+puck is, where obstacles are -- because the robot's own state (joint positions,
 velocities, gripper width) comes from direct sensors with millimeter precision
 at microsecond latency. Forcing the CNN to also learn "where is my arm?" wastes
-capacity on a problem that cheaper sensors already solve. This mirrors how real
-robotic systems operate: joint encoders + cameras, never cameras alone.
+capacity on a problem that cheaper sensors already solve, and this mirrors how
+real robotic systems operate: joint encoders + cameras, never cameras alone.
 
 ---
 
@@ -150,9 +144,9 @@ docker run --rm \
 | State + HER (Ch4) | 2M | 89% |
 | Pixel + HER (NatureCNN) | 2M | 5-8% |
 
-The algorithm is proven on state. The pixel observation pipeline is proven on
-Reach (Chapter 10). But combining pixels + sparse rewards + object interaction
-fails completely.
+The algorithm is proven on state, and the pixel observation pipeline is proven
+on Reach (Chapter 10), yet combining pixels + sparse rewards + object
+interaction fails completely.
 
 **The question this raises:** WHY? What about the visual processing pipeline is
 wrong for manipulation?
@@ -174,16 +168,15 @@ NatureCNN spatial progression:
   Flatten -> Linear(3136, 512)
 ```
 
-The puck is ~5 pixels wide. After stride-4, it becomes ~1 pixel. The spatial
-relationship between gripper and puck -- the signal the policy needs -- is
-destroyed in the FIRST layer.
-
-NatureCNN was designed for Atari, where game sprites are 10-30 pixels and
-decisions are coarse ("go left" vs "go right"). Manipulation requires
-millimeter-precision spatial reasoning about objects that are 3-5 pixels wide.
+The puck is ~5 pixels wide, so after stride-4 it becomes ~1 pixel, which means
+the spatial relationship between gripper and puck -- the signal the policy
+needs -- is destroyed in the FIRST layer. NatureCNN was designed for Atari,
+where game sprites are 10-30 pixels and decisions are coarse ("go left" vs "go
+right"), but manipulation requires millimeter-precision spatial reasoning about
+objects that are 3-5 pixels wide.
 
 **Fix:** Three changes, all motivated by the same principle -- preserve spatial
-information:
+information through the encoder pipeline.
 
 **1. ManipulationCNN** (3x3 kernels, gentle downsampling):
 
@@ -208,12 +201,10 @@ The spatial relationship is preserved. This architecture follows DrQ-v2
 
 Instead of flattening the 21x21x32 feature map (14,112 values), SpatialSoftmax
 extracts the expected (x, y) coordinate of each feature channel's peak
-activation. Output is 2 x 32 = 64 values representing "where things are" in
-the image, not "what the image looks like."
-
-This is a powerful inductive bias for manipulation: the policy needs SPATIAL
-COORDINATES (where is the puck? where is the gripper?), not a compressed image
-representation.
+activation, producing 2 x 32 = 64 values that represent "where things are" in
+the image rather than "what the image looks like." This is a powerful inductive
+bias for manipulation, since the policy needs SPATIAL COORDINATES (where is the
+puck? where is the gripper?), not a compressed image representation.
 
 ```python
 --8<-- "scripts/labs/manipulation_encoder.py:spatial_softmax"
@@ -252,37 +243,35 @@ SUFFICIENT.
 | ManipCNN + SpatialSoftmax + proprio | 2M | 5-8% |
 
 **The question this raises:** The encoder can now REPRESENT the right spatial
-information. But is it LEARNING to? Where do encoder gradients come from?
+information, but is it LEARNING to? Where do encoder gradients come from?
 
-**One concept taught:** Architecture determines what a network CAN represent.
-Training determines what it DOES represent. We fixed the capacity; now we need
-to fix the learning signal.
+**One concept taught:** Architecture determines what a network CAN represent,
+while training determines what it DOES represent. We fixed the capacity; now we
+need to fix the learning signal.
 
 ### 9.6 Step 2 -- The Right Gradient Flow (Critic-Encoder Routing)
 
 **Diagnosis:** In SB3's default SAC policy with a shared encoder, the encoder
-parameters live in the **actor's optimizer**. During critic training, SB3 calls
-`set_grad_enabled(False)` on the shared encoder -- gradients do not flow
-through the encoder during TD loss computation. The encoder only learns from
-**policy gradients**, which come from the actor loss.
-
-Early in training, the policy is random. The actor loss gradient is essentially
-noise. The encoder receives no useful learning signal.
+parameters live in the **actor's optimizer**, and during critic training SB3
+calls `set_grad_enabled(False)` on the shared encoder -- which means gradients
+do not flow through the encoder during TD loss computation, so the encoder only
+learns from **policy gradients** coming from the actor loss. Early in training
+the policy is random, which makes the actor loss gradient essentially noise, so
+the encoder receives no useful learning signal.
 
 DrQ-v2 (Yarats et al. 2022) does the opposite: place the encoder in the
-**critic's optimizer**. The critic's TD loss directly asks: "does this visual
-feature help predict future value?" This is a much richer learning signal than
-the noisy policy gradient. The actor receives **detached features** -- no
-encoder gradient flows through the actor loss.
+**critic's optimizer**, where the critic's TD loss directly asks "does this
+visual feature help predict future value?" This is a much richer learning
+signal than the noisy policy gradient, and the actor receives **detached
+features** so that no encoder gradient flows through the actor loss.
 
-**Fix:** Override SB3's gradient routing with `DrQv2SACPolicy`:
-
-- `CriticEncoderCritic`: always enable gradients through the shared encoder
-  during critic forward pass (no `set_grad_enabled(False)` gate)
-- `CriticEncoderActor`: detach features before passing to the policy MLP
-  (encoder does not receive actor loss gradients)
-- Optimizer wiring: encoder parameters in critic optimizer, excluded from actor
-  optimizer
+**Fix:** Override SB3's gradient routing with `DrQv2SACPolicy`. The override
+has three parts: `CriticEncoderCritic` always enables gradients through the
+shared encoder during the critic forward pass (removing the
+`set_grad_enabled(False)` gate), `CriticEncoderActor` detaches features before
+passing them to the policy MLP (so the encoder does not receive actor loss
+gradients), and the optimizer wiring places encoder parameters in the critic
+optimizer while excluding them from the actor optimizer.
 
 ```python
 --8<-- "scripts/labs/drqv2_sac_policy.py:critic_encoder_critic"
@@ -312,12 +301,13 @@ docker run --rm \
     --her-n-sampled-goal 8 --total-steps 5000000 --checkpoint-freq 500000'
 ```
 
-Key flags:
-- `--critic-encoder`: encoder in critic optimizer (DrQ-v2 pattern)
-- `--no-drq`: no DrQ augmentation (we will explain why in Step 4)
-- `--buffer-size 500000`: larger buffer to retain early exploration data
-- `--her-n-sampled-goal 8`: more HER relabeling (88% reward=0 vs 80% at default 4)
-- `--checkpoint-freq 500000`: periodic checkpointing every 500K steps
+The key flags here are `--critic-encoder` (placing the encoder in the critic
+optimizer, following the DrQ-v2 pattern), `--no-drq` (disabling DrQ
+augmentation, for reasons we will explain in Step 4), `--buffer-size 500000`
+(a larger buffer to retain early exploration data), `--her-n-sampled-goal 8`
+(more HER relabeling, yielding 88% reward=0 transitions vs 80% at the
+default 4), and `--checkpoint-freq 500000` (periodic checkpointing every
+500K steps to guard against OOM or process kills).
 
 **Result:** The training curve tells a story in three acts:
 
@@ -346,9 +336,9 @@ The hockey-stick emerges at ~2.2M steps. Once it starts, the agent goes from
 13% to 95% in about 1.5M steps.
 
 **One concept taught:** WHERE gradients flow matters as much as WHAT
-architecture you use. The encoder needs the critic's value signal (TD loss),
-not the actor's policy signal (noisy early on), to learn useful visual
-representations.
+architecture you use, because the encoder needs the critic's value signal
+(TD loss) -- not the actor's policy signal (which is noisy early on) -- to
+learn useful visual representations.
 
 ### 9.7 Step 3 -- Understanding the Training Curve (The Patience Tax)
 
@@ -357,10 +347,10 @@ training curve. The chapter pauses here to explain what the loss curves reveal.
 
 **The Three-Phase Loss Signature**
 
-In SAC + HER with sparse rewards, losses go through three distinct regimes.
-This is deeply counterintuitive: in supervised learning, training progress
-means loss goes DOWN. In sparse-reward RL, losses first decline (bad), then
-RISE (good), then decline again (convergence).
+In SAC + HER with sparse rewards, losses go through three distinct regimes, and
+the pattern is deeply counterintuitive: in supervised learning, training
+progress means loss goes DOWN, but in sparse-reward RL losses first decline
+(bad), then RISE (good), then decline again (convergence).
 
 **Phase 1: Failure Regime (0 - 2.2M steps)**
 
@@ -370,16 +360,14 @@ critic_loss:  Declining to 0.04-0.07
 actor_loss:   Near 0
 ```
 
-The critic's job is trivially easy. With the agent almost always failing,
-$Q$ converges to a uniform ~$-18.5$ everywhere (sum of $\gamma^t \cdot (-1)$
-for 50 steps with $\gamma = 0.95$). TD error is tiny because the Q-landscape
-is uniformly wrong -- predicting failure everywhere and being "right" because
-the agent always fails.
-
-The actor receives no useful gradient. SAC's actor loss is approximately
-$\alpha \log \pi(a|s) - Q(s, a)$. When $Q$ is the same for all actions,
-the gradient is zero. Actor loss near 0 means "the critic sees no difference
-between actions."
+The critic's job is trivially easy: with the agent almost always failing,
+$Q$ converges to a uniform ~$-18.5$ everywhere (the sum of $\gamma^t \cdot (-1)$
+for 50 steps with $\gamma = 0.95$), so TD error is tiny because the
+Q-landscape is uniformly wrong -- predicting failure everywhere and being
+"right" because the agent always fails. The actor, in turn, receives no useful
+gradient. SAC's actor loss is approximately $\alpha \log \pi(a|s) - Q(s, a)$,
+and when $Q$ is the same for all actions the gradient is zero, which means
+actor loss near 0 signals that "the critic sees no difference between actions."
 
 **A declining critic loss with flat success is a RED flag, not a green one.**
 
@@ -392,20 +380,20 @@ actor_loss:   RISING to 0.5-1.6
 ```
 
 Now some trajectories succeed ($R = 0$ on success steps) and others fail
-($R = -1$). The Q-landscape becomes heterogeneous: $Q(s, a) \approx 0$ for
+($R = -1$), so the Q-landscape becomes heterogeneous: $Q(s, a) \approx 0$ for
 good state-action pairs, $Q(s, a) \approx -18.5$ for bad ones. The critic must
-distinguish between states where the puck is reachable and states where it is
-not. This is HARDER -- hence higher loss.
+now distinguish between states where the puck is reachable and states where it
+is not, which is genuinely HARDER -- hence the higher loss.
 
 **Rising losses during the hockey-stick are a GREEN flag.**
 
-The positive feedback loop activates here:
-1. Critic learns value structure -> actor gets real gradients -> better policy
-2. Better policy -> more successes -> more diverse Bellman targets -> critic
-   learns finer structure
-3. HER amplifies: each success relabels N future transitions with $R = 0$,
-   seeding new value wavefronts
-4. This self-amplifying loop is why the curve goes exponential
+The positive feedback loop activates here: the critic learns value structure,
+which gives the actor real gradients, which produces a better policy, which
+generates more successes, which creates more diverse Bellman targets, which
+helps the critic learn finer structure. HER amplifies this cycle because each
+success relabels N future transitions with $R = 0$, seeding new value
+wavefronts through the goal space. This self-amplifying loop is why the curve
+goes exponential.
 
 **Phase 3: Convergence Regime (3.5M+ steps)**
 
@@ -415,14 +403,13 @@ critic_loss:  Declining to 0.15-0.35
 actor_loss:   Turning NEGATIVE (-0.2 to -0.8)
 ```
 
-The critic's value function is now mostly accurate. Most trajectories succeed
+The critic's value function is now mostly accurate: most trajectories succeed
 ($Q \approx 0$ for most states), so the Q-landscape becomes uniform again --
-but uniform SUCCESS. Declining critic loss here is a GREEN flag: the value
-function has converged to the true $Q$.
-
-Actor loss turning negative means $\alpha \log \pi < Q(s, a)$. The Q-values
-dominate the entropy penalty. This is the SAC-specific signal that the policy
-has converged.
+but uniform SUCCESS rather than uniform failure. Declining critic loss here is
+a GREEN flag, indicating that the value function has converged to the true $Q$.
+Actor loss turning negative means $\alpha \log \pi < Q(s, a)$, where the
+Q-values dominate the entropy penalty -- the SAC-specific signal that the
+policy has converged.
 
 **Summary table for monitoring pixel RL:**
 
@@ -432,9 +419,10 @@ has converged.
 | critic\_loss | Declining < 0.1 (RED) | Rising 0.3-0.8 (GREEN) | Declining 0.15-0.35 (GREEN) |
 | actor\_loss | Near 0 (no signal) | Rising 0.5-1.6 (real signal) | Negative (converged) |
 
-**How to distinguish Phase 1 declining from Phase 3 declining:** Look at
-success rate. Phase 1: critic\_loss declining AND success flat. Phase 3:
-critic\_loss declining AND success high. Never read loss curves in isolation.
+**How to distinguish Phase 1 declining from Phase 3 declining:** The answer is
+always to check success rate alongside the loss. In Phase 1, critic\_loss
+declines while success remains flat; in Phase 3, critic\_loss declines while
+success is high. The lesson is to never read loss curves in isolation.
 
 **The Training Budget Rule**
 
@@ -447,34 +435,31 @@ Pixel RL needs 2-4x the training budget of state RL for the same task:
 
 This matches the literature: Yarats et al. (2022, DrQ-v2) report that pixel
 agents on DMControl tasks typically need 2-3x the frames of state agents to
-reach equivalent performance.
-
-The overhead exists because the pixel agent must LEARN spatial representations
-before the value function becomes meaningful. The flat first ~2M steps look
-like failure but are the encoder warm-up phase -- a necessary overhead.
+reach equivalent performance. The overhead exists because the pixel agent must
+LEARN spatial representations before the value function becomes meaningful, so
+the flat first ~2M steps look like failure but are actually the encoder warm-up
+phase -- a necessary overhead, not a sign that something is broken.
 
 **The stop-rule trap:** A stop rule calibrated for state RL ("abort if <10% at
-1M steps") becomes a self-fulfilling prophecy for pixel RL. You terminate the
-run precisely because the encoder has not yet learned, which ensures you never
-see it learn.
+1M steps") becomes a self-fulfilling prophecy for pixel RL, since you terminate
+the run precisely because the encoder has not yet learned, which ensures you
+never see it learn.
 
 **The practical stopping rule:** Conversely, once the agent has converged, there
 is no reason to keep training. In our experiments, success rate plateaued at
-95-96% around 3.5M steps. Running to 5M burns ~15 extra hours of compute for
-no meaningful improvement. We find the following heuristic useful:
-
-- **Do not stop before 3M steps** (the hockey-stick may not have completed)
-- **Stop when success rate has been stable above 90% for 500K+ steps**
-- **Monitor critic\_loss:** once it is declining in Phase 3 (not Phase 1 --
-  check success rate to disambiguate), convergence is underway
-
-In our seed 0 run, 4M steps was more than sufficient. The 3.5M checkpoint
-at 95% would also have been a defensible stopping point.
+95-96% around 3.5M steps, and running to 5M burned ~15 extra hours of compute
+for no meaningful improvement. We find the following heuristic useful: do not
+stop before 3M steps (since the hockey-stick may not have completed), but stop
+when success rate has been stable above 90% for 500K+ steps, provided that
+critic\_loss is declining in Phase 3 rather than Phase 1 (check success rate
+to disambiguate). In our seed 0 run, 4M steps was more than sufficient, and
+the 3.5M checkpoint at 95% would also have been a defensible stopping point.
 
 **One concept taught:** How to READ training curves in pixel RL. Rising losses
-= the hockey-stick signal. Declining losses with flat success = the failure
-signal. This is the opposite of supervised learning intuition. And once
-convergence is clear, stop early rather than wasting compute.
+are the hockey-stick signal, while declining losses with flat success are the
+failure signal -- the opposite of supervised learning intuition. And once
+convergence is clear, stopping early saves compute better spent on additional
+seeds.
 
 ### 9.8 Step 4 -- The DrQ Surprise (Augmentation vs Representation)
 
@@ -505,35 +490,34 @@ docker run --rm \
 | No DrQ + SpatialSoftmax (Step 2) | 6% (pre-hockey-stick) | 95% |
 | DrQ + SpatialSoftmax | 3-6% | -- (terminated) |
 
-**Diagnosis:** DrQ shifts images by $\pm 4$ pixels randomly. After the CNN
-(84 -> 21 spatial), this becomes $\pm 1$ pixel on the feature map.
-SpatialSoftmax converts feature map positions to coordinates in $[-1, 1]$.
-A $\pm 1$ pixel shift at 21x21 resolution becomes $\pm 0.10$ in coordinate
-space.
-
-Crucially, `obs` and `next_obs` are augmented INDEPENDENTLY with different
-random shifts. This DOUBLES the noise in Bellman targets:
+**Diagnosis:** DrQ shifts images by $\pm 4$ pixels randomly, which after the
+CNN (84 -> 21 spatial) becomes $\pm 1$ pixel on the feature map. Since
+SpatialSoftmax converts feature map positions to coordinates in $[-1, 1]$,
+a $\pm 1$ pixel shift at 21x21 resolution becomes $\pm 0.10$ in coordinate
+space. Crucially, `obs` and `next_obs` are augmented INDEPENDENTLY with
+different random shifts, which DOUBLES the noise in Bellman targets:
 
 $$
 y = r + \gamma Q(s', a') \quad \text{where } s' = \text{aug}(s'_{\text{raw}})
 $$
 
 The gripper-puck distance signal in SpatialSoftmax coordinates is only
-~0.25-0.50. With $\pm 0.10$ independent noise on both obs and next\_obs,
-the noise-to-signal ratio is 40-80%. The critic cannot learn stable value
-structure from targets this noisy.
+~0.25-0.50, so with $\pm 0.10$ independent noise on both obs and next\_obs,
+the noise-to-signal ratio reaches 40-80% -- too noisy for the critic to learn
+stable value structure.
 
 **Why DrQ works on Reach but not on Push:** On Reach, the NatureCNN flattens
-the feature map into a 512D vector. DrQ's $\pm 4$ pixel shift creates
+the feature map into a 512D vector, and DrQ's $\pm 4$ pixel shift creates
 augmented views that regularize the Q-function against pixel-level overfitting.
-With SpatialSoftmax, the representation is already low-dimensional coordinates
--- there is no pixel-level overfitting to regularize, and the noise directly
-corrupts the spatial signal.
+With SpatialSoftmax, by contrast, the representation is already
+low-dimensional coordinates, which means there is no pixel-level overfitting to
+regularize and the noise directly corrupts the spatial signal that the critic
+depends on.
 
-**One concept taught:** Data augmentation is not universally good. You must
-match your augmentation to your representation. SpatialSoftmax extracts
-precise spatial coordinates; DrQ injects spatial noise. They are fundamentally
-incompatible.
+**One concept taught:** Data augmentation is not universally good -- you must
+match your augmentation to your representation, since SpatialSoftmax extracts
+precise spatial coordinates while DrQ injects spatial noise, making them
+fundamentally incompatible.
 
 **Generalizable principle:** "Choose your representation, then choose your
 augmentation."
@@ -564,9 +548,10 @@ proprioception passthrough:
 
 ### 9.10 ManipulationCNN + SpatialSoftmax
 
-The encoder pipeline: ManipulationCNN produces a feature map, SpatialSoftmax
-extracts spatial coordinates, ManipulationExtractor routes image and vector
-keys to the appropriate sub-encoders.
+The encoder pipeline chains three components: ManipulationCNN produces a feature
+map, SpatialSoftmax extracts spatial coordinates from that map, and
+ManipulationExtractor routes image and vector keys to the appropriate
+sub-encoders.
 
 Verification:
 
@@ -574,10 +559,10 @@ Verification:
 python scripts/labs/manipulation_encoder.py --verify
 ```
 
-Expected output includes:
-- SpatialSoftmax coordinates in $[-1, 1]$ range
-- ManipulationCNN output shape `(B, 32, 21, 21)`
-- ManipulationExtractor `features_dim = 80` (64 spatial + 10 proprio + 3 ag + 3 dg)
+Expected output confirms that SpatialSoftmax coordinates fall in the $[-1, 1]$
+range, the ManipulationCNN output shape is `(B, 32, 21, 21)`, and the
+ManipulationExtractor produces `features_dim = 80` (64 spatial + 10 proprio +
+3 ag + 3 dg).
 
 ### 9.11 DrQ-v2 Gradient Routing
 
@@ -589,13 +574,12 @@ Verification:
 python scripts/labs/drqv2_sac_policy.py --verify
 ```
 
-Expected output confirms:
-- Encoder parameters in critic optimizer: YES
-- Encoder parameters in actor optimizer: NO
-- After `critic.backward()`: encoder has grad
-- After `actor.backward()`: encoder has NO grad (features detached)
-- Target critic has its own encoder copy (not shared)
-- Save/load preserves gradient routing
+Expected output confirms that the encoder parameters appear in the critic
+optimizer (but not the actor optimizer), that running `critic.backward()`
+produces encoder gradients while `actor.backward()` does not (because features
+are detached), that the target critic has its own encoder copy rather than
+sharing the online encoder, and that save/load preserves the gradient routing
+configuration.
 
 ---
 
@@ -658,16 +642,17 @@ Key metrics to watch:
 | 3.0M | 85-93% | If below 50%: something is likely misconfigured |
 | 3.5M | 95%+ (converged) | Safe to stop here |
 
-**When to stop:** You do not need to run all 5M steps. Once success rate has
-been stable above 90% for 500K+ steps and critic\_loss is declining (Phase 3),
-the agent has converged. In our experience, 3.5-4M steps is sufficient. Running
-past convergence wastes compute that is better spent on additional seeds.
+**When to stop:** You do not need to run all 5M steps, since once the success
+rate has been stable above 90% for 500K+ steps and critic\_loss is declining
+(Phase 3), the agent has converged. In our experience, 3.5-4M steps is
+sufficient, and running past convergence wastes compute that is better spent on
+additional seeds.
 
 #### Memory: The Pixel Buffer Is the Binding Constraint
 
-For pixel RL, RAM -- not GPU speed -- is usually the limiting resource. The
-replay buffer stores every transition's `obs` and `next_obs` as pixel arrays,
-and these dominate memory.
+For pixel RL, RAM -- not GPU speed -- is usually the limiting resource, because
+the replay buffer stores every transition's `obs` and `next_obs` as pixel
+arrays that dominate memory.
 
 **Per-transition breakdown.** Each transition stores two observations (obs and
 next_obs), each containing a 4-frame stack of 84x84 RGB images:
@@ -693,21 +678,21 @@ uses ~200 bytes. **Pixel transitions are ~850x larger.**
 
 **Per-tier practical advice:**
 
-- **120+ GB RAM (DGX, large workstations):** Use the recommended `--buffer-size 500000`. This retains enough early exploration for the hockey-stick to emerge on schedule (~2.2M steps).
+- **120+ GB RAM (DGX, large workstations):** Use the recommended `--buffer-size 500000`, which retains enough early exploration for the hockey-stick to emerge on schedule (~2.2M steps).
 
-- **64 GB RAM:** Use `--buffer-size 300000`. Expect the hockey-stick onset to shift later (perhaps ~3M steps instead of ~2.2M) because the buffer forgets early exploration sooner. Final success rate should still reach 90%+.
+- **64 GB RAM:** Use `--buffer-size 300000`. The hockey-stick onset may shift later (perhaps ~3M steps instead of ~2.2M) because the buffer forgets early exploration sooner, though the final success rate should still reach 90%+.
 
-- **32 GB RAM:** Use `--buffer-size 100000`. The agent may plateau at 70-85% and need 5-6M steps to reach 90%+. The smaller buffer means the agent "forgets" early diverse experience faster, weakening the HER relabeling signal.
+- **32 GB RAM:** Use `--buffer-size 100000`. The agent may plateau at 70-85% and need 5-6M steps to reach 90%+, since the smaller buffer means the agent "forgets" early diverse experience faster, weakening the HER relabeling signal.
 
-- **16 GB RAM:** Experimental. Consider running the state-only variant (`--full-state`) first to verify the pipeline, then attempt pixels with `--buffer-size 50000`. Success is not guaranteed -- the buffer may be too small for the hockey-stick to emerge.
+- **16 GB RAM:** Experimental. Consider running the state-only variant (`--full-state`) first to verify the pipeline, then attempt pixels with `--buffer-size 50000` -- though success is not guaranteed, because the buffer may be too small for the hockey-stick to emerge.
 
 **Why buffer size matters for HER.** HER relabels transitions using goals from
-*future* transitions in the same episode. When the buffer is small relative to
-training length, old episodes are overwritten before their relabeled variants
-propagate value through the Bellman equation. This delays or weakens the
-hockey-stick phase transition: the positive feedback loop (more successes ->
-better value estimates -> more successes) needs a critical mass of diverse
-experience in the buffer to ignite.
+*future* transitions in the same episode, so when the buffer is small relative
+to training length, old episodes are overwritten before their relabeled
+variants propagate value through the Bellman equation. This delays or weakens
+the hockey-stick phase transition, because the positive feedback loop (more
+successes -> better value estimates -> more successes) needs a critical mass of
+diverse experience in the buffer to ignite.
 
 **Note:** SB3's `DictReplayBuffer` does not support `optimize_memory_usage`
 (which halves memory by storing `next_obs` implicitly). The RAM figures above
@@ -736,13 +721,14 @@ docker run --rm \
     --resume checkpoints/ch09_manip_noDrQ_criticEnc_FetchPush-v4_seed0_2500000_steps.zip'
 ```
 
-**What resumes:** Network weights and optimizer state. The replay buffer does
-NOT resume (too large to serialize for pixel buffers). It refills from the
-trained policy's behavior within ~1K steps.
+**What resumes:** Network weights and optimizer state resume from the
+checkpoint, but the replay buffer does NOT resume (since it is too large to
+serialize for pixel buffers) and instead refills from the trained policy's
+behavior within ~1K steps.
 
-**What `--total-steps` means on resume:** The TARGET total, not the remaining
-steps. If the checkpoint is at 2.5M and `--total-steps` is 5M, the script
-trains for 2.5M more steps.
+**What `--total-steps` means on resume:** This is the TARGET total, not the
+remaining steps -- so if the checkpoint is at 2.5M and `--total-steps` is 5M,
+the script trains for 2.5M more steps.
 
 ### 9.15 Evaluation
 
@@ -776,8 +762,8 @@ docker run --rm \
     --seed 0 --full-state --total-steps 2000000'
 ```
 
-Expected: 85-90% success at 2M steps (matching Ch4 results). If this fails,
-the problem is in the script wiring, not the visual pipeline.
+Expected: 85-90% success at 2M steps (matching Ch4 results), and if this fails
+the problem is in the script wiring rather than the visual pipeline.
 
 ---
 
@@ -890,11 +876,11 @@ python scripts/ch09_pixel_push.py train \
 upper bound, but convergence typically occurs by 3.5-4M).
 **RAM:** ~40-50 GB per run (500K pixel buffer + model + envs).
 
-**Practical tip:** Monitor `rollout/success_rate` in TensorBoard. Once it has
-been stable above 90% for 500K+ steps and `train/critic_loss` is declining
-(Phase 3, not Phase 1 -- check success rate to tell them apart), you can stop
-early and use the most recent periodic checkpoint. Running past convergence
-wastes compute better spent on additional seeds.
+**Practical tip:** Monitor `rollout/success_rate` in TensorBoard, and once it
+has been stable above 90% for 500K+ steps while `train/critic_loss` is
+declining (Phase 3, not Phase 1 -- check success rate to tell them apart), you
+can stop early and use the most recent periodic checkpoint, since running past
+convergence wastes compute better spent on additional seeds.
 
 **Results (seed 0, stopped at 4M steps):**
 

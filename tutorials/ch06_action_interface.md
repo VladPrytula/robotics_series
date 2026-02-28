@@ -90,16 +90,15 @@ decomposition:
 2. **Evaluate PD** (proportional controller, hand-tuned) on the same task: $\text{SR}_{\text{PD}}$
 3. **Compute the gap:** $\Delta = \text{SR}_{\text{RL}} - \text{SR}_{\text{PD}}$
 
-The interpretation:
-
-- **$\Delta \approx 0$, both high:** Pure *control* task. A simple controller
-  suffices -- the learned policy's advantage is not in strategy but perhaps
-  in movement quality.
-- **$\Delta \gg 0$:** *Planning* task. The RL policy has learned strategies
-  (multi-phase behavior, contact sequencing) that no fixed-gain controller
-  can replicate.
-- **$\Delta \approx 0$, both low:** Both fail -- the task may be fundamentally
-  harder or require different approaches entirely.
+The interpretation depends on both the gap and the absolute performance. When
+$\Delta \approx 0$ and both success rates are high, the task is a pure
+*control* problem -- a simple controller suffices, so the learned policy's
+advantage lies in movement quality rather than strategy. When $\Delta \gg 0$,
+the task requires *planning*: the RL policy has learned multi-phase behavior
+or contact sequencing that no fixed-gain controller can replicate. When
+$\Delta \approx 0$ but both success rates are low, neither approach works,
+which suggests the task may be fundamentally harder or require a different
+formulation entirely.
 
 This decomposition is not rigorous (it conflates many factors), but we find
 it practically useful for diagnosing where to focus debugging effort.
@@ -121,12 +120,13 @@ where $a_{\text{low}}, a_{\text{high}}$ are the environment's action space
 bounds (both $[-1, 1]^4$ for Fetch).
 
 **Intuition:** Scaling down ($\alpha < 1$) makes the policy take smaller
-steps -- finer control at the cost of speed. Scaling up ($\alpha > 1$)
-amplifies actions -- faster movement but more saturation and jitter.
+steps -- finer control at the cost of speed -- while scaling up ($\alpha > 1$)
+amplifies actions, producing faster movement but more saturation and jitter.
 
-**Prediction:** Smoothness should increase monotonically with $\alpha$
-(larger actions = larger differences between consecutive actions). Success
-rate may degrade at extreme scales.
+**Prediction:** Smoothness should increase monotonically with $\alpha$,
+since larger actions produce larger differences between consecutive steps.
+Success rate may degrade at extreme scales where either the actions are too
+small to accomplish the task or too large to maintain precision.
 
 ### 6.6 Low-Pass Filtering (EMA)
 
@@ -143,9 +143,11 @@ with $a_{\text{out}}^{(0)} = a_{\text{raw}}^{(0)}$ (no prior history).
 output. When $\alpha = 1$, there is no filtering (pass-through). When
 $\alpha \to 0$, the output barely changes -- extremely smooth but unresponsive.
 
-**Prediction:** Smoothness should decrease as $\alpha$ decreases (heavier
-filtering = smoother). But for tasks requiring fast reactions (e.g., pushing
-at contact), heavy filtering may hurt success rate.
+**Prediction:** Smoothness should decrease as $\alpha$ decreases, since
+heavier filtering averages out consecutive action differences. However, for
+tasks requiring fast reactions (such as switching behavior at the moment of
+contact during pushing), heavy filtering may delay the transition and hurt
+success rate.
 
 ### 6.7 Proportional Controller Baseline
 
@@ -168,13 +170,13 @@ to $[-1, 1]^4$.
 2. **Push:** Once near the object, push it toward the goal.
 
 **Note:** MuJoCo's Fetch robot already has internal PD controllers on each
-joint. Our Cartesian proportional controller operates on top of those --
+joint, so our Cartesian proportional controller operates on top of those --
 it computes a desired Cartesian displacement, and MuJoCo's internal
 controllers handle the joint-level tracking.
 
 **Why this matters:** The PD controller gives us a calibration point. If it
-solves the task, the learned policy's value is in movement quality, not in
-strategy. If it fails, we know the task requires planning that a simple
+solves the task, the learned policy's value lies in movement quality rather
+than strategy; if it fails, we know the task requires planning that a simple
 controller cannot provide.
 
 ---
@@ -298,7 +300,7 @@ controllers interchangeably:
 ### 6.8.4 Controller Metrics
 
 The metric dataclass bundles all engineering measurements for a single
-episode, and the computation function extracts them from trajectory data:
+episode, while the computation function extracts them from trajectory data:
 
 ```python
 --8<-- "scripts/labs/action_interface.py:controller_metrics"
@@ -320,17 +322,17 @@ mean is zero.
 ### 6.8.5 Unified Evaluation Loop
 
 The `run_controller_eval()` function runs N episodes with any policy-like
-object, applying optional wrappers, and returns both aggregate stats and
-per-episode details:
+object -- applying optional wrappers along the way -- and returns both
+aggregate statistics and per-episode details:
 
 ```python
 --8<-- "scripts/labs/action_interface.py:run_controller_eval"
 ```
 
 The wrapper composition pattern (line 309-310 in the source) applies
-wrappers in list order, with the last wrapper being outermost -- following
-the standard Gymnasium convention. This means you can stack scaling and
-filtering:
+wrappers in list order with the last wrapper being outermost, following the
+standard Gymnasium convention. This means scaling and filtering can be
+stacked so that the raw action is first scaled, then smoothed:
 
 ```python
 wrappers = [
@@ -416,13 +418,14 @@ Smoothness monotonicity: **PASS** (increases with scale as predicted).
 ![Action Scaling -- FetchReach](../figures/ch06_scaling_fetchreach-v4.png)
 
 **Interpretation:** FetchReach is robust to all scale factors -- 100% success
-everywhere. But the movement quality changes dramatically. At scale=0.25,
-the gripper crawls (TTS=9.1 steps) but is whisper-smooth (0.005). At
-scale=2.0, it arrives instantly (TTS=2.7) but smoothness explodes to 0.95 --
-the clipping at $[-1, 1]$ causes the policy to bang between saturation limits.
-The energy U-shape (27 at 0.25, minimum 12.3 at 1.5, back to 23.6 at 2.0)
-shows that the *trained* scale of 1.0 sits near the energy-efficient sweet
-spot.
+everywhere -- but the movement quality changes dramatically. At scale=0.25,
+the gripper crawls (TTS=9.1 steps) yet is whisper-smooth (0.005), whereas at
+scale=2.0 it arrives instantly (TTS=2.7) but smoothness explodes to 0.95
+because the clipping at $[-1, 1]$ causes the policy to bang between
+saturation limits. The energy U-shape (27 at 0.25, minimum 12.3 at 1.5, back
+to 23.6 at 2.0) confirms that the *trained* scale of 1.0 sits near the
+energy-efficient sweet spot, which makes sense given that SAC's entropy
+regularization implicitly discourages unnecessary action magnitude.
 
 **FetchPush-v4 -- Scaling Results:**
 
@@ -439,18 +442,18 @@ Smoothness monotonicity: **PASS**.
 
 ![Action Scaling -- FetchPush](../figures/ch06_scaling_fetchpush-v4.png)
 
-**Interpretation:** Push shows a clear *minimum force threshold*. At scale=0.25,
-the gripper cannot push the block hard enough -- only 25% of episodes succeed
-(likely those where the block starts near the goal). The S-curve from 25% to
-100% reveals that pushing requires sustained contact forces that small actions
-cannot produce. Above scale=1.0, success drops slightly (99%, 98%) due to
-overshoot at contact.
+**Interpretation:** Push shows a clear *minimum force threshold*. At
+scale=0.25, the gripper cannot push the block hard enough -- only 25% of
+episodes succeed (likely those where the block starts near the goal) -- and
+the S-curve from 25% to 100% reveals that pushing requires sustained contact
+forces that small actions cannot produce. Above scale=1.0, success drops
+slightly (99%, 98%) as oversized actions cause overshoot at contact.
 
 ![Action Scaling -- Combined](../figures/ch06_scaling_combined.png)
 
-The combined plot contrasts Reach (flat at 100%) with Push (S-curve). This
-is our first evidence that Push is *structurally harder* -- it has a
-force-threshold requirement that Reach does not.
+The combined plot contrasts Reach (flat at 100%) with Push (S-curve),
+providing our first evidence that Push is *structurally harder* because it
+has a force-threshold requirement that Reach does not.
 
 ### 6.11 Experiment 2: Low-Pass Filter Sweep
 
@@ -472,18 +475,19 @@ We evaluate at filter coefficients $\alpha \in \{0.2, 0.4, 0.6, 0.8, 1.0\}$.
 
 ![Low-Pass Filter -- FetchReach](../figures/ch06_filter_fetchreach-v4.png)
 
-**Interpretation:** For Reach, the filter does not hurt success rate at all.
-But note an interesting effect: at $\alpha = 0.2$ (heavy smoothing),
-smoothness actually *increases* to 0.071 (from 0.028 unfiltered). This
-seems counterintuitive -- should filtering not reduce smoothness?
+**Interpretation:** For Reach, the filter does not hurt success rate at all,
+but note an interesting effect: at $\alpha = 0.2$ (heavy smoothing),
+smoothness actually *increases* to 0.071 (from 0.028 unfiltered), which
+seems counterintuitive since one might expect filtering to reduce smoothness.
 
-The explanation: smoothness measures *action differences*, and heavy filtering
-causes a persistent *lag*. The filtered output slowly chases the raw policy
-output, creating a non-zero difference at every step. The raw policy (no
-filter) happens to output fairly similar actions in consecutive steps for
-Reach, so the filter adds more lag-induced differences than it removes
-jitter. This is a good reminder that smoothness is not the same as "looks
-smooth to a human" -- it is a specific mathematical quantity.
+The explanation is that smoothness measures *action differences*, and heavy
+filtering causes a persistent *lag* where the filtered output slowly chases
+the raw policy output, creating a non-zero difference at every step. Because
+the raw policy (no filter) happens to output fairly similar actions in
+consecutive steps for Reach, the filter adds more lag-induced differences
+than it removes in jitter. This is a good reminder that smoothness is not
+the same as "looks smooth to a human" -- it is a specific mathematical
+quantity that can increase even when the trajectory appears visually gentle.
 
 **FetchPush-v4 -- Filter Results:**
 
@@ -497,13 +501,13 @@ smooth to a human" -- it is a specific mathematical quantity.
 
 ![Low-Pass Filter -- FetchPush](../figures/ch06_filter_fetchpush-v4.png)
 
-**Interpretation:** Here the filter *does* cost success rate. At $\alpha = 0.2$,
-success drops to 85%. Push requires temporally precise control -- the policy
-must switch from "approach" to "push" behavior at the moment of contact.
-Heavy filtering delays this transition, causing the gripper to overshoot or
-slide past the block. The 15% success drop at $\alpha = 0.2$ is direct
-evidence that Push's learned strategy depends on rapid action changes that
-filtering suppresses.
+**Interpretation:** Here the filter *does* cost success rate -- at
+$\alpha = 0.2$, success drops to 85% because Push requires temporally
+precise control where the policy must switch from "approach" to "push"
+behavior at the moment of contact. Heavy filtering delays this transition,
+causing the gripper to overshoot or slide past the block, so the 15% success
+drop at $\alpha = 0.2$ is direct evidence that Push's learned strategy
+depends on rapid action changes that filtering suppresses.
 
 ### 6.12 Experiment 3: PD Controller Baseline
 
@@ -521,10 +525,11 @@ We evaluate the proportional controller at $K_p \in \{5, 10, 20\}$.
 | 10.0 | 100% | 0.0060 | 0.918 | 0.140 | 3.80 | 3.1 |
 | 20.0 | 100% | 0.0185 | 0.985 | 0.144 | 6.00 | 2.6 |
 
-The PD controller achieves 100% on Reach at all gains. Notably, at
-$K_p = 5$, it is *smoother than the RL policy* (0.001 vs 0.028) and uses
-far less energy (1.82 vs 12.44). The price: it takes longer (TTS=6.0 vs
-2.7).
+The PD controller achieves 100% on Reach at all gains, and notably at
+$K_p = 5$ it is *smoother than the RL policy* (0.001 vs 0.028) while using
+far less energy (1.82 vs 12.44). The price is that it takes longer
+(TTS=6.0 vs 2.7), which illustrates the speed-versus-smoothness tradeoff
+that a controls engineer would weigh in deployment.
 
 **FetchPush-v4 -- PD Baseline:**
 
@@ -535,10 +540,10 @@ far less energy (1.82 vs 12.44). The price: it takes longer (TTS=6.0 vs
 | 20.0 | 5% | 2.099 | 1.000 | 1.107 | 52.9 | 1.0 |
 
 The PD controller **fails catastrophically on Push** -- only 5% success
-(essentially chance). A proportional controller moves the gripper toward
-the goal, but it cannot orchestrate the approach-then-push sequence. It
-does not know to first move to the *block*, then push the block toward
-the *goal*. This is the clearest evidence that Push requires planning.
+(essentially chance) -- because a proportional controller moves the gripper
+toward the goal but cannot orchestrate the approach-then-push sequence. It
+does not know to first move to the *block* and then push the block toward
+the *goal*, which provides the clearest evidence that Push requires planning.
 
 ### 6.13 Experiment 4: Planning vs Control Decomposition
 
@@ -553,16 +558,16 @@ bash docker/dev.sh python scripts/ch06_action_interface.py compare --include-pus
 | FetchReach-v4 | 100% | 100% | 0% | Pure **control** task |
 | FetchPush-v4 | 100% | 5% | +95% | Requires **planning** |
 
-**FetchReach** is a pure control task. Both RL and PD solve it perfectly.
-The learned policy's advantage over PD is not in *whether* it succeeds, but
-in *how fast* it succeeds (TTS=2.7 vs 6.0 at $K_p = 5$). A controls
-engineer would choose based on the speed-vs-smoothness tradeoff.
+**FetchReach** is a pure control task -- both RL and PD solve it perfectly,
+so the learned policy's advantage over PD lies not in *whether* it succeeds
+but in *how fast* it succeeds (TTS=2.7 vs 6.0 at $K_p = 5$), a tradeoff
+that a controls engineer would weigh against smoothness in deployment.
 
 **FetchPush** requires planning. The 95-percentage-point gap proves that the
 RL policy has learned strategies -- approach, contact, push -- that no
-fixed-gain controller can replicate. When debugging a Push failure, the
-decomposition tells us to look at the *strategy* (reward shaping, exploration)
-rather than the action interface.
+fixed-gain controller can replicate, which means that when debugging a Push
+failure, the decomposition tells us to look at the *strategy* (reward
+shaping, exploration) rather than the action interface.
 
 ### 6.14 Engineering Metrics Dashboard
 
@@ -573,18 +578,15 @@ scale for each environment:
 
 ![Engineering Metrics -- FetchPush](../figures/ch06_metrics_fetchpush-v4.png)
 
-**Key observations:**
-
-- **TTS saturates:** For both envs, TTS drops quickly as scale increases
-  but plateaus beyond scale=1.0. Bigger actions do not make Push faster once
-  the force threshold is met.
-- **Path length is monotonic:** Larger actions = longer paths, because
-  overshoot adds travel distance. At scale=2.0, the Reach gripper travels
-  1.03 m (7x the 0.14 m at scale=1.0) due to oscillation.
-- **Energy U-shape:** The effort cost is minimized near scale=1.0 -- exactly
-  where the policy was trained. SAC's entropy regularization implicitly
-  penalizes unnecessary action magnitude, producing an energy-efficient
-  operating point.
+**Key observations:** For both environments, TTS drops quickly as scale
+increases but plateaus beyond scale=1.0, which means bigger actions do not
+make Push faster once the force threshold is met. Path length, by contrast,
+increases monotonically with scale because overshoot adds travel distance --
+at scale=2.0, the Reach gripper travels 1.03 m (7x the 0.14 m at scale=1.0)
+due to oscillation. Perhaps most striking is the energy U-shape: the effort
+cost is minimized near scale=1.0 -- exactly where the policy was trained --
+since SAC's entropy regularization implicitly penalizes unnecessary action
+magnitude, producing an energy-efficient operating point.
 
 ### 6.15 Video Recordings
 
@@ -647,8 +649,8 @@ bash docker/dev.sh python scripts/ch06_action_interface.py video --seed 0 --incl
 ### What Comes Next
 
 Chapter 7 addresses **robustness** -- how policies degrade under noise,
-domain randomization, and observation perturbations. Where this chapter
-asked "how well does the robot behave under ideal conditions?", Chapter 7
-asks "how well does it behave when conditions change?" The action wrappers
+domain randomization, and observation perturbations. Where this chapter asked
+"how well does the robot behave under ideal conditions?", Chapter 7 asks
+"how well does it behave when conditions change?", and the action wrappers
 and engineering metrics we built here will serve as the evaluation framework
-for robustness testing.
+for that robustness testing.

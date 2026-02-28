@@ -224,10 +224,11 @@ baseline performance. AUC measures *noise tolerance*, not *overall quality*
 
 ### 7.5 Noise Injection as an Eval-Time Wrapper
 
-A key insight: **noise injection does not require retraining**. We wrap the
-environment with a `NoisyEvalWrapper` that adds Gaussian noise to observations
-or actions at evaluation time. The policy weights remain unchanged -- we are
-measuring the *existing* policy's sensitivity, not training a new one.
+A key insight is that **noise injection does not require retraining** -- we
+wrap the environment with a `NoisyEvalWrapper` that adds Gaussian noise to
+observations or actions at evaluation time, leaving policy weights unchanged
+so that we are measuring the *existing* policy's sensitivity rather than
+training a new one.
 
 This wrapper composition pattern follows the Gymnasium convention:
 
@@ -235,34 +236,30 @@ This wrapper composition pattern follows the Gymnasium convention:
 policy -> LowPassFilterWrapper (optional) -> NoisyEvalWrapper -> base env
 ```
 
-The wrapper has three important properties:
-
-1. **Zero noise = identity:** When both noise stds are 0.0, the wrapper passes
-   observations and actions through unchanged. This is verified in the lab
-   module's test suite.
-
-2. **Goals are preserved:** Only the `observation` key is perturbed. The
-   `desired_goal` and `achieved_goal` keys pass through untouched -- the
-   reward computation stays correct even under observation noise.
-
-3. **Independent RNG:** Each wrapper instance has its own `numpy` random
-   generator, seeded independently from the environment seed. This ensures
-   reproducibility: the same wrapper seed produces the same noise sequence
-   regardless of the environment's internal state.
+The wrapper satisfies three properties that make it safe for systematic
+evaluation. First, it acts as the identity when both noise standard deviations
+are zero, so that an unperturbed sweep point recovers the exact baseline
+result (verified in the lab module's test suite). Second, it preserves goals:
+only the `observation` key is perturbed, while `desired_goal` and
+`achieved_goal` pass through untouched, which means the reward computation
+stays correct even under observation noise. Third, each wrapper instance
+carries its own `numpy` random generator, seeded independently from the
+environment seed, so that the same wrapper seed produces the same noise
+sequence regardless of the environment's internal state -- a requirement
+for reproducible degradation curves.
 
 ### 7.6 Cross-Seed Aggregation
 
-Why do we need multiple seeds? RL training is stochastic -- different random
-seeds produce different policy weights, and these policies may have different
-robustness profiles. A policy that happens to learn a conservative strategy
-may be more noise-tolerant than one that learns an aggressive strategy, even
-if both achieve 100% success under zero noise.
-
-Henderson et al. (2018) showed that single-seed RL results are unreliable.
-Our aggregation formula computes mean, standard deviation, and 95% confidence
-intervals across seeds at each noise level. For small sample sizes ($S < 30$),
-we use a conservative $z \approx 2.0$ instead of the normal approximation
-$z = 1.96$.
+RL training is stochastic, so different random seeds produce different policy
+weights -- and these policies may have different robustness profiles, since a
+policy that happens to learn a conservative strategy may be more noise-tolerant
+than one that learns an aggressive strategy even if both achieve 100% success
+under zero noise. Henderson et al. (2018) showed that single-seed RL results
+are unreliable, which means a degradation curve from one seed may not represent
+the algorithm's typical behavior. Our aggregation formula addresses this by
+computing mean, standard deviation, and 95% confidence intervals across seeds
+at each noise level, using a conservative $z \approx 2.0$ (instead of the
+normal approximation $z = 1.96$) for small sample sizes where $S < 30$.
 
 ### 7.7 Mitigation via Low-Pass Filtering
 
@@ -386,11 +383,10 @@ The result dataclass stores all metrics from evaluating at one noise level:
 
 ### 7.8.3 Running a Noise Sweep
 
-Recall the sweep definition: for each $\sigma$ in a list of noise levels,
-create a `NoisyEvalWrapper` and evaluate the policy for $N$ episodes.
-
-The core loop constructs a wrapper per noise level and delegates evaluation
-to `run_controller_eval`:
+Recall the sweep definition from Section 7.3: for each $\sigma$ in a list of
+noise levels, create a `NoisyEvalWrapper` and evaluate the policy for $N$
+episodes. The core loop implements this directly, constructing a fresh wrapper
+per noise level and delegating evaluation to `run_controller_eval`:
 
 ```python
 --8<-- "scripts/labs/robustness.py:run_noise_sweep_loop"
@@ -542,12 +538,12 @@ integration:
 
 ### 7.8.6 Plugging in Any Controller
 
-A key design property of `run_noise_sweep`: it accepts *any* object with a
-`predict(obs, deterministic) -> (action, _)` interface. This is the same
-interface that SB3 models expose, and it is also implemented by the
+A key design property of `run_noise_sweep` is that it accepts *any* object
+with a `predict(obs, deterministic) -> (action, _)` interface -- the same
+interface that SB3 models expose, and also the one implemented by the
 `ProportionalController` from Chapter 6. This means we can compare a learned
 SAC policy against a classical P-controller using the exact same evaluation
-machinery -- no adapter code needed.
+machinery, with no adapter code needed.
 
 !!! lab "Build It (illustrative)"
     ```python
@@ -644,9 +640,9 @@ Verifying run_noise_sweep...
 ## WHAT: Experiments and Expected Results (Run It)
 
 All experiments use checkpoints from Chapter 4 (SAC+HER, FetchReach-v4 and
-FetchPush-v4). No new training is needed -- this is an evaluation-only chapter.
-If you skipped Chapter 4 or are missing checkpoints, the script provides a
-`train` fallback subcommand that will train SAC+HER automatically:
+FetchPush-v4), so no new training is needed -- this is an evaluation-only
+chapter. If you skipped Chapter 4 or are missing checkpoints, the script
+provides a `train` fallback subcommand that will train SAC+HER automatically:
 
 ```bash
 bash docker/dev.sh python scripts/ch07_robustness_curves.py train --seeds 0 --include-push
@@ -721,12 +717,11 @@ only 11% of episodes succeed, and at $\sigma = 0.1$, success is essentially
 random (5%). The extended range to $\sigma = 0.2$ confirms that Push stays
 flat at 5% -- once the policy cannot locate the block, adding more noise
 does not make things worse because the policy is already failing completely.
-
-Why? Push requires *precise spatial coordination*: the gripper must align
-with the block, make contact at the right angle, and push in the right
-direction. Observation noise corrupts the gripper-to-block distance estimate,
-causing the policy to miss the block entirely or push it in the wrong
-direction.
+The underlying reason is that Push requires *precise spatial coordination*:
+the gripper must align with the block, make contact at the right angle, and
+push in the right direction, so observation noise that corrupts the
+gripper-to-block distance estimate causes the policy to miss the block
+entirely or push it in the wrong direction.
 
 ### 7.11 Experiment 2: SAC Action Noise Sweep
 
@@ -812,14 +807,13 @@ SB3 models, so `run_noise_sweep` accepts it directly.
 
 **Interpretation:** The P-controller is nearly perfectly robust to observation
 noise -- 99% at $\sigma = 0.2$ where SAC dropped to 87%. This is surprising
-at first glance, but makes
-sense: the P-controller computes $a = K_p(g - x)$, where noise in $x$
-adds jitter to the error signal but does not change its *expected direction*.
-The controller has no learned decision boundaries to cross, so observation
-noise cannot cause qualitatively wrong actions -- just noisier convergence.
-
-Notice the final distance: the PD controller achieves 0.002 m at zero noise
-(vs SAC's 0.020 m), meaning it converges more precisely even before noise.
+at first glance, but makes sense once we consider the structure of the control
+law: the P-controller computes $a = K_p(g - x)$, where noise in $x$ adds
+jitter to the error signal but does not change its *expected direction*. Since
+the controller has no learned decision boundaries to cross, observation noise
+cannot cause qualitatively wrong actions -- just noisier convergence. The
+precision advantage is visible even at zero noise, where the PD controller
+achieves 0.002 m final distance (vs SAC's 0.020 m).
 
 **FetchReach-v4 -- PD Action Noise:**
 
@@ -865,15 +859,13 @@ neural network policy tends to produce.
 | 0.500 | 6% | -49.55 | 0.439 | 24.9 | 5.7 |
 
 **Interpretation:** The PD controller achieves only 5% success on Push at
-*every* noise level -- including zero noise. The degradation curve is flat
-at 5% because the controller already cannot solve the task. The two-phase
-approach-then-push strategy is simply too crude for Push's geometric
-precision requirements. This confirms Chapter 6's finding: Push is a
-*planning* task that a simple controller cannot solve.
-
-The TTS of 1.0 everywhere is an artifact: the only successes are lucky
-episodes where the block starts near the goal, and these are "solved"
-immediately.
+*every* noise level -- including zero noise -- so the degradation curve is
+flat at 5% because the controller already cannot solve the task. The two-phase
+approach-then-push strategy is too crude for Push's geometric precision
+requirements, confirming Chapter 6's finding that Push is a *planning* task
+beyond the reach of a simple controller. The TTS of 1.0 everywhere is an
+artifact of this incapability: the only successes are lucky episodes where the
+block starts near the goal, and these are "solved" immediately.
 
 ### 7.13 Experiment 4: SAC vs P-Controller Side-by-Side
 
@@ -894,13 +886,12 @@ robust where it matters:**
 | 0.200 | **87%** | **99%** | 0.113 | 0.086 |
 
 For Reach under observation noise, the PD controller *beats* SAC
-at $\sigma = 0.2$ (99% vs 87%). Why? The P-controller's linear control
-law $a = K_p(g-x)$ has no learned features to corrupt. Noise in the
-position estimate causes jitter, but the expected error direction is always
-correct. SAC's neural network, by contrast, has sharper input-output
-mappings that can be more easily disrupted by large perturbations. The PD
-controller also achieves consistently lower final distance (0.086 vs 0.113
-at $\sigma = 0.2$).
+at $\sigma = 0.2$ (99% vs 87%), because its linear control law
+$a = K_p(g-x)$ has no learned features to corrupt. Noise in the position
+estimate causes jitter, but the expected error direction is always correct,
+whereas SAC's neural network has sharper input-output mappings that can be
+more easily disrupted by large perturbations. The PD controller also achieves
+consistently lower final distance (0.086 vs 0.113 at $\sigma = 0.2$).
 
 **Action Noise -- FetchPush-v4:**
 
@@ -985,62 +976,63 @@ Combining all results, we build the complete robustness comparison table:
 | PD | FetchPush-v4 | obs | **0.00** | 0.00 | 0.010 |
 | PD | FetchPush-v4 | act | **0.00** | 0.01 | 0.026 |
 
-**Key findings:**
+**Key findings.** The most striking pattern is that observation noise is the
+critical vulnerability for SAC: both Reach and Push are far more sensitive to
+observation noise than action noise, with Push-SAC's obs AUC (0.044) running
+11x lower than its act AUC (0.496). On the simpler Reach task, the PD
+controller is actually slightly more robust than SAC under observation noise
+-- PD achieves AUC = 0.200 (near-perfect over $[0, 0.2]$) while SAC achieves
+0.194 (losing 13% at $\sigma = 0.2$) -- because the P-controller's linear
+structure is inherently resistant to Gaussian input perturbations.
 
-1. **Observation noise is the critical vulnerability for SAC.** Both Reach
-   and Push are far more sensitive to observation noise than action noise.
-   Push-SAC's obs AUC (0.044) is 11x lower than its act AUC (0.496).
-
-2. **PD Reach is slightly more robust than SAC Reach under obs noise.**
-   PD achieves AUC = 0.200 (near-perfect over $[0, 0.2]$) while SAC
-   achieves 0.194 (losing 13% at $\sigma = 0.2$). The P-controller's linear
-   structure is inherently resistant to Gaussian input perturbations.
-
-3. **SAC Push is dramatically more robust than PD Push.** PD starts at 5%
-   success (critical sigma = 0.0) while SAC starts at 100% and only degrades
-   at $\sigma_{\text{obs}} = 0.05$. The AUC ratio is 0.044 / 0.010 = 4.4x
-   -- SAC's learned strategy is far more noise-tolerant *when the task
-   requires planning*.
-
-4. **Robustness requires capability first.** The PD controller's flat
-   5% line on Push is not "robust" in any meaningful sense -- it is
-   uniformly incapable. Robustness metrics like AUC only become
-   meaningful when baseline performance is high. We can think of the
-   AUC as measuring *how well a policy preserves its capability under
-   perturbation*.
+The relationship reverses on Push, where SAC is dramatically more robust than
+PD. The PD controller starts at 5% success (critical sigma = 0.0) while SAC
+starts at 100% and only degrades at $\sigma_{\text{obs}} = 0.05$, yielding an
+AUC ratio of 0.044 / 0.010 = 4.4x -- SAC's learned strategy is far more
+noise-tolerant *when the task requires planning*. This last comparison also
+illustrates a deeper point: robustness requires capability first. The PD
+controller's flat 5% line on Push is not "robust" in any meaningful sense
+-- it is uniformly incapable, which means robustness metrics like AUC only
+become meaningful when baseline performance is high. We can think of the AUC
+as measuring *how well a policy preserves its capability under perturbation*.
 
 ### 7.16 Discussion: What Makes a Policy Brittle?
 
-The data from experiments 1-5 suggests three patterns:
+Stepping back from individual experiments, the data from experiments 1-5
+suggests three patterns that connect into a coherent picture of what makes
+policies fragile.
 
 **Pattern 1: Observation noise is more damaging than action noise.** Both
-SAC and PD degrade more under observation noise than action noise. This makes
-sense: observation noise corrupts the policy's *perception*, causing
-systematically wrong decisions, while action noise adds *random jitter*
-around correct decisions. The former introduces bias; the latter introduces
-only variance.
+SAC and PD degrade more under observation noise than action noise, which
+makes sense once we consider what each noise source corrupts: observation
+noise disrupts the policy's *perception*, causing systematically wrong
+decisions, while action noise adds *random jitter* around correct decisions.
+The former introduces bias in the decision-making process; the latter
+introduces only variance in execution.
 
 **Pattern 2: Planning tasks are more brittle than control tasks.** Push
 (which requires approach-align-push coordination) degrades faster than
-Reach (which only requires move-toward-goal). The *planning* component
-is what makes Push fragile -- the multi-phase strategy depends on accurate
-state estimates.
+Reach (which only requires move-toward-goal), because the *planning*
+component is what makes Push fragile -- the multi-phase strategy depends on
+accurate state estimates at each transition between phases, so that even
+moderate observation noise can cause the policy to mistime or misalign the
+critical approach-to-push handoff.
 
 **Pattern 3: Linear controllers resist input noise by construction.** The
 P-controller's robustness on Reach illustrates a general principle: simpler
-control laws have fewer "failure modes" under noise. A linear mapping
+control laws have fewer "failure modes" under noise, since a linear mapping
 $a = K_p \cdot e$ cannot be destabilized by Gaussian noise (the expected
 output direction is always correct). A neural network policy, by contrast,
-has nonlinear decision boundaries that can be crossed by large perturbations.
-This is the classic robustness-capability tradeoff: the PD controller is
-more robust on Reach but *fundamentally incapable* on Push.
+has nonlinear decision boundaries that can be crossed by large perturbations
+-- which is the classic robustness-capability tradeoff, where the PD
+controller is more robust on Reach but *fundamentally incapable* on Push.
 
-**The deeper lesson:** Robustness is not a single number. It depends on the
-noise type, the task complexity, and the controller architecture. A policy
-can be simultaneously robust (to action noise) and brittle (to observation
-noise), or robust on simple tasks and brittle on complex ones. The
-degradation curve captures this nuance in a way that a single success rate
-cannot.
+These three patterns converge on a deeper lesson: robustness is not a single
+number but depends on the noise type, the task complexity, and the controller
+architecture. A policy can be simultaneously robust (to action noise) and
+brittle (to observation noise), or robust on simple tasks and brittle on
+complex ones, and the degradation curve captures this nuance in a way that a
+single success rate cannot.
 
 **An open question for Chapter 8:** Does this brittleness pattern transfer
 to a different simulator? If we test the same policies in a second
@@ -1166,23 +1158,17 @@ that pay off even at moderate noise levels.
 | Degradation slope | -0.59 | 0.00 | -5.39 | -5.33 |
 | Robustness AUC | 0.194 | 0.200 | **0.044** | **0.075** |
 
-**What the numbers confirm:**
-
-1. **Critical sigma doubled for Push** ($\sigma^* = 0.05 \to 0.10$). The
-   robust policy tolerates twice the noise before hitting the 50% threshold.
-
-2. **Degradation slope barely changed** (-5.39 vs -5.33). The cliff is just
-   as steep -- noise-augmented training shifted it *rightward* rather than
-   making it gentler. Once the robust policy starts failing, it fails just
-   as fast.
-
-3. **AUC improved 71% for Push** (0.044 $\to$ 0.075). This integrates the
-   improvement across all noise levels into a single number -- a substantial
-   gain in overall noise tolerance.
-
-4. **Clean-condition cost is 4% for Push** (100% $\to$ 96%). This is within
-   acceptable range -- a modest price for the robustness gain. For Reach,
-   the clean-condition cost is zero.
+**What the numbers confirm.** The most important change is that critical sigma
+doubled for Push ($\sigma^* = 0.05 \to 0.10$), meaning the robust policy
+tolerates twice the noise before hitting the 50% threshold. Interestingly, the
+degradation slope barely changed (-5.39 vs -5.33), which tells us the cliff is
+just as steep -- noise-augmented training shifted it *rightward* rather than
+making it gentler, so that once the robust policy starts failing, it fails
+just as fast. Integrating across all noise levels, AUC improved 71% for Push
+(0.044 $\to$ 0.075), a substantial gain in overall noise tolerance. The
+clean-condition cost for this improvement is 4% on Push (100% $\to$ 96%) --
+a modest price for the robustness gain -- while for Reach the clean-condition
+cost is zero.
 
 **The diagnose-treat-verify arc:** This completes Chapter 7's narrative.
 We started by *diagnosing* brittleness (Sections 7.10-7.15), then

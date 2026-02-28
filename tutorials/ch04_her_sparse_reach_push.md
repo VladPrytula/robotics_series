@@ -27,14 +27,7 @@ where $\epsilon = 0.05$ meters (5 cm) is the success threshold.
 
 ### Why Standard RL Fails on Sparse Goals
 
-Consider training SAC without HER on sparse Reach:
-
-1. **Initial exploration is random.** The gripper moves chaotically.
-2. **Most episodes fail.** The gripper rarely lands within 5cm of the goal by chance.
-3. **All transitions have reward $-1$.** The critic learns: "everything is equally bad."
-4. **No gradient signal for improvement.** Without reward variation, the policy has no direction to improve.
-
-This is not a hyperparameter problem -- it is a **structural limitation** of standard RL with sparse rewards.
+Consider training SAC without HER on sparse Reach. Initial exploration is random, so the gripper moves chaotically and rarely lands within 5cm of the goal by chance. Since most episodes fail, nearly all transitions carry reward $-1$, which means the critic learns that "everything is equally bad." Without reward variation, the policy has no gradient signal to improve -- it cannot distinguish promising actions from useless ones. This is not a hyperparameter problem; it is a **structural limitation** of standard RL with sparse rewards.
 
 ### The Key Insight: Failed Trajectories Contain Information
 
@@ -69,22 +62,11 @@ The substituted goals $g'$ come from the same trajectory. Common strategies:
 
 ### The `n_sampled_goal` Parameter
 
-For each original transition, HER creates `n_sampled_goal` additional relabeled transitions. The default is 4, meaning:
-
-- 1 original transition (goal = intended)
-- 4 relabeled transitions (goal = sampled achieved goals)
-
-This 5x expansion of the replay buffer is how HER manufactures dense reward signal from sparse feedback.
+For each original transition, HER creates `n_sampled_goal` additional relabeled transitions. The default is 4, meaning each real transition produces 1 original (goal = intended) plus 4 relabeled copies (goal = sampled achieved goals). This 5x expansion of the replay buffer is how HER manufactures dense reward signal from sparse feedback.
 
 ### Why HER Requires Off-Policy Learning
 
-HER only works with **off-policy** algorithms (SAC, TD3, DDPG) because:
-
-1. **Relabeling changes the reward.** The relabeled transition has a different reward than what the agent actually experienced.
-2. **Off-policy methods don't care.** They can learn from any transition, regardless of which policy generated it.
-3. **On-policy methods (PPO) cannot use relabeled data.** They require transitions from the current policy.
-
-This is why the syllabus builds SAC mastery (Weeks 2-3) before introducing HER (Week 4).
+HER only works with **off-policy** algorithms (SAC, TD3, DDPG) because relabeling changes the reward -- the relabeled transition carries a different reward than what the agent actually experienced. Off-policy methods can learn from any transition regardless of which policy generated it, so this altered reward poses no problem. On-policy methods like PPO, by contrast, require that transitions come from the current policy, which means they cannot use relabeled data at all. This is why the syllabus builds SAC mastery (Weeks 2-3) before introducing HER (Week 4).
 
 ---
 
@@ -193,13 +175,7 @@ The relabeled transition is $(s_t, a_t, r'_t, s_{t+1}, g')$ -- same observation 
 
 ### 4.5.4 The Data Amplification Effect
 
-Processing an episode with HER dramatically increases the success rate in the replay buffer. The arithmetic: a 50-step episode with `k=4` and `her_ratio=0.8` generates:
-
-- 50 original transitions (all with reward $-1$, assuming the episode failed)
-- $\sim 50 \times 0.8 \times 4 = 160$ relabeled transitions (many with reward $0$)
-- Total: $\sim 210$ transitions, with a significant fraction being "successes"
-
-The **HER ratio** is the fraction of relabeled transitions: $160 / 210 \approx 0.76$.
+Processing an episode with HER dramatically increases the success rate in the replay buffer. Consider the arithmetic for a 50-step episode with `k=4` and `her_ratio=0.8`: the 50 original transitions all carry reward $-1$ (assuming the episode failed), but HER generates $\sim 50 \times 0.8 \times 4 = 160$ relabeled transitions, many of which carry reward $0$ because the relabeled goal matches the achieved goal. The total grows to $\sim 210$ transitions, with a significant fraction being "successes." The **HER ratio** -- the fraction of relabeled transitions -- is $160 / 210 \approx 0.76$.
 
 ```python
 --8<-- "scripts/labs/her_relabeler.py:her_buffer_insert"
@@ -455,28 +431,13 @@ bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py train \
 
 **This is an important finding:** FetchReach-v4 is too easy to demonstrate HER's value clearly.
 
-**Why does no-HER work so well on Reach?**
+No-HER works so well on Reach because the gripper workspace is only ~15cm cubed, which means random exploration frequently enters the 5cm success threshold by chance. The task requires no object manipulation -- the gripper just needs to move itself, with no contact forces or object dynamics to complicate matters. Episodes are 50 steps long, so with 8 parallel envs and 500k steps the agent accumulates ~12,500 episodes, which is plenty for random success to occur. The 5cm success threshold is also forgiving relative to the workspace size.
 
-1. **Small goal space:** The gripper workspace is only ~15cm³. Random exploration frequently enters the success threshold (5cm) by chance.
-
-2. **No object manipulation:** The gripper just needs to move itself -- no physics interactions, no contact forces, no object dynamics.
-
-3. **Short horizon:** Episodes are 50 steps. With 8 parallel envs and 500k steps, that's ~12,500 episodes -- plenty for random success accumulation.
-
-4. **Forgiving success threshold:** 5cm is relatively large compared to the workspace.
-
-**The pedagogical point:** Reach is useful for validating that HER *doesn't hurt* (HER achieves 100% vs 96% for no-HER), but it fails to show HER's transformative effect. We need a harder task.
-
-**This is why we proceed to FetchPush-v4.**
+The pedagogical point is that Reach validates HER *doesn't hurt* (HER achieves 100% vs 96% for no-HER), but it fails to show HER's transformative effect. We need a harder task, which is why we proceed to FetchPush-v4.
 
 ### Experiment 2: Sparse Push -- Where HER Matters
 
-Push is dramatically harder than Reach because:
-
-1. **Indirect control:** The gripper must contact and push the object -- actions affect the object indirectly through physics.
-2. **Object dynamics:** The object slides on the table with friction, momentum, and potentially overshooting.
-3. **Coordinated behavior:** Success requires approach → contact → push → stop, all in sequence.
-4. **Larger state space:** Both gripper AND object positions matter.
+Push is dramatically harder than Reach because control is indirect -- the gripper must contact and push the object, so actions affect the goal position only through physics. The object slides on the table with friction and momentum, which means the agent must learn to avoid overshooting. Success requires a coordinated multi-phase behavior (approach, contact, push, stop) rather than a single motion, and the state space is larger since both gripper and object positions matter.
 
 ```bash
 # Full pipeline for Push (recommended settings, ~3 hours)
@@ -484,19 +445,9 @@ bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py push-all \
     --seeds 0,1,2 --total-steps 2000000 --ent-coef 0.05
 ```
 
-**Why no-HER should fail on Push:**
+**Why no-HER should fail on Push:** Random exploration rarely pushes the object to the goal by chance, so without accidental successes the replay buffer contains only $R=-1$ transitions. Since the critic cannot distinguish "almost succeeded" from "completely failed," there is no gradient signal and therefore no learning.
 
-- Random exploration rarely pushes the object to the goal by chance
-- Without accidental successes, the replay buffer contains only $R=-1$ transitions
-- The critic cannot distinguish "almost succeeded" from "completely failed"
-- No gradient signal → no learning
-
-**Why HER should succeed:**
-
-- Every trajectory shows how to push the object *somewhere*
-- Relabeling creates successful demonstrations: "you pushed it to $(x,y)$, let's pretend that was the goal"
-- The agent learns push dynamics from its own failures
-- Eventually generalizes to arbitrary goals
+**Why HER should succeed:** Every trajectory shows how to push the object *somewhere*, so relabeling creates successful demonstrations -- "you pushed it to $(x,y)$, let's pretend that was the goal." The agent learns push dynamics from its own failures and eventually generalizes to arbitrary goals.
 
 **Expected results (with sufficient training and correct hyperparameters):**
 
@@ -621,11 +572,7 @@ The marginal analysis averages over all other factors to isolate each factor's i
 | **learning_starts** | 1000 | 85.2% | -- |
 | | 5000 | 86.9% | +1.8 pp |
 
-**Key findings:**
-
-1. **Gamma dominates.** Switching from 0.98 to 0.95 gains +11 pp on average. This is the single most impactful parameter.
-2. **Entropy matters, but lower is better.** The jump from 0.05 to 0.2 costs 19.5 pp. Even 0.1 vs 0.05 loses 2.5 pp.
-3. **n_sampled_goal and learning_starts are noise.** Their effects (+1.2 pp and +1.8 pp) are within seed variance. We had been tuning the wrong knobs.
+**Key findings:** Gamma dominates -- switching from 0.98 to 0.95 gains +11 pp on average, making it the single most impactful parameter. Entropy matters too, but lower is better: the jump from 0.05 to 0.2 costs 19.5 pp, and even 0.1 vs 0.05 loses 2.5 pp. By contrast, n_sampled_goal and learning_starts are noise, since their effects (+1.2 pp and +1.8 pp respectively) fall within seed variance. We had been tuning the wrong knobs.
 
 !!! warning "The old defaults were wrong"
     Our previous recommendation was gamma=0.98, n_sampled_goal=8, learning_starts=5000.
@@ -773,11 +720,7 @@ bash docker/dev.sh python scripts/ch04_her_sparse_reach_push.py train \
 
 **Root cause analysis of the previous recommendation:**
 
-Our earlier single-seed result of 98% with ent=0.1, gamma=0.98, nsg=8 was a lucky seed. The sweep revealed:
-
-- The old defaults (gamma=0.98, nsg=8, ls=5000) average 93.8% but with high variance (84%-100%)
-- The **simplest** config (gamma=0.95, nsg=4, ls=1000) averages 99.4% with near-zero variance (98%-100%)
-- Gamma was the dominant factor all along, not entropy or HER parameters
+Our earlier single-seed result of 98% with ent=0.1, gamma=0.98, nsg=8 was a lucky seed. The sweep revealed that the old defaults (gamma=0.98, nsg=8, ls=5000) average only 93.8% with high variance (84%-100%), whereas the **simplest** config (gamma=0.95, nsg=4, ls=1000) averages 99.4% with near-zero variance (98%-100%). Gamma was the dominant factor all along, not entropy or HER parameters.
 
 **Conclusion:** Fixed entropy is critical for sparse Push (auto-tuning collapses). But within fixed entropy configs, **gamma=0.95 is the key parameter** -- it matches the task's natural timescale and produces both higher mean performance and lower seed-to-seed variance.
 
@@ -937,10 +880,7 @@ The syllabus criterion is:
 
 > Clear separation in success-rate between HER and no-HER.
 
-We interpret this as:
-- HER success rate significantly higher than no-HER
-- Difference > 50 percentage points (ideally >70)
-- Consistent across multiple seeds
+We interpret this as requiring that HER's success rate be significantly higher than no-HER (by more than 50 percentage points, ideally more than 70) and that the difference be consistent across multiple seeds.
 
 **Important caveat:** On easy tasks like Reach, you may NOT see clear separation because no-HER can succeed through random exploration. This is expected -- the syllabus requires demonstrating HER's value, and Reach alone is insufficient.
 
@@ -1013,9 +953,7 @@ Per-seed breakdown: seed 0 = 100%, seed 1 = 99%, seed 2 = 98%. This is consisten
 
 ### Statistical Validity
 
-With 3 seeds, you can report:
-- Mean +/- 95% confidence interval
-- The `compare` command computes these automatically
+With 3 seeds, you can report mean +/- 95% confidence interval. The `compare` command computes these automatically.
 
 ### What to Do Next
 
@@ -1033,13 +971,7 @@ This section documents our actual debugging journey. We include it because **deb
 
 ### Why Your First Attempt Will Probably Fail
 
-RL algorithms are notoriously sensitive to hyperparameters. Henderson et al. (2018) documented that:
-
-- Random seeds alone can cause 2-3x variance in final performance
-- Hyperparameters that work on one environment fail on similar ones
-- "Default" settings are tuned for specific benchmarks, not your problem
-
-**Our experience confirmed this.** We implemented HER correctly, used sensible defaults, and got 5% success rate. The algorithm was right; the hyperparameters were wrong.
+RL algorithms are notoriously sensitive to hyperparameters. Henderson et al. (2018) documented that random seeds alone can cause 2-3x variance in final performance, that hyperparameters which work on one environment fail on similar ones, and that "default" settings are tuned for specific benchmarks rather than your problem. Our experience confirmed this: we implemented HER correctly, used sensible defaults, and got 5% success rate. The algorithm was right; the hyperparameters were wrong.
 
 ### Our Diagnostic Journey
 
@@ -1095,15 +1027,7 @@ SAC's entropy auto-tuning works as follows:
 2. **If policy entropy > target:** decrease `ent_coef` (less exploration)
 3. **If policy entropy < target:** increase `ent_coef` (more exploration)
 
-The problem on sparse Push:
-
-1. **Early training:** All transitions have $R = -1$
-2. **Critic sees no reward variation:** Q-values are similar everywhere
-3. **Policy becomes arbitrarily "confident":** No reward signal to guide it
-4. **Entropy drops below target:** Auto-tuning sees this as "policy knows what it's doing"
-5. **`ent_coef` collapses:** Exploration stops before discovering push behavior
-
-**This is a structural issue with auto-tuning on sparse rewards, not a bug.**
+The problem on sparse Push is a causal cascade: early in training all transitions carry $R = -1$, so the critic sees no reward variation and Q-values become similar everywhere. Without reward signal to guide it, the policy becomes arbitrarily "confident," which causes entropy to drop below the target. Auto-tuning interprets this as "the policy knows what it's doing" and collapses `ent_coef`, which in turn kills exploration before the agent discovers push behavior. This is a structural issue with auto-tuning on sparse rewards, not a bug.
 
 #### Attempt 3: Less Aggressive Target Entropy
 
@@ -1176,10 +1100,10 @@ Common failure modes and their signatures:
 
 Don't change multiple things at once. Our progression:
 
-1. **Hypothesis:** Not enough training → **Test:** 4x more steps → **Result:** Partial improvement
-2. **Hypothesis:** Need denser relabeling → **Test:** `n_sampled_goal=8` → **Result:** Marginal improvement
-3. **Hypothesis:** Entropy collapsing → **Test:** Check TensorBoard → **Result:** Confirmed (`ent_coef=0.005`)
-4. **Hypothesis:** Fixed entropy will help → **Test:** `ent_coef=0.1` → **Result:** Success (98%)
+1. **Hypothesis:** Not enough training -> **Test:** 4x more steps -> **Result:** Partial improvement
+2. **Hypothesis:** Need denser relabeling -> **Test:** `n_sampled_goal=8` -> **Result:** Marginal improvement
+3. **Hypothesis:** Entropy collapsing -> **Test:** Check TensorBoard -> **Result:** Confirmed (`ent_coef=0.005`)
+4. **Hypothesis:** Fixed entropy will help -> **Test:** `ent_coef=0.1` -> **Result:** Success (98%)
 
 #### Step 5: Document Everything
 
@@ -1225,21 +1149,13 @@ For future reference, here are the specific numbers that guided our debugging:
 ```
 
 **Key diagnostic ratios:**
-- `ent_coef < 0.01` with `success_rate < 0.5` → entropy collapse, need fixed entropy
-- `ep_rew_mean` stuck at -47 to -50 → agent failing almost every step (50-step episodes × -1 = -50)
-- `ep_rew_mean` at -15 → agent succeeding around step 35 on average
+- `ent_coef < 0.01` with `success_rate < 0.5` -> entropy collapse, need fixed entropy
+- `ep_rew_mean` stuck at -47 to -50 -> agent failing almost every step (50-step episodes x -1 = -50)
+- `ep_rew_mean` at -15 -> agent succeeding around step 35 on average
 
 ### Lessons Learned
 
-1. **Defaults are suggestions, not guarantees.** SAC's auto-entropy works beautifully on dense rewards but fails on sparse tasks.
-
-2. **Read the training curves, not just final numbers.** A run that reaches 30% then crashes is different from one that never exceeds 5%.
-
-3. **Understand the algorithm well enough to debug it.** We fixed entropy collapse because we understood how auto-tuning works.
-
-4. **Document your experiments.** We could trace back exactly which settings produced which results.
-
-5. **Failure is information.** Each failed run taught us something about the problem structure.
+First, **defaults are suggestions, not guarantees** -- SAC's auto-entropy works beautifully on dense rewards but fails on sparse tasks. Second, **read the training curves, not just final numbers**, because a run that reaches 30% then crashes is fundamentally different from one that never exceeds 5%. Third, **understand the algorithm well enough to debug it**: we fixed entropy collapse because we understood how auto-tuning works, which meant we could identify the root cause rather than guessing. Fourth, **document your experiments** -- we could trace back exactly which settings produced which results, which made the diagnostic progression possible. Finally, **failure is information**: each failed run taught us something about the problem structure, and without those failures we would not have discovered that gamma (not entropy or HER parameters) was the dominant factor.
 
 ### Time Investment Reality Check
 
@@ -1262,12 +1178,7 @@ Here is roughly how our time was spent:
 
 After documenting the journey above, we believed we had solved Push. One seed at 98% with fixed entropy felt like validation. We were wrong -- or at least, only partially right.
 
-When we ran the systematic sweep (120 runs, 24 configs, 5 seeds each), we discovered:
-
-1. **Our "winning" config (ent=0.1, gamma=0.98, nsg=8) averages 85-94% across seeds, not 98%.** That single seed was an optimistic outlier.
-2. **The actual winner uses gamma=0.95, not 0.98.** We had been recommending a suboptimal discount factor.
-3. **n_sampled_goal=8 provides no benefit over the default of 4.** We had introduced complexity without gain.
-4. **The simplest possible config (lowest entropy, default nsg, earliest learning start, lower gamma) wins.** Occam's razor, again.
+When we ran the systematic sweep (120 runs, 24 configs, 5 seeds each), we discovered that our "winning" config (ent=0.1, gamma=0.98, nsg=8) averages only 85-94% across seeds -- that single 98% result was an optimistic outlier. The actual winner uses gamma=0.95 rather than 0.98, which means we had been recommending a suboptimal discount factor. Furthermore, n_sampled_goal=8 provides no benefit over the default of 4, so we had introduced complexity without gain. In the end, the simplest possible config (lowest entropy, default nsg, earliest learning start, lower gamma) wins -- Occam's razor, again.
 
 **The lesson:** One seed at 98% is not evidence. Five seeds at 99.4% +/- 0.9% is evidence. Even when you think you have solved a problem, proper multi-seed validation may reveal that you were only partially right -- and that the right answer is simpler than what you thought.
 
@@ -1324,12 +1235,7 @@ Raw results are in `results/sweep/sweep_results_raw.json`. Each entry contains t
 | `learning_starts` | **1000** | +1.8 pp for ls=5000 is within noise |
 | `total_steps` | **2M** | Required for Push convergence |
 
-**The bottom line:**
-1. **Reach is too easy** -- both methods succeed, weak separation
-2. **Push requires fixed entropy** -- auto-tuning collapses exploration too early
-3. **Gamma=0.95 is the dominant factor** -- matches the task's 15-25 step timescale
-4. **HER + optimal config achieves 99.0% +/- 1.2% (3 seeds), 99.4% +/- 0.9% (5 seeds)** -- massive improvement over no-HER (~5%)
-5. **The simplest config wins** -- the best parameters are all the simplest choices (lower entropy, default nsg, early learning start, lower gamma)
+**The bottom line:** Reach is too easy for both methods, producing only weak separation, so Push is where HER's value becomes visible. Push requires fixed entropy because auto-tuning collapses exploration too early, and within fixed-entropy configs gamma=0.95 is the dominant factor since it matches the task's 15-25 step timescale. With the optimal config, HER achieves 99.0% +/- 1.2% (3 seeds) and 99.4% +/- 0.9% (5 seeds) -- a massive improvement over no-HER (~5%). Perhaps most striking, the simplest config wins: the best parameters are all the simplest choices (lower entropy, default nsg, early learning start, lower gamma).
 
 ### Files Generated
 

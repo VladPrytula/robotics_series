@@ -2,7 +2,7 @@
 
 ## What This Chapter Is Really About
 
-Chapter 2 validated our training pipeline with PPO. We achieved 100% success on dense Reach. The infrastructure works. But PPO has a fundamental limitation: **it discards data after every update**.
+Chapter 2 validated our training pipeline with PPO, achieving 100% success on dense Reach and confirming that the infrastructure works. But PPO has a fundamental limitation: **it discards data after every update**.
 
 **The result:** A SAC policy that learned to reach any point in 3D space, matching PPO's performance while building the off-policy machinery we need for HER.
 
@@ -22,11 +22,11 @@ Chapter 2 validated our training pipeline with PPO. We achieved 100% success on 
 
 ---
 
-PPO's data inefficiency is wasteful. Each transition took real simulation time to collect. PPO uses it for a few gradient steps, then throws it away. For dense-reward tasks where signal is plentiful, this inefficiency is tolerable. For sparse-reward tasks (coming in Chapter 4), it's catastrophic.
+PPO's data inefficiency is wasteful: each transition took real simulation time to collect, yet PPO uses it for a few gradient steps and then throws it away. For dense-reward tasks where signal is plentiful this inefficiency is tolerable, but for sparse-reward tasks (coming in Chapter 4) it becomes catastrophic.
 
-**Off-policy methods** solve this by storing transitions in a **replay buffer** and reusing them across many updates. This is dramatically more sample-efficient. But it introduces new failure modes: stale data, value overestimation, training instability.
+**Off-policy methods** solve this by storing transitions in a **replay buffer** and reusing them across many updates, which is dramatically more sample-efficient -- though it introduces new failure modes: stale data, value overestimation, and training instability.
 
-This chapter validates the off-policy machinery on dense Reach--the same "easy" task where we know success is achievable. If SAC fails here, the bug is in our off-policy implementation, not the task difficulty.
+This chapter validates the off-policy machinery on dense Reach -- the same "easy" task where we know success is achievable. If SAC fails here, the bug is in our off-policy implementation, not the task difficulty.
 
 By the end, you will have:
 1. A trained SAC policy matching or exceeding PPO's performance
@@ -40,7 +40,7 @@ By the end, you will have:
 
 ### 0.1 Why SAC After PPO?
 
-We're not choosing SAC because it's "better"--we're building toward HER (Hindsight Experience Replay), which requires off-policy learning. The dependency chain:
+We are not choosing SAC because it is "better" -- we are building toward HER (Hindsight Experience Replay), which requires off-policy learning. The dependency chain makes this concrete:
 
 ```
 Dense Reach + PPO (Ch 2)      -- validates training loop
@@ -55,16 +55,11 @@ Sparse Reach + SAC + HER (Ch 4) -- validates goal relabeling
 Harder tasks (Ch 5+)          -- builds on validated infrastructure
 ```
 
-Each step isolates one new component. If SAC fails on dense Reach, we know the bug is in SAC, not the environment. If HER fails on sparse Reach, we know the bug is in HER, not SAC.
+Each step isolates one new component: if SAC fails on dense Reach, we know the bug is in SAC, not the environment; if HER fails on sparse Reach, we know the bug is in HER, not SAC.
 
 ### 0.2 The Diagnostic Mindset (Again)
 
-Dense Reach with SAC should achieve similar performance to PPO--both are solving the same task with the same amount of signal. If SAC performs much worse:
-- Value overestimation (Q-values growing unbounded)
-- Entropy collapse (exploration stopped too early)
-- Replay buffer issues (stale data, wrong sampling)
-
-The diagnostics callback we'll use catches these early.
+Dense Reach with SAC should achieve similar performance to PPO, since both are solving the same task with the same amount of signal. If SAC performs much worse, the cause is likely value overestimation (Q-values growing unbounded), entropy collapse (exploration stopped too early), or replay buffer issues (stale data, wrong sampling). The diagnostics callback we use catches these early.
 
 ---
 
@@ -78,23 +73,17 @@ Recall from Chapter 2 that standard RL maximizes expected return:
 J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t R_t \right]
 ```
 
-This finds a policy that gets high reward. But there's a subtle problem: **the optimal policy is deterministic.** Once you know the best action for each state, why ever do anything else?
+This finds a policy that gets high reward, but there is a subtle problem: **the optimal policy is deterministic.** Once you know the best action for each state, why ever do anything else?
 
 ### 1.2 Why Determinism Is Actually a Problem
 
-In theory, a deterministic optimal policy is fine. In practice, it causes issues:
+In theory, a deterministic optimal policy is fine. In practice, it causes three related problems.
 
-**Problem 1: Exploration Dies**
+**Problem 1: Exploration dies.** A deterministic policy exploits what it knows -- if the current best action gets reward +10, the policy commits to it. But what if there is an action that would get +20, which the policy has never tried because it stopped exploring?
 
-A deterministic policy exploits what it knows. If the current best action gets reward +10, the policy commits to it. But what if there's an action that would get +20, which the policy has never tried because it stopped exploring?
+**Problem 2: Brittleness.** A policy that commits fully to one action per state is fragile, since small perturbations (observation noise, model mismatch) can push it into unfamiliar states where it has no idea what to do.
 
-**Problem 2: Brittleness**
-
-A policy that commits fully to one action per state is fragile. Small perturbations (observation noise, model mismatch) can push it into unfamiliar states where it has no idea what to do.
-
-**Problem 3: Training Instability**
-
-When the policy is nearly deterministic, small value estimate changes cause large behavioral changes (the "winning" action flips). This amplifies noise in the training process.
+**Problem 3: Training instability.** When the policy is nearly deterministic, small value estimate changes cause large behavioral changes (the "winning" action flips), which amplifies noise in the training process.
 
 ### 1.3 The Maximum Entropy Objective
 
@@ -104,9 +93,7 @@ SAC modifies the objective to include an **entropy bonus**:
 J(\theta) = \mathbb{E}\left[ \sum_{t=0}^{T} \gamma^t \left( R_t + \alpha \mathcal{H}(\pi(\cdot | s_t)) \right) \right]
 ```
 
-where:
-- $\mathcal{H}(\pi(\cdot | s))$ = **entropy** of the policy at state $s$, measuring how "spread out" the action distribution is
-- $\alpha > 0$ = **temperature** parameter, controlling the exploration-exploitation tradeoff
+where $\mathcal{H}(\pi(\cdot | s))$ is the **entropy** of the policy at state $s$ (measuring how "spread out" the action distribution is) and $\alpha > 0$ is the **temperature** parameter controlling the exploration-exploitation tradeoff.
 
 **Definition (Entropy).** For a continuous policy outputting a Gaussian distribution over actions, the entropy is:
 
@@ -122,13 +109,11 @@ where $d$ is the action dimension and $|\Sigma|$ is the determinant of the covar
 \pi^*(a | s) \propto \exp(Q^*(s, a) / \alpha)
 ```
 
-This is a **Boltzmann distribution** (or "softmax" over continuous actions). High-Q actions are more likely, but low-Q actions still have some probability. The temperature $\alpha$ controls the sharpness:
-- $\alpha \to 0$: deterministic (argmax)
-- $\alpha \to \infty$: uniform random
+This is a **Boltzmann distribution** (or "softmax" over continuous actions). High-Q actions are more likely, but low-Q actions still have some probability. The temperature $\alpha$ controls the sharpness: as $\alpha \to 0$ the policy becomes deterministic (argmax), while as $\alpha \to \infty$ it approaches uniform random.
 
 ### 1.4 Automatic Temperature Tuning
 
-Choosing $\alpha$ manually is tricky--too low and you lose exploration, too high and you never exploit. SAC can learn $\alpha$ automatically by targeting a desired entropy level:
+Choosing $\alpha$ manually is tricky -- too low and you lose exploration, too high and you never exploit. SAC can learn $\alpha$ automatically by targeting a desired entropy level:
 
 ```math
 \alpha^* = \arg\min_\alpha \mathbb{E}_{a \sim \pi}\left[ -\alpha \log \pi(a|s) - \alpha \bar{\mathcal{H}} \right]
@@ -138,15 +123,11 @@ where $\bar{\mathcal{H}}$ is the **target entropy** (typically set to $-\dim(\ma
 
 **Translation:** "Adjust $\alpha$ so that the policy's entropy stays near $\bar{\mathcal{H}}$."
 
-This means SAC adapts its exploration automatically. Early in training, when the policy is uncertain, entropy is high naturally. Late in training, when the policy is confident, $\alpha$ decreases to allow more exploitation.
+This means SAC adapts its exploration automatically: early in training, when the policy is uncertain, entropy is high naturally, while late in training, when the policy is confident, $\alpha$ decreases to allow more exploitation.
 
 ### 1.5 Why This Matters for Robotics
 
-In robotics, brittleness kills. A policy that works perfectly in simulation but fails on real hardware is useless. Maximum entropy encourages:
-
-1. **Diverse training data**: The policy explores many actions, seeing more of the state space
-2. **Robust behaviors**: The policy doesn't commit fully to any single action, making it more tolerant to noise
-3. **Smoother training**: The Boltzmann-style policy changes gradually as Q-values change
+In robotics, brittleness kills -- a policy that works perfectly in simulation but fails on real hardware is useless. Maximum entropy helps on several fronts: it encourages **diverse training data** (the policy explores many actions, seeing more of the state space), produces **robust behaviors** (the policy does not commit fully to any single action, making it more tolerant to noise), and leads to **smoother training** (the Boltzmann-style policy changes gradually as Q-values change rather than snapping between discrete action choices).
 
 ---
 
@@ -188,16 +169,11 @@ repeat:
 
 **Step 1: Collect Data**
 
-Unlike PPO, SAC collects data continuously. Each step:
-1. Get action from policy (with sampling for exploration)
-2. Execute in environment
-3. Store $(s, a, r, s', done)$ in replay buffer
-
-The replay buffer is circular--when full, old transitions are overwritten.
+Unlike PPO, SAC collects data continuously. Each step, it samples an action from the current policy (with stochasticity for exploration), executes it in the environment, and stores the resulting transition $(s, a, r, s', done)$ in the replay buffer. The replay buffer is circular -- when full, new transitions overwrite the oldest.
 
 **Step 2: Sample Minibatch**
 
-Uniformly sample `batch_size` transitions from the buffer. This is where sample reuse happens--the same transition might be sampled many times across training.
+Uniformly sample `batch_size` transitions from the buffer. This is where sample reuse happens -- the same transition might be sampled many times across training.
 
 **Step 3: Update Critics**
 
@@ -544,13 +520,7 @@ bash docker/dev.sh python scripts/labs/sac_from_scratch.py --demo --steps 50000
 | 25000 | -141 | 0.048 | Refining swing-up behavior |
 | 50000 | -134 | 0.017 | Stable, nearly deterministic policy |
 
-**Key observations:**
-
-1. **Automatic temperature tuning works:** Alpha drops from 0.415 → 0.017, meaning the policy transitions from exploratory (high entropy) to exploitative (low entropy) automatically.
-
-2. **Solves by step 10k:** The -200 threshold is crossed early; additional training refines the policy.
-
-3. **This is the same algorithm SB3 uses:** The from-scratch implementation matches SB3's SAC. The difference is pedagogical clarity, not algorithmic.
+**Key observations:** Automatic temperature tuning works as expected -- alpha drops from 0.415 to 0.017, meaning the policy transitions from exploratory (high entropy) to exploitative (low entropy) without manual intervention. The task is solved by step 10k (crossing the -200 threshold), after which additional training refines the policy further. Most importantly, this is the same algorithm SB3 uses; the from-scratch implementation matches SB3's SAC, with the difference being pedagogical clarity rather than algorithmic substance.
 
 **Exercise 2.5.5: Record a GIF of the Trained Policy**
 
@@ -618,11 +588,7 @@ Training progress milestones for SAC (note: `learning_starts=10000` means no tra
 | 150k-400k | 80-99% | Policy converging |
 | 400k-1M | 100% | Fine-tuning, entropy near zero |
 
-Our test run achieved:
-- **100% success rate** after ~300k steps
-- **18.6mm average goal distance** (well within 50mm threshold)
-- **~594 steps/second** throughput on NVIDIA GB10
-- **Entropy coefficient**: dropped from 0.47 to 0.0004 (policy became deterministic)
+Our test run achieved **100% success rate** after roughly 300k steps, with an **18.6mm average goal distance** (well within the 50mm threshold) and **~594 steps/second** throughput on NVIDIA GB10. The entropy coefficient dropped from 0.47 to 0.0004 over the course of training, meaning the policy became nearly deterministic as it converged.
 
 ### 3.3 What the Diagnostics Callback Logs
 
@@ -639,22 +605,11 @@ Our custom `SACDiagnosticsCallback` logs to TensorBoard:
 
 ### 3.4 What to Watch For
 
-**Q-Value Behavior:**
-- Healthy: Q-values stabilize in a reasonable range (we observed `q_min_mean ~ -1.5`)
-- Unhealthy: Q-values grow unbounded (>100, continuing to increase)
+**Q-Value Behavior:** Healthy Q-values stabilize in a reasonable range (we observed `q_min_mean ~ -1.5`), while unhealthy Q-values grow unbounded (>100 and continuing to increase). Our run showed Q-values starting positive (~18 at 30k steps during random exploration) then settling to ~-1.5 as the policy learned -- this is healthy, indicating the critic learned accurate value estimates.
 
-Our run showed Q-values starting positive (~18 at 30k steps during random exploration) then settling to ~-1.5 as the policy learned. This is healthy--the critic learned accurate value estimates.
+**Entropy Coefficient:** A healthy entropy coefficient starts high and gradually decreases (we observed 0.47 -> 0.0004), whereas an unhealthy one drops to near-zero within the first 10k steps (exploration collapsed). Our run showed gradual decrease over 1M steps, indicating the auto-tuning worked correctly. The final value of 0.0004 means the policy became nearly deterministic -- appropriate for a solved task.
 
-**Entropy Coefficient:**
-- Healthy: Starts high, gradually decreases (we observed: 0.47 -> 0.0004)
-- Unhealthy: Drops to near-zero in first 10k steps (exploration collapsed)
-
-Our run showed gradual decrease over 1M steps, indicating the auto-tuning worked correctly. The final value (0.0004) means the policy became nearly deterministic--appropriate for a solved task.
-
-**Goal Distance (in replay buffer):**
-- Note: This shows the *average* distance across the entire buffer, not current policy performance
-- Our run showed ~0.20m mean distance (historical average including early random data)
-- Current policy performance is measured by `rollout/success_rate` and evaluation metrics
+**Goal Distance (in replay buffer):** Note that this metric shows the *average* distance across the entire buffer, not current policy performance. Our run showed ~0.20m mean distance (a historical average including early random data). Current policy performance is better measured by `rollout/success_rate` and the evaluation metrics.
 
 ### 3.5 Throughput Scaling
 
@@ -664,10 +619,7 @@ Off-policy methods can benefit from parallel environments, but the relationship 
 bash docker/dev.sh python scripts/ch03_sac_dense_reach.py throughput --n-envs-list 1,2,4,8,16
 ```
 
-This measures steps/second for different `n_envs` values. Expect:
-- Near-linear scaling up to some point
-- Diminishing returns as CPU becomes the bottleneck
-- Sweet spot typically around 4-16 envs for SAC
+This measures steps/second for different `n_envs` values. Expect near-linear scaling up to some point, followed by diminishing returns as CPU becomes the bottleneck, with the sweet spot typically around 4-16 envs for SAC.
 
 ### 3.6 Actual Results
 
@@ -682,11 +634,7 @@ On FetchReachDense-v4 with 1M steps (NVIDIA GB10):
 | Training Time | ~6 min | ~28 min |
 | Throughput | ~1300 fps | ~594 fps |
 
-**Analysis:**
-- Both achieve 100% success--the off-policy stack is validated
-- SAC has higher final distance (18.6mm vs 4.6mm) but still well within the 50mm success threshold
-- SAC is slower due to more network updates (actor + 2 critics + 2 targets) per step
-- SAC's slightly less smooth actions reflect the entropy bonus encouraging exploration
+**Analysis:** Both algorithms achieve 100% success, which validates the off-policy stack. SAC has a higher final distance (18.6mm vs 4.6mm) but still well within the 50mm success threshold, and it is slower due to more network updates (actor + 2 critics + 2 targets) per step. SAC's slightly less smooth actions reflect the entropy bonus encouraging exploration even late in training.
 
 ### 3.7 Understanding GPU Utilization
 
@@ -708,14 +656,9 @@ $ nvidia-smi dmon -s u
 | Neural network backward | GPU | ~10-15% |
 | Replay buffer operations | CPU | ~5% |
 
-With small batch sizes (256) and simple MLPs, GPU operations complete in microseconds. The GPU idles while waiting for CPU-bound simulation. This is why throughput (~600 fps) is limited by CPU, not GPU.
+With small batch sizes (256) and simple MLPs, GPU operations complete in microseconds, so the GPU idles while waiting for CPU-bound simulation. This is why throughput (~600 fps) is limited by CPU, not GPU.
 
-**To increase GPU utilization:**
-- Larger batch sizes (but diminishing returns for small networks)
-- Multiple parallel training workers (adds complexity)
-- Vision-based policies with CNNs (Week 8+)
-
-For our curriculum, ~600 fps is sufficient. Don't optimize prematurely.
+To increase GPU utilization, one could use larger batch sizes (though with diminishing returns for small networks), run multiple parallel training workers (which adds complexity), or switch to vision-based policies with CNNs (Week 8+). For our curriculum, ~600 fps is sufficient -- there is no reason to optimize prematurely.
 
 ---
 
@@ -734,21 +677,11 @@ bash docker/dev.sh python scripts/generate_demo_videos.py \
     --gif
 ```
 
-This creates:
-- `videos/sac_reach_demo.mp4` - Compilation of all episodes
-- `videos/sac_reach_demo_grid.mp4` - 2x2 grid showing 4 episodes simultaneously
-- `videos/sac_reach_demo_grid.gif` - GIF version for documentation/social media
+This creates three output files: `videos/sac_reach_demo.mp4` (a compilation of all episodes), `videos/sac_reach_demo_grid.mp4` (a 2x2 grid showing 4 episodes simultaneously), and `videos/sac_reach_demo_grid.gif` (a GIF version for documentation or social media).
 
-**Video annotations:** Each frame shows:
-- **Distance to target** - Real-time distance in centimeters
-- **"TARGET REACHED!"** - Green text when within 5cm threshold
-- **Legend** - Red dot = target position, Green dot = gripper position
+**Video annotations:** Each frame shows the real-time distance to target in centimeters, a green "TARGET REACHED!" indicator when within the 5cm threshold, and a legend (red dot for target position, green dot for gripper position).
 
-The script automatically:
-1. Loads the trained model (works with PPO, SAC, or TD3)
-2. Enlarges the target sphere for visibility
-3. Adds text overlays with goal distance
-4. Creates both MP4 and GIF formats
+The script automatically loads the trained model (works with PPO, SAC, or TD3), enlarges the target sphere for visibility, adds text overlays with goal distance, and creates both MP4 and GIF formats.
 
 ---
 
@@ -763,10 +696,7 @@ The replay buffer is a circular array storing transitions:
  ^-- oldest                          ^-- newest
 ```
 
-When full, new transitions overwrite the oldest. This means:
-- Recent experience is always available
-- Very old experience is eventually forgotten
-- Buffer size controls the "memory horizon"
+When full, new transitions overwrite the oldest, which means recent experience is always available while very old experience is eventually forgotten -- in effect, buffer size controls the "memory horizon."
 
 For 1M buffer and 1M training steps, every transition is seen roughly once on average. Increase buffer size for longer memory; decrease for faster adaptation.
 
@@ -778,7 +708,7 @@ When computing the target for critic updates, SAC uses:
 \min_{j=1,2} Q_{\bar{\phi}_j}(s', a')
 ```
 
-This seems pessimistic--why take the minimum? Because Q-learning systematically overestimates:
+This seems pessimistic -- why take the minimum? Because Q-learning systematically overestimates:
 
 ```math
 \mathbb{E}[\max(Q_1, Q_2)] \geq \max(\mathbb{E}[Q_1], \mathbb{E}[Q_2])
@@ -788,11 +718,7 @@ Taking the min counteracts this bias, leading to more stable training.
 
 ### 4.3 The Squashed Gaussian
 
-SAC uses a "squashed Gaussian" for the policy:
-1. Sample from a Gaussian: $z \sim \mathcal{N}(\mu, \sigma^2)$
-2. Squash through tanh: $a = \tanh(z)$
-
-This ensures actions are bounded (important for robotics with joint limits). The log probability calculation accounts for the squashing via a Jacobian correction.
+SAC uses a "squashed Gaussian" for the policy: first sample from a Gaussian ($z \sim \mathcal{N}(\mu, \sigma^2)$), then squash through tanh ($a = \tanh(z)$). This ensures actions are bounded (important for robotics with joint limits), and the log probability calculation accounts for the squashing via a Jacobian correction.
 
 ---
 
@@ -860,7 +786,7 @@ How does fixed vs auto-tuned entropy affect:
 
 **Symptom:** `replay/q_min_mean` keeps growing without bound.
 
-**Cause:** Overestimation feedback loop. Q-targets use overestimated Q-values, which train the critic to overestimate further.
+**Cause:** An overestimation feedback loop -- Q-targets use overestimated Q-values, which train the critic to overestimate further.
 
 **Solutions:**
 1. Verify rewards are bounded (FetchReachDense: [-1, 0])
@@ -903,15 +829,9 @@ How does fixed vs auto-tuned entropy affect:
 
 ## Part 7: Looking Ahead
 
-With SAC validated on dense Reach, we've confirmed:
-1. Replay buffer correctly stores and samples transitions
-2. Dual critics work without divergence
-3. Entropy tuning behaves as expected
-4. Off-policy learning achieves good performance
+With SAC validated on dense Reach, we have confirmed that the replay buffer correctly stores and samples transitions, that dual critics work without divergence, that entropy tuning behaves as expected, and that off-policy learning achieves good performance on this task.
 
-**Chapter 4** introduces HER (Hindsight Experience Replay) for sparse rewards. The key insight: a failed trajectory to goal $g$ is a successful trajectory to whatever goal we actually reached. HER relabels transitions to manufacture success signal from failure.
-
-This requires off-policy learning (SAC or TD3)--on-policy methods like PPO cannot use HER because they can't reuse relabeled data. Our validated SAC stack is the foundation.
+**Chapter 4** introduces HER (Hindsight Experience Replay) for sparse rewards. The key insight is that a failed trajectory to goal $g$ is a successful trajectory to whatever goal we actually reached -- HER relabels transitions to manufacture success signal from failure. This requires off-policy learning (SAC or TD3), since on-policy methods like PPO cannot use HER because they cannot reuse relabeled data. Our validated SAC stack is the foundation.
 
 ---
 

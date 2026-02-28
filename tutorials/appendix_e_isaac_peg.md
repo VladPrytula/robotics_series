@@ -20,12 +20,11 @@ our FetchPush work (approach, grasp, lift, track a target). The narrative
 becomes: *the same SAC methodology, dramatically faster thanks to
 GPU-parallel physics.*
 
-Two constraints shape scope:
-
-1. **GPU-only runtime.** Isaac Lab requires Linux + NVIDIA GPU.
-2. **Honest method-benchmark matching.** We demonstrate SAC on tasks where
-   it works (Lift-Cube, fully observable MDP) and explain where it does not
-   (PegInsert, POMDP requiring recurrence).
+Two constraints shape scope. First, Isaac Lab requires Linux + NVIDIA GPU,
+so the entire appendix is GPU-only. Second, we practice honest
+method-benchmark matching: we demonstrate SAC on tasks where it works
+(Lift-Cube, a fully observable MDP) and explain where it does not
+(PegInsert, a POMDP requiring recurrence).
 
 ---
 
@@ -82,41 +81,34 @@ similar in spirit but different in several important details:
 | Caching | Per-container (ephemeral) | Named Docker volumes (persistent) |
 | Boot time | ~5 seconds | ~15-30s (+ 30-90s shader compilation on first run) |
 
-Why each difference exists:
-
-- **Root user.** Omniverse Kit requires root for certain filesystem and device
-  operations. The `OMNI_KIT_ALLOW_ROOT=1` env var acknowledges this
-  explicitly.
-- **`/workspace/project` mount.** Isaac Lab's internal code lives at
-  `/workspace/isaaclab`. If we mounted our repo at `/workspace`, it would
-  shadow Isaac Lab's own packages.
-- **`--network=host`.** Isaac Sim uses network sockets for internal Omniverse
-  services (LiveLink, Nucleus). Host networking avoids port-mapping
-  complications.
-- **Named volumes.** Kit shader caches, GL caches, and compute caches are
-  stored in Docker named volumes (`isaac-cache-kit`, `isaac-cache-glcache`,
-  etc.) so they survive across container restarts. Without these, every run
-  triggers a full shader recompilation.
-- **No venv.** The NGC image bundles Python, PyTorch, Isaac Lab, and all
-  Omniverse dependencies in a carefully configured PYTHONPATH. Creating a
-  separate venv would break these internal dependencies.
+Each difference has a concrete reason. The container runs as **root** because
+Omniverse Kit requires root for certain filesystem and device operations (the
+`OMNI_KIT_ALLOW_ROOT=1` env var acknowledges this explicitly). Our repo mounts
+at **`/workspace/project`** rather than `/workspace` because Isaac Lab's
+internal code lives at `/workspace/isaaclab` -- mounting at the parent would
+shadow Isaac Lab's own packages. The container uses **`--network=host`**
+because Isaac Sim relies on network sockets for internal Omniverse services
+(LiveLink, Nucleus), so host networking avoids port-mapping complications.
+**Named Docker volumes** (`isaac-cache-kit`, `isaac-cache-glcache`, etc.)
+store Kit shader caches, GL caches, and compute caches so they survive across
+container restarts; without these, every run triggers a full shader
+recompilation. Finally, there is **no venv** because the NGC image bundles
+Python, PyTorch, Isaac Lab, and all Omniverse dependencies in a carefully
+configured PYTHONPATH, which means creating a separate venv would break these
+internal dependencies.
 
 ### First Launch Expectations
 
-The first time you run `dev-isaac.sh`, expect:
-
-1. **Verbose Omniverse/Kit/CARB logs.** Isaac Sim prints startup diagnostics
-   from Kit, CARB (Carbonite runtime), and PhysX. This is normal. The output
-   is much noisier than MuJoCo's clean startup.
-
-2. **Shader compilation pause (30-90 seconds).** On the first launch with a
-   given GPU, Isaac Sim compiles Vulkan shaders. The process appears to hang.
-   Subsequent runs reuse the cached shaders (stored in named Docker volumes).
-
-3. **GPU memory usage.** Isaac Sim uses 8-12 GB of GPU memory just to boot
-   the simulation runtime, before any training begins. Monitor with
-   `nvidia-smi` in a separate terminal. If your GPU is shared with other
-   workloads, you may need to free memory first.
+The first time you run `dev-isaac.sh`, expect three things that might look
+alarming but are normal. First, Isaac Sim prints **verbose Omniverse/Kit/CARB
+logs** -- startup diagnostics from Kit, CARB (Carbonite runtime), and PhysX
+that are much noisier than MuJoCo's clean startup. Second, on the first launch
+with a given GPU, Isaac Sim compiles Vulkan **shaders**, which causes a
+**30-90 second pause** during which the process appears to hang; subsequent
+runs reuse the cached shaders (stored in named Docker volumes). Third, Isaac
+Sim uses **8-12 GB of GPU memory** just to boot the simulation runtime, before
+any training begins, so monitor with `nvidia-smi` in a separate terminal and
+free other workloads if your GPU is shared.
 
 ---
 
@@ -138,13 +130,11 @@ sees the GPU.
 PhysX -- all of which require CUDA and Vulkan. If the container cannot boot,
 nothing else works.
 
-**What failure means.** Either:
-
-1. NVIDIA drivers or Container Toolkit are not installed
-2. The `robotics-rl:isaac` image was not built (run `bash docker/build.sh isaac`)
-3. The GPU is unavailable or out of memory
-4. Vulkan ICD (Installable Client Driver) is not mounted -- `dev-isaac.sh`
-   handles this automatically, but custom `docker run` invocations may miss it
+**What failure means.** The most common causes are missing NVIDIA drivers or
+Container Toolkit, an unbuilt `robotics-rl:isaac` image (run
+`bash docker/build.sh isaac`), an unavailable or out-of-memory GPU, or an
+unmounted Vulkan ICD (Installable Client Driver) -- `dev-isaac.sh` handles
+ICD mounting automatically, but custom `docker run` invocations may miss it.
 
 **The test.**
 
@@ -166,12 +156,10 @@ raise `EnvironmentNameNotFound`. Common causes: version mismatch between
 Isaac Lab and the task extensions, or missing `--headless` flag on a headless
 system (Isaac Sim tries to open a Vulkan display and segfaults).
 
-**What failure means.** Either:
-
-1. The `isaaclab_tasks` module is not installed in the NGC image
-2. `--headless` was omitted on a headless machine (causes segfault or
-   `VkResult` error)
-3. Isaac Lab internal configuration issue
+**What failure means.** The `isaaclab_tasks` module may not be installed in
+the NGC image, or `--headless` was omitted on a headless machine (which causes
+a segfault or `VkResult` error), or there is an Isaac Lab internal
+configuration issue.
 
 **The test.**
 
@@ -194,11 +182,10 @@ GPU simulation and SB3's numpy-based training loop. The wrapper must
 correctly convert tensors to numpy, extract the `policy` observation key,
 and clip infinite action bounds.
 
-**What failure means.** Either:
-
-1. Observation or action space mismatch between Isaac env and SB3
-2. `Sb3VecEnvWrapper` import failure (missing `isaaclab_rl` package)
-3. GPU memory exhaustion during env creation
+**What failure means.** Typical causes include an observation or action space
+mismatch between the Isaac env and SB3, an `Sb3VecEnvWrapper` import failure
+(indicating a missing `isaaclab_rl` package), or GPU memory exhaustion during
+env creation.
 
 **The test.**
 
@@ -221,12 +208,10 @@ computation, checkpoint serialization. Many bugs only appear after
 `learning_starts` transitions have been collected and the first gradient
 update fires.
 
-**What failure means.** Either:
-
-1. SB3 configuration error (e.g., policy class mismatch)
-2. CUDA out-of-memory during training
-3. NaN in loss values (can happen with unclamped action bounds in custom
-   wrappers -- `Sb3VecEnvWrapper` handles this)
+**What failure means.** Possible causes are an SB3 configuration error (such
+as a policy class mismatch), CUDA out-of-memory during training, or NaN in
+loss values -- which can happen with unclamped action bounds in custom wrappers,
+though `Sb3VecEnvWrapper` handles this automatically.
 
 **The test.**
 
@@ -236,10 +221,10 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py smoke \
 ```
 
 This runs the default 10,000-step smoke test (~1-2 minutes including Isaac
-boot). On completion, check for:
-
-- `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip`
-- `checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.meta.json`
+boot). On completion, verify that
+`checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.zip` and
+`checkpoints/appendix_e_sac_Isaac-Lift-Cube-Franka-v0_seed0.meta.json`
+both exist.
 
 ### Summary
 
@@ -448,12 +433,12 @@ same methodology.
 
 ### Why SAC Should Work
 
-The problem structure tells us SAC is the right algorithm:
-
-- **Continuous actions** -> actor-critic (not DQN)
-- **Dense reward** -> off-policy works well (no HER needed)
-- **36D state** -> MLP sufficient (no CNN, no LSTM)
-- **Sample efficiency** -> SAC's replay buffer reuses experience (vs PPO's on-policy waste)
+The problem structure tells us SAC is the right algorithm. The action space is
+continuous, which rules out DQN and points toward actor-critic methods. The
+reward is dense, so off-policy learning works well without HER. The 36D state
+vector is fully observable, which means an MLP suffices (no CNN, no LSTM). And
+SAC's replay buffer reuses experience, providing superior sample efficiency
+compared to PPO's on-policy waste.
 
 NVIDIA's reference configuration for Lift-Cube uses PPO with 16.3M steps.
 SAC's superior sample efficiency (off-policy reuse) should solve the task in
@@ -547,19 +532,10 @@ core update math and relabeling mechanics independent of any one Isaac task ID.
 
 ## WHAT: Run It Pipeline
 
-The production Appendix E pipeline is:
-
-- `scripts/appendix_e_isaac_peg.py`
-
-It provides the same chapter-style commands as the rest of the book:
-
-- `discover-envs`
-- `smoke`
-- `train`
-- `eval`
-- `all`
-- `compare`
-- `record` (video recording from checkpoints)
+The production Appendix E pipeline lives in
+`scripts/appendix_e_isaac_peg.py` and provides the same chapter-style
+subcommands as the rest of the book: `discover-envs`, `smoke`, `train`,
+`eval`, `all`, `compare`, and `record` (video recording from checkpoints).
 
 ### E.10 Discover Available Isaac Environments
 
@@ -571,12 +547,9 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py discover-envs -
 it, Isaac Sim attempts to open a Vulkan display and will segfault.
 
 The command also **probes the observation space** of the specified env
-(`Isaac-Reach-Franka-v0` by default, or any env via `--dense-env-id`). For
-the probed env, it reports:
-
-- Observation type (Box or Dict) and shape
-- Whether the env is goal-conditioned
-- Action space shape
+(`Isaac-Reach-Franka-v0` by default, or any env via `--dense-env-id`),
+reporting the observation type (Box or Dict) and shape, whether the env is
+goal-conditioned, and the action space shape.
 
 Only **one env is probed per process**. This is a deliberate constraint:
 Isaac Lab's USD stage and PhysX scene are not fully clearable after
@@ -586,10 +559,8 @@ We discovered this empirically -- the first probe completes in ~10 seconds,
 but the second env load hangs without error. To probe a different env,
 re-run with `--dense-env-id <other-env-id>`.
 
-Output artifacts:
-
-- `results/appendix_e_isaac_env_catalog.json` -- includes a `probed_envs`
-  section with observation metadata
+The output artifact is `results/appendix_e_isaac_env_catalog.json`, which
+includes a `probed_envs` section with observation metadata.
 
 ### E.11 Dense-First Smoke Check
 
@@ -864,20 +835,17 @@ The `record` subcommand creates the env with `render_mode="rgb_array"` and
 (first few frames are often black during shader compilation), runs one
 deterministic episode, and saves frames as MP4 at 30 fps via `imageio`.
 
-**What to look for in the videos:**
-
-- **Early (200K):** The arm moves without purpose -- no reaching strategy.
-  Reward is deep negative (~-27). The agent is still in the random exploration
-  phase, collecting experience for the replay buffer.
-- **Mid (3M):** The arm reaches toward the cube and sometimes grasps it. You
-  may see partial lifts that fail (cube slips). Reward is around -15, meaning
-  the agent has learned reaching and is discovering grasping.
-- **Converged (8M):** Smooth, purposeful motion: approach, close gripper,
-  lift, track target. Reward is positive (+0.54). The entire manipulation
-  sequence is reliable across goal configurations.
-
-This progression mirrors the training curve: the jumps between phases
-(reaching -> grasping -> lifting -> tracking) are visible both in reward
+**What to look for in the videos.** At the early checkpoint (200K), the arm
+moves without purpose -- no reaching strategy, deep negative reward (~-27) --
+because the agent is still in the random exploration phase, collecting
+experience for the replay buffer. By the mid checkpoint (3M), the arm reaches
+toward the cube and sometimes grasps it, though you may see partial lifts that
+fail when the cube slips; reward is around -15, meaning the agent has learned
+reaching and is discovering grasping. At the converged checkpoint (8M), the
+motion is smooth and purposeful -- approach, close gripper, lift, track target
+-- with positive reward (+0.54) and reliable manipulation across goal
+configurations. This progression mirrors the training curve: the jumps between
+phases (reaching -> grasping -> lifting -> tracking) are visible both in reward
 plots and in behavior.
 
 ### PegInsert: What Came Before (Diagnostic Journey)
@@ -954,17 +922,17 @@ distinguish these three states.
 
 ### What Would Be Needed
 
-To solve PegInsert with our framework, we would need one of:
-
-1. **Enrich the observation** -- make it Markov by including contact forces,
-   peg orientation relative to socket, and enough history that a single
-   frame is sufficient. This effectively converts the POMDP into an MDP.
-2. **Add recurrence** -- LSTM or GRU layers in the policy, giving it learned
-   memory. This requires switching from SB3 (which does not support recurrent
-   SAC) to a framework like RL-Games or cleanrl.
-3. **Frame stacking** -- a coarser approximation that provides a fixed
-   temporal window. Our experiment with 4-frame stacking was inconclusive;
-   it may need more frames or a longer training budget.
+To solve PegInsert with our framework, we would need one of three approaches.
+The most direct is to **enrich the observation** so that it becomes Markov --
+by including contact forces, peg orientation relative to socket, and enough
+history that a single frame contains all decision-relevant information, which
+effectively converts the POMDP into an MDP. Alternatively, we could **add
+recurrence** (LSTM or GRU layers in the policy) to give it learned memory,
+though this requires switching from SB3 (which does not support recurrent SAC)
+to a framework like RL-Games or cleanrl. A coarser approximation is **frame
+stacking**, which provides a fixed temporal window rather than adaptive memory;
+our experiment with 4-frame stacking was inconclusive and may need more frames
+or a longer training budget.
 
 This is not a failure of SAC -- it is a mismatch between problem structure
 and algorithm assumptions. Recognizing this mismatch is exactly the
@@ -984,17 +952,15 @@ Rather than using Isaac Lab's native visuomotor environments (which have
 observations to Lift-Cube using `env.render()` -- exactly the same pattern
 Chapter 9 used with FetchPush.
 
-**How it works:**
-
-1. Create Lift-Cube with `render_mode="rgb_array"` + `--enable_cameras`
-2. After `Sb3VecEnvWrapper`, the env exposes `Box(36,)` state observations
-   and supports `render()` for viewport frames
-3. `IsaacPixelObsWrapper` calls `render()` each step, resizes 1280x720 to
-   84x84 via PIL, transposes HWC to CHW, and creates a Dict observation:
-   `{"pixels": uint8(3, 84, 84), "state": float32(36,)}`
-4. SB3's `MultiInputPolicy` auto-detects the image key and routes it through
-   NatureCNN (CNN for pixels, Flatten for state vector, concatenated before
-   the policy/value MLP)
+**How it works.** We create Lift-Cube with `render_mode="rgb_array"` and
+`--enable_cameras`, so that after `Sb3VecEnvWrapper` the env exposes
+`Box(36,)` state observations and supports `render()` for viewport frames.
+Our `IsaacPixelObsWrapper` then calls `render()` each step, resizes the
+1280x720 viewport to 84x84 via PIL, transposes HWC to CHW, and creates a Dict
+observation: `{"pixels": uint8(3, 84, 84), "state": float32(36,)}`. SB3's
+`MultiInputPolicy` auto-detects the image key and routes it through NatureCNN
+(CNN for pixels, Flatten for the state vector, concatenated before the
+policy/value MLP).
 
 This mirrors Chapter 9's `PixelObservationWrapper` but wraps a VecEnv
 (Isaac Lab) rather than a Gymnasium env. The observation design follows the
@@ -1037,41 +1003,36 @@ bash docker/dev-isaac.sh python3 scripts/appendix_e_isaac_peg.py train \
     --learning-starts 5000
 ```
 
-Key choices:
-
-- **`--pixel`** injects `--enable_cameras` automatically and forces
-  `num_envs=1`
-- **buffer_size=200K**: 84x84x3 uint8 = 21KB per frame. At 200K
-  transitions (obs + next_obs), this is ~8GB -- fits in RAM
-- **batch_size=256**: Same as state-based training
-- **learning_starts=5000**: Collect some pixel experience before first
-  gradient update
+A few key choices deserve explanation. The **`--pixel`** flag injects
+`--enable_cameras` automatically and forces `num_envs=1` (since the viewport
+camera is global). We set **buffer_size=200K** because each 84x84x3 uint8
+frame is ~21KB, so 200K transitions (obs + next_obs) consume ~8GB -- which
+fits in RAM. The **batch_size** stays at 256, the same as state-based
+training, and **learning_starts=5000** ensures we collect some pixel experience
+before the first gradient update.
 
 ### What Isaac Lab Also Offers (Native Visuomotor)
 
 Isaac Lab has five visuomotor Stack-Cube variants with per-environment
 cameras (table-mounted + wrist-mounted, 200x200 RGB each). These are
-architecturally richer than our render-based approach but require
-non-trivial adapter work:
-
-- **Image normalization:** Isaac Lab provides float32 [0, 1] images; SB3
-  expects uint8 [0, 255]. Our `IsaacImageNormWrapper` handles this
-  conversion, but the visuomotor envs also use `subtask_terms` instead of
-  standard reward terms.
-- **Two cameras:** Processing two 200x200 streams doubles CNN computation.
-- **Stack-Cube vs Lift-Cube:** Stack-Cube is a harder task (stack two cubes)
-  with a different reward structure.
+architecturally richer than our render-based approach but require non-trivial
+adapter work. Isaac Lab provides float32 [0, 1] images while SB3 expects
+uint8 [0, 255] -- our `IsaacImageNormWrapper` handles this conversion, but the
+visuomotor envs also use `subtask_terms` instead of standard reward terms.
+Processing two 200x200 camera streams (table-mounted and wrist-mounted) doubles
+CNN computation, and Stack-Cube is itself a harder task (stacking two cubes)
+with a different reward structure than Lift-Cube.
 
 We chose the render-based approach because it isolates the pixel observation
 question from the task difficulty question: same task (Lift-Cube), same
 reward, just different observations. This makes the comparison with
 state-based Lift-Cube clean and interpretable.
 
-For readers interested in the native visuomotor integration:
-
-- Isaac Lab's camera sensor documentation (`isaaclab.sensors.Camera`)
-- NVIDIA's RL-Games training scripts for visuomotor tasks
-- The `IsaacImageNormWrapper` in our pipeline (handles float32->uint8)
+Readers interested in the native visuomotor integration can consult Isaac
+Lab's camera sensor documentation (`isaaclab.sensors.Camera`), NVIDIA's
+RL-Games training scripts for visuomotor tasks, and the
+`IsaacImageNormWrapper` in our pipeline (which handles the float32->uint8
+conversion).
 
 ---
 

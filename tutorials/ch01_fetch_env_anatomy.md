@@ -20,10 +20,7 @@ Done when `results/ch01_env_describe.json` and `results/ch01_random_metrics.json
 
 ### 0.1 Where We Are
 
-You have completed Chapter 0. You now have:
-- A working Docker container with GPU access
-- MuJoCo physics simulation running headlessly
-- A verified training loop that produces checkpoints
+You have completed Chapter 0, which means you now have a working Docker container with GPU access, MuJoCo physics simulation running headlessly, and a verified training loop that produces checkpoints.
 
 You are running on a DGX cluster, a Linux workstation, or a Mac. If you are on a Mac or a CPU-only machine, that is fine for this chapter and the next several (through Chapter 8). MuJoCo physics is CPU-bound; GPU utilization sits at ~5% for state-based RL because 256x256 MLPs processing 25D observation vectors complete forward and backward passes in microseconds regardless of device. The GPU becomes important at Chapter 9 (pixel observations) and essential at Appendix E (Isaac Lab GPU physics). Your environment is reproducible: anyone with the same Docker image and code can replicate your results.
 
@@ -58,19 +55,9 @@ The script preserves your host user ID, so files created inside the container ar
 
 We are training neural network policies to control a **simulated robot** in a **physics engine**. Let us be precise about what this means.
 
-**The Physics Engine: MuJoCo.** MuJoCo (Multi-Joint dynamics with Contact) is a physics simulator designed for robotics and biomechanics research. It computes:
-- Rigid body dynamics (how objects move under forces)
-- Contact forces (what happens when the robot touches objects)
-- Joint constraints (how the robot's links connect)
+**The Physics Engine: MuJoCo.** MuJoCo (Multi-Joint dynamics with Contact) is a physics simulator designed for robotics and biomechanics research. It computes rigid body dynamics (how objects move under forces), contact forces (what happens when the robot touches objects), and joint constraints (how the robot's links connect). MuJoCo runs the physics at 500Hz internally, while the environment exposes control at 25Hz (every 20 simulation steps), so that when you call `env.step(action)`, MuJoCo simulates 20 timesteps of physics and then returns the resulting state.
 
-MuJoCo runs the physics at 500Hz internally; the environment exposes control at 25Hz (every 20 simulation steps). When you call `env.step(action)`, MuJoCo simulates 20 timesteps of physics, then returns the resulting state.
-
-**Why Simulation?** Reinforcement learning requires millions of trials. A real robot would:
-- Break from repeated collisions
-- Take months to collect enough data
-- Pose safety hazards during random exploration
-
-In simulation, we collect a million timesteps in minutes. Policies trained in simulation can later transfer to real hardware (sim-to-real transfer), though that is beyond this curriculum's scope.
+**Why Simulation?** Reinforcement learning requires millions of trials, and a real robot would break from repeated collisions, take months to collect enough data, and pose safety hazards during random exploration. In simulation, we collect a million timesteps in minutes. Policies trained in simulation can later transfer to real hardware (sim-to-real transfer), though that is beyond this curriculum's scope.
 
 **The Simulated Robot: Fetch.** The [Fetch robot](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) is a real mobile manipulator manufactured by Fetch Robotics (now part of Zebra Technologies), designed for warehouse automation and research. The MuJoCo model in [Gymnasium-Robotics](https://robotics.farama.org/envs/fetch/reach/) replicates its kinematics.
 
@@ -111,11 +98,7 @@ The simulation includes a table with objects (for Push/PickAndPlace tasks) and a
 - [Original OpenAI Gym Robotics paper](https://arxiv.org/abs/1802.09464) -- Plappert et al., "Multi-Goal Reinforcement Learning" (introduces these environments)
 - [Fetch Robotics product page](https://fetchrobotics.com/robotics-platforms/fetch-mobile-manipulator/) -- real robot specifications
 
-**What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian delta-position commands:
-- `(dx, dy, dz)`: Desired end-effector delta in world frame
-- `gripper`: Open (<0) or close (>0) command
-
-An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques. This simplification means the agent does not need to learn inverse kinematics--it just says "move left" and the controller figures out which joints to actuate.
+**What the Agent Controls.** The agent does not control joint torques directly. Instead, it outputs 4D Cartesian delta-position commands: `(dx, dy, dz)` specifying the desired end-effector displacement in world frame, plus a `gripper` value that opens (<0) or closes (>0) the fingers. An internal controller (part of the MuJoCo model) converts these Cartesian commands to joint torques, which means the agent does not need to learn inverse kinematics -- it just says "move left" and the controller figures out which joints to actuate.
 
 ### 0.3 What We Are Doing
 
@@ -143,9 +126,7 @@ The Gymnasium-Robotics package provides four manipulation tasks of increasing di
 | **FetchPickAndPlace** | Pick up object, place at target | Hard--requires grasping |
 | **FetchSlide** | Slide object to distant target | Hardest--requires throwing motion |
 
-Each task has two reward variants:
-- **Dense** (e.g., `FetchReachDense-v4`): Reward = negative distance to goal. Provides continuous feedback.
-- **Sparse** (e.g., `FetchReach-v4`): Reward = 0 if goal reached, -1 otherwise. Binary feedback only.
+Each task has two reward variants. The **dense** variant (e.g., `FetchReachDense-v4`) returns the negative distance to the goal, providing continuous feedback at every step. The **sparse** variant (e.g., `FetchReach-v4`) returns 0 if the goal is reached and -1 otherwise, giving only binary feedback.
 
 ### 0.5 Why Environment Anatomy Matters
 
@@ -160,40 +141,24 @@ Imagine you tell the robot "reach position (0.5, 0.3, 0.2)" but it ends up at (0
 What if we could say: "You failed to reach (0.5, 0.3, 0.2), but you successfully demonstrated how to reach (0.6, 0.4, 0.3)!" We relabel the trajectory with the goal the robot *actually* achieved, recompute the rewards (now it's a success!), and learn from that.
 
 **Why the Interface Matters.**
-For this relabeling trick to work, the environment must provide three things:
+For this relabeling trick to work, the environment must provide three things. First, it must **separate goal information in observations** -- the environment returns a dictionary with keys `observation` (robot state: joint positions, velocities), `desired_goal` (where we wanted to go), and `achieved_goal` (where we actually are). Without this separation, we could not know what goal was "achieved" by a trajectory.
 
-1. **Separate goal information in observations.**
-   The environment returns a dictionary with three keys:
-   - `observation`: Robot state (joint positions, velocities)
-   - `desired_goal`: Where we wanted to go (the target)
-   - `achieved_goal`: Where we actually are (current position)
+Second, it must expose **a `compute_reward()` function that accepts any goal:**
 
-   Without this separation, we couldn't know what goal was "achieved" by a trajectory.
+```python
+reward = env.unwrapped.compute_reward(achieved_goal, any_goal, info)
+```
 
-2. **A `compute_reward()` function that accepts any goal.**
-   ```python
-   reward = env.unwrapped.compute_reward(achieved_goal, any_goal, info)
-   ```
-   This lets us ask "what would the reward have been if the goal were X?" without re-running the simulation. This is how we recompute rewards after relabeling.
+This lets us ask "what would the reward have been if the goal were X?" without re-running the simulation, which is how we recompute rewards after relabeling.
 
-3. **A geometric success threshold.**
-   Success means `distance(achieved_goal, desired_goal) <= 0.05` (5 centimeters). This concrete definition lets us determine success for any goal we choose to relabel with.
+Third, it must define **a geometric success threshold** -- success means `distance(achieved_goal, desired_goal) <= 0.05` (5 centimeters). This concrete definition lets us determine success for any goal we choose to relabel with.
 
 **Bottom Line.**
-These three interface features--dictionary observations, recomputable rewards, geometric success--are not arbitrary design choices. They are the mathematical substrate that makes HER possible. If any feature were missing, HER would not work.
-
-If you treat the environment as a black box--feeding observations to a network and hoping it learns--you will waste weeks on avoidable failures. This chapter makes the interface explicit so you can use HER correctly in Chapter 4 and debug intelligently when things go wrong.
+These three interface features -- dictionary observations, recomputable rewards, geometric success -- are not arbitrary design choices. They are the mathematical substrate that makes HER possible, and if any feature were missing, HER would not work. Treating the environment as a black box -- feeding observations to a network and hoping it learns -- leads to weeks of avoidable failures. This chapter makes the interface explicit so that you can use HER correctly in Chapter 4 and debug intelligently when things go wrong.
 
 ### 0.6 What This Chapter Produces
 
-By the end of this chapter, you will have:
-
-1. **JSON schemas** documenting observation and action spaces exactly
-2. **Verified reward consistency** between `env.step()` and `compute_reward()`
-3. **Random baseline metrics** establishing the performance floor
-4. **Complete understanding** of why Fetch environments enable HER
-
-These are not optional artifacts. They are the foundation on which all subsequent training rests.
+By the end of this chapter, you will have JSON schemas documenting the observation and action spaces exactly, verified reward consistency between `env.step()` and `compute_reward()`, random baseline metrics establishing the performance floor, and a complete understanding of why Fetch environments enable HER. These are not optional artifacts -- they are the foundation on which all subsequent training rests.
 
 ---
 
@@ -233,7 +198,7 @@ We seek to answer four questions:
 
 **Q4 (Goal Achievement).** How does the environment determine success? What is the `achieved_goal` and how does it relate to the `desired_goal`?
 
-These questions are not merely technical curiosities. The answers determine what algorithms are applicable, what hyperparameters are sensible, and what performance is achievable.
+These questions are not merely technical curiosities -- their answers determine what algorithms are applicable, what hyperparameters are sensible, and what performance is achievable.
 
 ---
 
@@ -401,10 +366,7 @@ We verify the critical invariant that `env.step()` rewards match `compute_reward
 bash docker/dev.sh python scripts/ch01_env_anatomy.py reward-check --n-steps 500
 ```
 
-This check verifies three things:
-1. `env.step(action)` reward matches `env.unwrapped.compute_reward(achieved_goal, desired_goal, info)`
-2. `compute_reward` matches the Fetch distance-based formula for the current goal (dense: `-||ag - dg||`; sparse: `0/-1` with threshold)
-3. `compute_reward` matches the same formula for randomly sampled alternative goals (a proxy for HER relabeling)
+This check verifies three things: first, that the `env.step(action)` reward matches `env.unwrapped.compute_reward(achieved_goal, desired_goal, info)`; second, that `compute_reward` matches the Fetch distance-based formula for the current goal (dense: `-||ag - dg||`; sparse: `0/-1` with threshold); and third, that `compute_reward` matches the same formula for randomly sampled alternative goals, which serves as a proxy for HER relabeling.
 
 **Expected Output.** A message confirming the checks passed within numerical tolerance.
 
@@ -464,17 +426,9 @@ Condition 3 is not strictly necessary for HER -- any reward function satisfying 
 
 The choice between sparse and dense rewards involves a fundamental trade-off:
 
-**Dense Rewards:** $R = -\|g_a - g_d\|$
-- Pro: Provides gradient signal at every timestep
-- Pro: Standard policy gradient methods (PPO) can learn effectively
-- Con: May encourage undesirable behaviors (e.g., hovering near the goal without reaching it)
-- Con: Reward shaping may not align with true task objective
+**Dense Rewards** ($R = -\|g_a - g_d\|$) provide gradient signal at every timestep, which means standard policy gradient methods like PPO can learn effectively. The downside is that distance-based shaping may encourage undesirable behaviors (e.g., hovering near the goal without reaching it) and may not align with the true task objective.
 
-**Sparse Rewards:** $R = \mathbf{1}[\|g_a - g_d\| \leq \epsilon] - 1$
-- Pro: Clearly defined success criterion
-- Pro: No reward shaping artifacts
-- Con: No gradient signal until goal is reached
-- Con: Requires HER or similar techniques for sample-efficient learning
+**Sparse Rewards** ($R = \mathbf{1}[\|g_a - g_d\| \leq \epsilon] - 1$) offer a clearly defined success criterion with no reward shaping artifacts, but at a cost: there is no gradient signal until the goal is reached, which means the agent requires HER or similar techniques for sample-efficient learning.
 
 **Remark (When to Use Each).** *For initial development and debugging, use dense rewards--they make it easier to verify that the pipeline is working. For final experiments, consider sparse rewards, which more accurately reflect the true task objective. HER bridges the gap by enabling sample-efficient learning even with sparse rewards. Andrychowicz et al. (2017, Sec. 4.4) found that HER with sparse binary rewards outperformed HER with shaped rewards on all three Fetch manipulation tasks--shaped rewards introduced a discrepancy between the optimization objective and the true success criterion, and penalized exploration by discouraging contact with the object.*
 
@@ -488,12 +442,7 @@ The observation dimensions have implications for policy architecture:
 | FetchPush | 25 | 3 | 3 | 31 |
 | FetchPickAndPlace | 25 | 3 | 3 | 31 |
 
-Stable Baselines 3's `MultiInputPolicy` handles dictionary observations by:
-1. Processing each key through a separate MLP encoder
-2. Concatenating the encoded representations
-3. Passing the concatenation through shared layers
-
-This architecture allows the policy to learn separate representations for state and goal, which may improve generalization across goals.
+Stable Baselines 3's `MultiInputPolicy` handles dictionary observations by processing each key through a separate MLP encoder, concatenating the encoded representations, and passing the concatenation through shared layers. This architecture allows the policy to learn separate representations for state and goal, which may improve generalization across goals.
 
 ---
 
