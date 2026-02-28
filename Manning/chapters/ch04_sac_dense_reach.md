@@ -59,7 +59,7 @@ SAC addresses these problems by modifying the objective. Instead of maximizing r
 
 ### The Boltzmann policy
 
-The maximum entropy objective has a clean solution. The optimal policy under this objective assigns action probabilities proportional to exponentiated Q-values:
+The maximum entropy objective has a clean closed-form solution: the optimal policy assigns action probabilities proportional to exponentiated Q-values:
 
 $$\pi^*(a \mid s) \propto \exp\left( Q^*(s, a) / \alpha \right)$$
 
@@ -80,11 +80,7 @@ Compare this to PPO's on-policy constraint (defined in Chapter 3): PPO can only 
 
 Here is what this means concretely. PPO collects 8,192 transitions, uses them for 10 gradient epochs, then throws them all away. SAC stores every transition in a replay buffer (capacity 1,000,000) and samples from it repeatedly. A transition collected at step 10,000 might be sampled again at step 500,000 -- the same data contributes to learning hundreds of times.
 
-This difference drives the entire chapter. Off-policy learning is:
-
-- **More sample-efficient** -- every simulation step contributes to many updates, not just one
-- **More complex** -- learning from stale data introduces challenges (overestimation bias, moving targets) that require new machinery (twin critics, target networks)
-- **Required for HER** -- Chapter 5's goal relabeling modifies stored transitions after the fact, which is only possible if transitions are stored and reusable
+This difference drives the entire chapter. Off-policy learning is more sample-efficient, since every simulation step contributes to many updates rather than just one. It is also more complex, because learning from stale data introduces challenges (overestimation bias, moving targets) that require new machinery (twin critics, target networks). And it is required for HER -- Chapter 5's goal relabeling modifies stored transitions after the fact, which is only possible if transitions are stored and reusable.
 
 ### Automatic temperature tuning
 
@@ -98,22 +94,13 @@ The temperature loss function is:
 
 $$L(\alpha) = \mathbb{E}_{a \sim \pi}\left[ -\alpha \left( \log \pi(a \mid s) + \bar{\mathcal{H}} \right) \right]$$
 
-The gradient pushes $\alpha$ in the right direction:
-
-- If the policy's entropy is below the target ($\log \pi$ is large and negative, but not negative enough), $\alpha$ increases to encourage more exploration
-- If the policy's entropy is above the target, $\alpha$ decreases to allow more exploitation
+The gradient pushes $\alpha$ in the right direction: if the policy's entropy is below the target ($\log \pi$ is large and negative, but not negative enough), $\alpha$ increases to encourage more exploration, whereas if entropy is above the target, $\alpha$ decreases to allow more exploitation.
 
 In practice, SAC learns $\log \alpha$ rather than $\alpha$ directly, ensuring $\alpha$ stays positive. We initialize $\log \alpha = 0$ (so $\alpha = 1.0$) and let the optimizer adjust it.
 
 ### Why this matters for robotics
 
-In robotics, robustness matters as much as performance. A policy needs to handle real sensor noise, not just clean simulation. The maximum entropy objective helps in three specific ways:
-
-1. **Diverse training data.** The policy explores many actions, seeing more of the state space during training. This produces a critic with better coverage -- it has seen more state-action combinations, so its value estimates are more reliable.
-
-2. **Robust behaviors.** By not committing fully to a single action, the policy develops softer trajectories that tolerate perturbations. In our experiments, the entropy bonus at training time translates to less jerky motion even after $\alpha$ has decreased near zero.
-
-3. **Smoother training.** The Boltzmann-style policy changes gradually as Q-values change, avoiding the oscillations that plague deterministic policy optimization.
+In robotics, robustness matters as much as performance. A policy needs to handle real sensor noise, not just clean simulation. The maximum entropy objective helps here in several reinforcing ways. First, the policy explores many actions during training, which means the critic sees more of the state-action space and develops more reliable value estimates. This broader coverage then supports more robust behaviors, since a policy that does not commit fully to a single action develops softer trajectories that tolerate perturbations -- in our experiments, the entropy bonus at training time translates to less jerky motion even after $\alpha$ has decreased near zero. Finally, the Boltzmann-style policy changes gradually as Q-values change, which smooths the training process and avoids the oscillations that plague deterministic policy optimization.
 
 
 ## 4.2 HOW: The SAC algorithm
@@ -200,7 +187,7 @@ Figure 4.1: The SAC architecture. Transitions flow from the environment into a c
 
 Off-policy learning requires storing transitions for reuse. Unlike PPO, which discards data after each update, SAC stores every transition in a circular buffer and samples from it repeatedly.
 
-A **replay buffer** is a fixed-size array. New transitions overwrite the oldest when the buffer is full:
+A **replay buffer** is a fixed-size array in which new transitions overwrite the oldest when the buffer is full:
 
 ```
 [t_0, t_1, t_2, ..., t_{n-1}, t_n, t_{n+1}, ...]
@@ -243,7 +230,7 @@ class ReplayBuffer:
                 "dones": to_t(self.dones[idx])}
 ```
 
-The buffer pre-allocates numpy arrays at initialization -- this avoids the overhead of growing a Python list. The `ptr` (pointer) tracks where the next transition goes, wrapping around via modular arithmetic. Sampling converts numpy arrays to PyTorch tensors on the target device.
+The buffer pre-allocates numpy arrays at initialization to avoid the overhead of growing a Python list. The `ptr` (pointer) tracks where the next transition goes, wrapping around via modular arithmetic so that old data is silently overwritten. When sampling, the buffer converts numpy arrays to PyTorch tensors on the target device.
 
 > **Checkpoint.** Add 100 transitions with `obs_dim=10, act_dim=4` and sample a batch of 32. You should see: `obs` shape `(32, 10)`, `actions` shape `(32, 4)`, `rewards` shape `(32,)`, `buf.size == 100`, `buf.ptr == 100`. If shapes are wrong, check that the numpy arrays were initialized with the correct dimensions.
 
@@ -333,12 +320,7 @@ class GaussianPolicy(nn.Module):
         return action, log_prob
 ```
 
-A few things to notice:
-
-- **State-dependent std.** Unlike PPO in Chapter 3 (which used a state-independent `log_std` parameter), SAC learns a different standard deviation for each state. This allows the policy to be more exploratory in unfamiliar states and more precise in well-understood ones.
-- **Clamped log-std.** The `LOG_STD_MIN = -20` and `LOG_STD_MAX = 2` bounds prevent numerical instability. Without them, `log_std` can go to $-\infty$ (zero variance, division by zero) or $+\infty$ (infinite variance, useless actions).
-- **Reparameterization trick.** We use `rsample()` instead of `sample()` so that gradients flow through the sampling operation. This is essential -- without it, we cannot backpropagate through the actor loss.
-- **Numerically stable log-prob.** The squashing correction `2 * (log(2) - x_t - softplus(-2 * x_t))` is mathematically equivalent to `log(1 - tanh^2(x_t))` but avoids the numerical issue where `tanh^2(x_t)` rounds to exactly 1.0 for large `x_t`, producing `log(0) = -inf`.
+A few design choices in this code deserve attention. Unlike PPO in Chapter 3 (which used a state-independent `log_std` parameter), SAC learns a **state-dependent standard deviation**, so the policy can be more exploratory in unfamiliar states and more precise in well-understood ones. The `LOG_STD_MIN = -20` and `LOG_STD_MAX = 2` **clamps** prevent numerical instability, since without them `log_std` can go to $-\infty$ (zero variance, division by zero) or $+\infty$ (infinite variance, useless actions). We use `rsample()` instead of `sample()` -- the **reparameterization trick** -- so that gradients flow through the sampling operation, which is essential because without it we cannot backpropagate through the actor loss. Finally, the **numerically stable log-prob** correction `2 * (log(2) - x_t - softplus(-2 * x_t))` is mathematically equivalent to `log(1 - tanh^2(x_t))` but avoids the issue where `tanh^2(x_t)` rounds to exactly 1.0 for large `x_t`, which would produce `log(0) = -inf`.
 
 | Math | Code | Meaning |
 |------|------|---------|
@@ -780,7 +762,7 @@ Both algorithms solve FetchReachDense-v4, but with different tradeoffs. Figure 4
 | Training Time | ~6 min | ~28 min |
 | Throughput | ~1,300 fps | ~594 fps |
 
-Both achieve 100% success -- the off-policy stack is validated. SAC has a higher final distance (18.6mm vs 4.6mm) but still well within the 50mm threshold. SAC is slower in wall-clock time because it updates more networks per step (actor + two critics + two targets versus PPO's single shared network). SAC's slightly rougher actions (smoothness 1.68 vs 1.40) reflect the entropy bonus encouraging a spread of actions during training.
+Both achieve 100% success -- the off-policy stack is validated. SAC has a higher final distance (18.6mm vs 4.6mm), though still well within the 50mm threshold, and it is slower in wall-clock time because it updates more networks per step (actor + two critics + two targets versus PPO's single shared network). The slightly rougher actions (smoothness 1.68 vs 1.40) reflect the entropy bonus encouraging a spread of actions during training.
 
 Both algorithms solve this task completely, so the interesting comparison is structural: PPO used each transition once and discarded it, while SAC stored every transition and reused it across many updates. On FetchReachDense, where signal is plentiful, this difference is a mild efficiency trade. On sparse-reward tasks (Chapter 5), the replay buffer becomes the key enabler for learning.
 

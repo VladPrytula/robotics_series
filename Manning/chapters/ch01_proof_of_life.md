@@ -88,7 +88,7 @@ We chose Fetch for three reasons:
 
 This is a deliberate pedagogical choice: we believe you learn more from understanding one task deeply than from running many tasks superficially. The cost is real -- you will not see locomotion, multi-agent coordination, or real hardware in the main text. We address portability in the appendices (Appendix C ports the methodology to PyBullet's PandaGym; Appendix E demonstrates it on NVIDIA Isaac). But the core curriculum stays with Fetch because depth enables something breadth cannot: controlled variable elimination.
 
-When a training run fails in Chapter 5 (sparse rewards), is the problem the algorithm, the reward, the exploration, or the environment? Because you already solved the same environment with dense rewards in Chapters 3-4, you can rule out the environment. When pixel-based training struggles in Chapter 9, you already solved the same task from state vectors -- so you know the task is solvable, and the problem must be in the visual pipeline. With a new environment each chapter, every failure has five possible causes. With one environment family, you isolate variables the way a lab scientist would.
+When a training run fails in Chapter 5 (sparse rewards), is the problem the algorithm, the reward, the exploration, or the environment? Because you already solved the same environment with dense rewards in Chapters 3-4, you can rule out the environment. When pixel-based training struggles in Chapter 9, you already solved the same task from state vectors -- so you know the task is solvable, and the problem must be in the visual pipeline. With a new environment each chapter, every failure has five possible causes; with one environment family, you isolate variables the way a lab scientist would.
 
 The Fetch environments form a natural difficulty ladder that we will climb throughout the book. Notice that the rightmost column spans all ten chapters -- same robot, same simulator, increasing challenge:
 
@@ -110,9 +110,9 @@ All five rows share the same robot, the same action space, and (except for pixel
 
 This three-part structure is a convention from the Gymnasium `GoalEnv` interface. It will show up in every chapter, so it is worth getting familiar with now. The separation of `achieved_goal` and `desired_goal` from the main observation is what makes goal conditioning explicit -- the environment literally tells the policy "here is where you are, here is where you should be."
 
-**Actions.** Actions are 4-dimensional vectors: three components for the desired Cartesian velocity of the end-effector (dx, dy, dz) and one for gripper control (open/close). Each component is in [-1, 1]. For reaching tasks, the gripper dimension does not matter -- the robot is just moving its arm. For push and pick-and-place, the gripper becomes essential: the robot must learn to close the gripper around an object and open it at the target location.
+**Actions.** Actions are 4-dimensional vectors: three components for the desired Cartesian velocity of the end-effector (dx, dy, dz) and one for gripper control (open/close), with each component bounded to [-1, 1]. For reaching tasks, the gripper dimension does not matter -- the robot is just moving its arm. For push and pick-and-place, the gripper becomes essential: the robot must learn to close the gripper around an object and open it at the target location.
 
-The Cartesian action space is an important design choice. It means the learning algorithm does not need to figure out how joint torques map to end-effector motion -- an inverse kinematics controller handles that internally. The policy operates at a higher level of abstraction: "move the hand right and close the gripper." This makes the learning problem tractable for the algorithms we use.
+The Cartesian action space is an important design choice, because it means the learning algorithm does not need to figure out how joint torques map to end-effector motion -- an inverse kinematics controller handles that internally. The policy therefore operates at a higher level of abstraction: "move the hand right and close the gripper." This makes the learning problem tractable for the algorithms we use.
 
 **Rewards.** Fetch environments come in two flavors:
 
@@ -139,7 +139,7 @@ Here is the contract:
 | TensorBoard logs | Event files | `runs/ppo/FetchReachDense-v4/seed0/` |
 | Videos | MP4 | `videos/ppo_FetchReachDense-v4_seed0.mp4` |
 
-The `ppo` in the example filenames refers to PPO (Proximal Policy Optimization), the algorithm used for training -- we introduce PPO in Chapter 3. The two most important columns are "Format" and "Example." Checkpoints are files with known paths and machine-readable metadata. Evaluation reports are JSON -- not prose, not impressions, but structured data with success rates, episode returns, goal distances, and seed counts. When this book says "94% success rate," there is a JSON file that contains that number, and you can verify it yourself.
+The `ppo` in the example filenames refers to PPO (Proximal Policy Optimization), the algorithm used for training -- we introduce PPO in Chapter 3. The two most important columns are "Format" and "Example," because they make the contract concrete: checkpoints are files with known paths and machine-readable metadata, and evaluation reports are JSON -- not prose, not impressions, but structured data with success rates, episode returns, goal distances, and seed counts. When this book says "94% success rate," there is a JSON file that contains that number, and you can verify it yourself.
 
 **Why provenance matters.** Henderson et al. (2018) documented a reproducibility crisis in deep RL: many published results could not be replicated, even by the original authors, because the experimental conditions were underspecified. Random seeds, hyperparameters, library versions, and hardware all matter. A single random seed can be the difference between 95% success and 40% success on the same algorithm with the same hyperparameters. A result with provenance -- one you can trace back to a specific command, seed, and environment -- is worth far more than one without it.
 
@@ -323,7 +323,7 @@ Manual reward: -1.058329
 Match: True
 ```
 
-The specific reward value depends on the random action sampled, which varies across library versions and seeds. What matters is that the two values match exactly. We call this the critical invariant: `compute_reward(achieved_goal, desired_goal, info)` must equal the reward from `env.step()`. Every chapter that uses HER depends on this.
+The specific reward value depends on the random action sampled, which varies across library versions and seeds. What matters is that the two values match exactly -- we call this the critical invariant: `compute_reward(achieved_goal, desired_goal, info)` must equal the reward from `env.step()`, since every chapter that uses HER depends on it.
 
 Why does this matter so much? When HER relabels a failed trajectory -- "you did not reach the goal at position (1.3, 0.7, 0.5), but you did reach position (1.2, 0.6, 0.42)" -- it needs to recompute the reward as if that alternate position had been the goal all along. It does this by calling `compute_reward(achieved_goal=actual_position, desired_goal=relabeled_goal, info)`. If this function returns a different value than `env.step()` would have returned for the same state, then HER is training on incorrect reward labels. The policy learns from corrupted data, and training may silently fail or converge to a bad policy.
 
@@ -368,13 +368,7 @@ print(f"Below threshold: {distance < 0.05}")
 
 The success signal is what we measure during evaluation. When later chapters report "94% success rate," they mean that across many episodes, `info['is_success']` was True at the end of 94% of them. This is the metric that matters most -- not the reward, not the return, not the loss value, but the fraction of episodes where the robot actually achieved the goal. A high return with a low success rate means the robot is getting close but not close enough; a high success rate with a modest return means the robot succeeds but takes a roundabout path.
 
-Notice the relationship between the three things we have inspected:
-
-1. **Observations** tell the policy where it is and where it should be
-2. **Rewards** give the policy a training signal (dense: how close? sparse: success or failure?)
-3. **Success** is the binary metric we ultimately care about
-
-The reward drives learning; the success signal measures whether learning worked. In dense-reward environments, a well-trained policy will have both high reward (close to 0) and high success rate (close to 100%). In sparse-reward environments, the relationship is starker: the reward is -1 until the moment of success, then 0. This makes dense rewards more informative for learning but sparse rewards more honest about what we actually want.
+Notice how the three things we have inspected fit together: observations tell the policy where it is and where it should be, rewards give the policy a training signal based on that information (dense: how close? sparse: success or failure?), and the success metric is the binary outcome we ultimately care about. In other words, the reward drives learning, while the success signal measures whether learning worked. In dense-reward environments, a well-trained policy will have both high reward (close to 0) and high success rate (close to 100%). In sparse-reward environments, the relationship is starker: the reward is -1 until the moment of success, then 0. This makes dense rewards more informative for learning but sparse rewards more honest about what we actually want.
 
 > **Checkpoint.** On a random action immediately after reset, the distance is typically 0.05-0.15 meters and `is_success` is usually False (the robot's initial position is rarely on top of the goal). If `is_success` is True on the first step with a random action, something is unusual -- check that the environment is creating diverse goal positions.
 
@@ -529,7 +523,7 @@ Action space: Box(-1.0, 1.0, (4,), float32)
 
 A few things to notice here. The policy is a `MultiInputPolicy` -- not a `MlpPolicy` -- because observations are dictionaries, not flat vectors. SB3 handles the dictionary structure internally by processing each key separately and concatenating them before feeding into the neural network. The observation space is a `Dict` with three `Box` entries matching the shapes we saw in section 1.5. The action space is a `Box` with shape `(4,)` and bounds `[-1, 1]`, matching the Cartesian velocity + gripper action we described in section 1.2.
 
-This checkpoint is not worth evaluating for performance -- it trained for only 50,000 steps, far too few to learn useful behavior on any task. Its purpose is to prove the loop runs, not that it learns. Learning starts in Chapter 3.
+This checkpoint is not worth evaluating for performance -- it trained for only 50,000 steps, far too few to learn useful behavior on any task. Its purpose is to prove the loop runs, not that it learns; actual learning starts in Chapter 3.
 
 **`ppo_smoke.meta.json`** -- A small metadata file capturing the environment ID, seed, training step count, device, and library versions used for the smoke run. Later chapters produce the same `.meta.json` alongside checkpoints in `checkpoints/`.
 
@@ -543,22 +537,13 @@ GPU check  ->  Fetch env registry  ->  Headless rendering  ->  Training loop
 
 Each test assumes the previous ones work. Rendering depends on MuJoCo initializing correctly (Test 2). Training depends on rendering being at least attempted (the training test disables rendering, but it still needs MuJoCo and Gymnasium working). And training performance depends on the compute environment (Test 1) -- for state-based chapters (2-8), CPU is adequate; for pixel chapters (9+), GPU helps but RAM is often the binding constraint.
 
-When something fails, diagnose in order. If rendering fails, check Test 2 first -- maybe MuJoCo itself cannot initialize. If training is unexpectedly slow, check Test 1 -- maybe CUDA is not available. The `all` subcommand runs the tests sequentially and the output makes it clear which test failed.
+When something fails, diagnose in order: if rendering fails, check Test 2 first, since MuJoCo itself may not be initializing; if training is unexpectedly slow, check Test 1, since CUDA may not be available. The `all` subcommand runs the tests sequentially, so the output makes it clear which test failed.
 
 ### What "proof of life" means
 
-After these four tests pass, you know:
+After these four tests pass, you know that the container has access to the GPU (or is correctly falling back to CPU), that MuJoCo and Gymnasium-Robotics are installed and functional, that headless rendering produces valid images, and that the full training loop (env -> policy -> training -> checkpoint) executes without error.
 
-- The container has access to the GPU (or is correctly falling back to CPU)
-- MuJoCo and Gymnasium-Robotics are installed and functional
-- Headless rendering produces valid images
-- The full training loop (env -> policy -> training -> checkpoint) executes without error
-
-Together with the Build It checks from section 1.5, you also know:
-
-- Observations have the expected dictionary structure and shapes
-- `compute_reward` matches `env.step()` (the critical invariant)
-- The success signal correctly reflects goal distance
+Together with the Build It checks from section 1.5, you also know that observations have the expected dictionary structure and shapes, that `compute_reward` matches `env.step()` (the critical invariant), and that the success signal correctly reflects goal distance.
 
 This is what "alive" means: the environment can produce valid results. Producing good results -- that is what the rest of the book is for.
 

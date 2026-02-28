@@ -12,7 +12,7 @@ In Chapter 1, you verified that the computational stack works: Docker launches, 
 
 But alive is not the same as understood. You know the environment *works*, but not what it *says*. What do the 10 numbers in the observation vector mean? What happens when the robot takes action `[1, 0, 0, 0]`? Why does the reward function return -0.073 instead of -1? How does the environment know the robot "succeeded"? Answering these questions gives you the foundation to debug training failures and choose appropriate algorithms.
 
-This chapter provides a complete anatomy of Fetch environment observations, actions, rewards, and goals. You will inspect every component by hand, verify reward computation against the distance formula, simulate HER-style goal relabeling, and establish the random-policy baseline that every trained agent must beat. With the environment understood, Chapter 3 trains a real policy -- PPO on dense Reach. The observation shapes you document here determine the network architecture. The random baseline you establish here is the floor that PPO must exceed.
+This chapter provides a complete anatomy of Fetch environment observations, actions, rewards, and goals. You will inspect every component by hand, verify reward computation against the distance formula, simulate HER-style goal relabeling, and establish the random-policy baseline that every trained agent must beat. With the environment understood, Chapter 3 trains a real policy -- PPO on dense Reach -- where the observation shapes you document here determine the network architecture, and the random baseline you establish here is the floor that PPO must exceed.
 
 
 ## 2.1 WHY: Why environment anatomy matters
@@ -51,14 +51,9 @@ The common thread: every one of these is preventable by inspecting the environme
 
 When you understand what the environment returns, debugging becomes tractable. A flat reward curve is no longer a mystery -- you can check: does the policy's output fall within the action space bounds? Is the achieved goal moving in response to actions? Is the reward decreasing (getting closer to zero) even if success rate has not budged? Is `compute_reward` returning the same values as `env.step()`?
 
-Each of these diagnostic checks has a specific prerequisite:
+Each of these diagnostic checks has a specific prerequisite in this chapter's anatomy. Checking action bounds requires knowing the action space shape and range (section 2.4), while checking goal movement requires knowing what `achieved_goal` tracks -- gripper position for Reach, object position for Push (section 2.3). Checking reward trends requires knowing the reward formula and its range, since dense rewards are negative distances and sparse rewards are 0 or -1 (section 2.5). And checking the `compute_reward` invariant requires knowing the API signature and how it relates to `env.step()` (also section 2.5).
 
-- **Checking action bounds** requires knowing the action space shape and range (section 2.4)
-- **Checking goal movement** requires knowing what `achieved_goal` tracks -- gripper position for Reach, object position for Push (section 2.3)
-- **Checking reward trends** requires knowing the reward formula and its range -- dense rewards are negative distances, sparse rewards are 0 or -1 (section 2.5)
-- **Checking the `compute_reward` invariant** requires knowing the API signature and how it relates to `env.step()` (section 2.5)
-
-Each of these will come up in practice. In Chapter 3, when PPO training stalls, the first thing to check is whether the reward is moving. In Chapter 5, when HER does not improve performance, the first thing to check is whether `compute_reward` handles relabeled goals correctly. The anatomy you build here is the diagnostic toolkit for every later chapter.
+All of these will come up in practice. In Chapter 3, when PPO training stalls, the first thing to check is whether the reward is moving. In Chapter 5, when HER does not improve performance, the first thing to check is whether `compute_reward` handles relabeled goals correctly. The anatomy you build here is the diagnostic toolkit for every later chapter.
 
 The rest of this chapter gives you that knowledge, piece by piece. We start with what the agent sees (observations and goals), move to what it can do (actions), then to how performance is measured (rewards), and finally to the key insight that ties it all together (goal relabeling).
 
@@ -106,7 +101,7 @@ When you render this scene, the coordinates come to life. The tan tabletop sits 
 
 These numbers matter because they give you a sense of scale. The entire workspace is about 60 cm x 70 cm x 20 cm. The success threshold is 5 cm (0.05 m), which means the end-effector must be within about 8% of the workspace width to "succeed." Random flailing is unlikely to land within 5 cm of an arbitrary target -- which is why random baselines have near-zero success rates.
 
-**Dense vs. sparse rewards.** Each task comes in two reward variants. The environment ID encodes which: `FetchReachDense-v4` uses dense rewards (negative distance to goal), while `FetchReach-v4` uses sparse rewards (0 if goal reached, -1 otherwise). The observation structure and action space are identical between variants -- only the reward computation differs.
+**Dense vs. sparse rewards.** Each task comes in two reward variants, and the environment ID encodes which: `FetchReachDense-v4` uses dense rewards (negative distance to goal), while `FetchReach-v4` uses sparse rewards (0 if goal reached, -1 otherwise). The observation structure and action space are identical between variants -- only the reward computation differs.
 
 For this chapter, we work primarily with `FetchReachDense-v4` (dense Reach). It is the simplest variant: no objects, continuous feedback, and a workspace that the arm can easily cover. The anatomy principles transfer directly to Push, PickAndPlace, and Slide -- the interface is the same, and we verify that uniformity in section 2.7. Figures 2.1 through 2.3 show the three Fetch environments we use in this book.
 
@@ -127,7 +122,7 @@ Figure 2.3: FetchPickAndPlace-v4 after `env.reset()`. The red target sphere floa
 
 ## 2.3 Build It: The observation dictionary
 
-The first thing to understand about any RL environment is what the agent perceives. In Fetch environments, the agent does not see a flat vector. It sees a dictionary with three keys, each carrying a different kind of information. This structure is not just a data format -- it is the interface through which goal-conditioned learning operates.
+The first thing to understand about any RL environment is what the agent perceives. In Fetch environments, the agent does not see a flat vector but rather a dictionary with three keys, each carrying a different kind of information. This structure is not just a data format -- it is the interface through which goal-conditioned learning operates.
 
 ### What the dictionary contains
 
@@ -195,7 +190,7 @@ For FetchReach, the first three elements of `obs["observation"]` -- the gripper 
 
 ### The goal space: where goals live
 
-The goal-achievement mapping $\phi$ extracts the "achieved goal" from the current state. For Reach, $\phi(s)$ = gripper position. For Push, $\phi(s)$ = object position. This mapping is what determines `achieved_goal` in the observation dictionary.
+The goal-achievement mapping $\phi$ extracts the "achieved goal" from the current state -- for Reach, $\phi(s)$ is the gripper position, while for Push, $\phi(s)$ is the object position. This mapping is what determines `achieved_goal` in the observation dictionary.
 
 ```python
 # Goal space verification
@@ -366,15 +361,15 @@ Why do we check all three? Because each catches a different failure mode. If `ma
 
 ### Sparse reward: binary success signal
 
-As Figure 2.5 illustrates, the sparse reward works very differently from the dense variant. Instead of a smooth gradient, the agent receives a binary signal. The sparse reward uses a distance threshold $\epsilon = 0.05$ meters (5 cm):
+As Figure 2.5 illustrates, the sparse reward works very differently from the dense variant: instead of a smooth gradient, the agent receives a binary signal determined by a distance threshold $\epsilon = 0.05$ meters (5 cm):
 
 $$R_{\text{sparse}} = \begin{cases} 0 & \text{if } \|g_a - g_d\|_2 \leq \epsilon \\ -1 & \text{otherwise} \end{cases}$$
 
-Note the values: 0 for success, -1 for failure. Not +1 for success. Not -1/+1. The reward is always non-positive. This matters for value function initialization and for understanding what a "good" return looks like.
+Note the values: 0 for success and -1 for failure -- not +1 for success, not -1/+1. The reward is always non-positive, which matters for value function initialization and for understanding what a "good" return looks like.
 
 Let's trace through the numbers. With sparse rewards, an episode of 50 steps where the goal is never reached has a return of $\sum_{t=0}^{49}(-1) = -50$. An episode where the goal is reached on step 40 and maintained for the remaining 10 steps has a return of $40 \times (-1) + 10 \times 0 = -40$. A perfect policy that reaches the goal immediately would have a return of $-1 \times (\text{steps to reach goal}) + 0 \times (\text{remaining steps})$. The best possible return on a 50-step episode is 0 (goal reached on step 0), but in practice even good policies take a few steps to reach the goal, so returns of -2 to -5 indicate strong performance.
 
-For dense rewards, the numbers are different but the reasoning is similar. The return is the sum of negative distances across all 50 steps. A random policy averages about -25 to -10 per episode. A well-trained policy that quickly reaches the goal and stays there might achieve -1 to -3.
+For dense rewards, the numbers are different but the reasoning is similar. The return is the sum of negative distances across all 50 steps, so a random policy averages about -25 to -10 per episode, while a well-trained policy that quickly reaches the goal and stays there might achieve -1 to -3.
 
 ### Verifying the sparse reward formula
 
@@ -441,7 +436,7 @@ Everything we have built up to -- the dictionary observations, the separate achi
 
 ### Why relabeling matters
 
-The problem with sparse rewards is simple: if the agent never reaches the goal, the reward is -1 at every step of every episode. There is no gradient signal pointing toward success. The agent has no way to distinguish between a near-miss (3 cm from the goal) and a complete failure (30 cm away). Both get reward -1.
+The problem with sparse rewards is simple: if the agent never reaches the goal, the reward is -1 at every step of every episode, which means there is no gradient signal pointing toward success. The agent has no way to distinguish between a near-miss (3 cm from the goal) and a complete failure (30 cm away), since both get reward -1.
 
 Hindsight Experience Replay (HER), which we cover in depth in Chapter 5, solves this by asking: "You failed to reach the goal, but you *did* reach some position. What if that position had been the goal?" HER takes the `achieved_goal` from a failed trajectory and retroactively pretends it was the `desired_goal`. Then it recomputes the reward -- and because the agent actually reached that position, the recomputed reward is 0 (success).
 
@@ -479,12 +474,7 @@ def relabel_check(env_id="FetchReachDense-v4", n_goals=10,
     return {"n_goals": n_goals, "mismatches": mismatches}
 ```
 
-Here is what this code does, step by step:
-
-1. **Take a step** to get a non-trivial achieved goal (the gripper moved somewhere).
-2. **Sample 10 random goals** from the goal space -- positions the environment never intended as targets.
-3. **Call `compute_reward`** with the actual achieved goal and each random goal.
-4. **Verify** that the returned reward matches the distance formula.
+Here is what this code does. It first takes a step to get a non-trivial achieved goal (the gripper moved somewhere), then samples 10 random goals from the goal space -- positions the environment never intended as targets. For each random goal, it calls `compute_reward` with the actual achieved goal and verifies that the returned reward matches the distance formula.
 
 This is exactly what HER does, in miniature. The agent "failed" (it did not reach the original desired goal), but we can ask: "what would the reward have been if the goal were somewhere else?" And `compute_reward` gives us a correct answer.
 
@@ -494,7 +484,7 @@ This is exactly what HER does, in miniature. The agent "failed" (it did not reac
 
 ### Why this works (and why it would not work everywhere)
 
-The reason `compute_reward` accepts arbitrary goals is that the Fetch reward depends on the goal only through the distance $\|g_a - g\|$. The function does not need to access the physics state, the action history, or any internal simulation data. It takes two 3D vectors and computes a distance. This is why relabeling is cheap and exact.
+The reason `compute_reward` accepts arbitrary goals is that the Fetch reward depends on the goal only through the distance $\|g_a - g\|$. The function does not need to access the physics state, the action history, or any internal simulation data -- it takes two 3D vectors and computes a distance, which is why relabeling is both cheap and exact.
 
 Not all environments have this property. An environment where the reward depends on the trajectory (not just the endpoint), or where "success" requires a specific sequence of actions, would not support this kind of relabeling. An environment that returns flat observations with no goal separation does not expose the structure HER needs -- you would not know what "achieved goal" to relabel with, and you would have no function to recompute rewards for a different goal.
 
@@ -564,7 +554,7 @@ Environments with objects (Push, PickAndPlace) include 15 additional dimensions:
 | 20-22 | Gripper linear velocity | `grip_velp` |
 | 23-24 | Gripper finger velocities | `gripper_vel` |
 
-The crucial thing to notice: when `achieved_goal` changes from tracking the gripper (Reach) to tracking the object (Push, PickAndPlace), the goal-achievement mapping $\phi$ changes. For Reach, $\phi(s)$ = gripper position. For Push, $\phi(s)$ = object position. The environment handles this transparently -- you do not need to change your code. But you need to understand it, because it affects what "success" means: in Push, the agent succeeds when the *object* (not the gripper) is within 5 cm of the target.
+The crucial thing to notice is that when `achieved_goal` changes from tracking the gripper (Reach) to tracking the object (Push, PickAndPlace), the goal-achievement mapping $\phi$ changes accordingly -- $\phi(s)$ is the gripper position for Reach but the object position for Push. The environment handles this transparently, so you do not need to change your code. But you need to understand it, because it affects what "success" means: in Push, the agent succeeds when the *object* (not the gripper) is within 5 cm of the target.
 
 ### Uniform interface, changing semantics
 
@@ -623,7 +613,7 @@ Relabel reward checks: 500 checks, mismatches=0
 [BRIDGE OK] Bridging proof passed
 ```
 
-100 steps, 5 relabeled goals per step = 500 total reward checks. Zero mismatches. The manual computation and the environment's `compute_reward` agree to within 1e-10 on every single check.
+That gives us 100 steps with 5 relabeled goals per step, for 500 total reward checks -- and zero mismatches. The manual computation and the environment's `compute_reward` agree to within 1e-10 on every single check.
 
 This bridging proof serves the same purpose as unit tests in software engineering: it confirms that your understanding (the manual computation) matches the implementation (the environment's API). When you run the production script in the next section and it reports "OK," you know exactly what "OK" means -- because you have done the same checks by hand.
 
@@ -704,7 +694,7 @@ The random baseline is more useful than it might appear. It answers a concrete q
 
 For FetchReachDense-v4 with a threshold of 0.05 meters, random success is typically 0-10%. The workspace is much larger than the success region, so stumbling into the goal by chance is rare but not impossible. This makes Reach a good development environment: hard enough that random does not solve it, easy enough that basic algorithms (PPO with dense rewards) reliably learn it.
 
-Note the `ep_len_mean` of 50. This confirms something we mentioned in section 2.2: episodes are truncated at 50 steps, never terminated early. Even when the agent reaches the goal, the episode continues. This is a design choice in the Fetch environments -- the agent is rewarded for staying at the goal, not just reaching it. For dense rewards, staying at the goal produces rewards near 0 (distance near 0), which is the maximum possible. For sparse rewards, staying at the goal produces reward 0 (success), which is also the maximum. Both reward structures incentivize reaching and holding the goal position.
+Note the `ep_len_mean` of 50, which confirms something we mentioned in section 2.2: episodes are truncated at 50 steps, never terminated early, so even when the agent reaches the goal the episode continues. This is a design choice in the Fetch environments -- the agent is rewarded for staying at the goal, not just reaching it. For dense rewards, staying at the goal produces rewards near 0 (distance near 0), which is the maximum possible. For sparse rewards, staying at the goal produces reward 0 (success), which is also the maximum. Both reward structures incentivize reaching and holding the goal position.
 
 
 ## 2.10 What can go wrong

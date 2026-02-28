@@ -8,13 +8,13 @@
 > - Bridging from-scratch code to Stable Baselines 3 (SB3): confirming that both implementations compute the same GAE advantages, and mapping SB3 TensorBoard metrics to the code you wrote
 > - Training PPO on FetchReachDense-v4 to 100% success rate, establishing the pipeline baseline that every future chapter builds on
 
-In Chapter 2, you dissected the Fetch environment -- observation dictionaries, action semantics, dense and sparse reward computation, goal relabeling, and the random-policy baseline (0% success, mean return around -20). You understand what the agent sees and what the numbers mean.
+In Chapter 2, you dissected the Fetch environment -- observation dictionaries, action semantics, dense and sparse reward computation, goal relabeling, and the random-policy baseline (0% success, mean return around -20). You now understand what the agent sees and what the numbers mean.
 
-But understanding the environment is necessary and not sufficient. A random policy achieves 0% success. You need an algorithm that converts observations into intelligent actions -- one that improves through experience. The question is: which algorithm, and how do you verify it is working?
+But understanding the environment is necessary and not sufficient. A random policy achieves 0% success, so you need an algorithm that converts observations into intelligent actions -- one that improves through experience. The question is: which algorithm, and how do you verify it is working?
 
-This chapter introduces PPO (Proximal Policy Optimization), an on-policy algorithm that learns by clipping likelihood ratios to prevent destructive updates. You will derive the PPO objective, implement it from scratch (actor-critic network, GAE, clipped loss, value loss), verify each component, bridge to SB3, and train a policy that reaches 100% success on FetchReachDense-v4 (see Figure 3.1). This validates your entire training pipeline.
+This chapter introduces PPO (Proximal Policy Optimization), an on-policy algorithm that learns by clipping likelihood ratios to prevent destructive updates. You will derive the PPO objective, implement it from scratch (actor-critic network, GAE, clipped loss, value loss), verify each component, bridge to SB3, and train a policy that reaches 100% success on FetchReachDense-v4 (see Figure 3.1), thereby validating your entire training pipeline.
 
-One note before we begin: PPO works here because dense rewards provide continuous gradient signal. But PPO is on-policy -- it discards all data after each update, wasting expensive simulation time. Chapter 4 introduces SAC, an off-policy algorithm that stores and reuses experience in a replay buffer. That off-policy machinery is what Chapter 5 (Hindsight Experience Replay) requires when we tackle sparse rewards.
+One note before we begin: PPO works here because dense rewards provide continuous gradient signal, but PPO is on-policy -- it discards all data after each update, wasting expensive simulation time. Chapter 4 introduces SAC, an off-policy algorithm that stores and reuses experience in a replay buffer, and that off-policy machinery is what Chapter 5 (Hindsight Experience Replay) requires when we tackle sparse rewards.
 
 ![Annotated screenshot of FetchReachDense-v4 showing the Fetch robot arm reaching toward a red target sphere, with the end-effector and goal positions labeled](figures/fetch_reach_setup.png)
 
@@ -49,7 +49,7 @@ Here $J(\theta)$ measures how good a policy with parameters $\theta$ is, average
 
 The expectation is over trajectories -- different runs give different outcomes because actions sample from the policy distribution and the environment may be stochastic.
 
-The challenge: how do you take a gradient of this? The expectation depends on $\theta$ in a complicated way -- $\theta$ determines the policy, which determines the actions, which determines the states visited, which determines the rewards.
+The challenge is: how do you take a gradient of this? The expectation depends on $\theta$ in a complicated way, since $\theta$ determines the policy, which determines the actions, which determines the states visited, which in turn determines the rewards.
 
 ### The policy gradient theorem
 
@@ -80,19 +80,17 @@ Read this as: "Adjust $\theta$ to make good actions more likely and bad actions 
 
 ### The instability problem
 
-In theory, you can follow this gradient and improve. In practice, vanilla policy gradient is notoriously unstable (Henderson et al., 2018). Two things go wrong.
+In theory, you can follow this gradient and improve. In practice, vanilla policy gradient is notoriously unstable (Henderson et al., 2018), and two things go wrong.
 
-**Advantage estimates are noisy.** We do not know the true advantage -- we estimate it from sampled trajectories. With a finite batch, these estimates have high variance. Sometimes they are way off, and we make bad updates.
+**Advantage estimates are noisy.** We do not know the true advantage -- we estimate it from sampled trajectories. With a finite batch, these estimates have high variance, which means they are sometimes way off, leading to bad updates.
 
-**Big updates can be destructive.** Suppose we estimate that some action is great ($A \gg 0$) and crank up its probability. But if our estimate was wrong, we have committed to a bad action. Worse, the new policy visits different states, making our old advantage estimates invalid. The whole thing can spiral into a collapse that the policy never recovers from.
+**Big updates can be destructive.** Suppose we estimate that some action is great ($A \gg 0$) and crank up its probability. If our estimate was wrong, we have committed to a bad action. Worse still, the new policy visits different states, making our old advantage estimates invalid, so the whole thing can spiral into a collapse that the policy never recovers from.
 
 In our experience, unclipped policy gradient on Fetch tasks fails roughly half the time -- some seeds converge and others crash to zero and never recover. PPO's clipping mechanism was designed to make training reliably stable across seeds.
 
 ### PPO's solution: constrained updates
 
-PPO's key idea: do not change the policy too much in one update (Schulman et al., 2017).
-
-But "too much" in what sense? Not in parameter space -- a small parameter change can cause large behavior change. Instead, in probability space.
+PPO's key idea is: do not change the policy too much in one update (Schulman et al., 2017). But "too much" in what sense? Not in parameter space -- a small parameter change can cause large behavior change. Instead, PPO constrains change in probability space.
 
 Define the **probability ratio** (also called the likelihood ratio):
 
@@ -139,23 +137,19 @@ The gradient flows through the clipped version. We still increase the action pro
 
 FetchReachDense-v4 gives reward $r_t = -\|g_a - g_d\|_2$ at every step -- the negative distance to the goal.
 
-Why this helps PPO:
+This helps PPO in three related ways. Every action provides signal -- "you got 2cm closer" or "you drifted 1cm away" -- so the algorithm always has gradient information. Since even random actions produce useful data (every distance tells you something), exploration is not a bottleneck. Most importantly, dense rewards decouple the exploration problem from the learning problem, which means any training issues on dense Reach point to the implementation rather than insufficient exploration, making debugging much more straightforward.
 
-- **Every action provides signal.** "You got 2cm closer" or "you drifted 1cm away" -- the algorithm always has gradient information.
-- **Exploration is not a bottleneck.** Even random actions produce useful data, because every distance tells you something.
-- **Learning problems are algorithm problems.** Dense rewards decouple the exploration problem from the learning problem, so any training issues on dense Reach point to the implementation rather than insufficient exploration. This makes debugging much more straightforward.
-
-Compare to sparse rewards ($R = 0$ if success, $-1$ otherwise): most of your data carries no information about which direction to improve. We address that challenge in Chapter 5 with HER.
+Compare this to sparse rewards ($R = 0$ if success, $-1$ otherwise), where most of your data carries no information about which direction to improve. We address that challenge in Chapter 5 with HER.
 
 ### The well-posedness check
 
-Before we train, it is worth asking three practical questions (from Chapter 1):
+Before we train, it is worth asking the three well-posedness questions from Chapter 1.
 
-1. **Can this be solved?** Yes -- the policy network has 16 inputs and 4 outputs, with ~5,600 parameters. The mapping from "see goal, move toward it" is well within the capacity of a small MLP. A hand-coded controller solves this task with a few lines of code, so a learned one certainly can.
+First, **can this be solved?** The policy network has 16 inputs and 4 outputs, with ~5,600 parameters, and the mapping from "see goal, move toward it" is well within the capacity of a small MLP. A hand-coded controller solves this task with a few lines of code, so a learned one certainly can.
 
-2. **Is the solution reliable?** We expect yes -- the task is low-dimensional, the reward is smooth, and the goal distribution is bounded. Different seeds should converge to qualitatively similar policies (move toward the goal), even if the exact parameters differ.
+Second, **is the solution reliable?** We expect yes, because the task is low-dimensional, the reward is smooth, and the goal distribution is bounded. Different seeds should therefore converge to qualitatively similar policies (move toward the goal), even if the exact parameters differ.
 
-3. **Is the solution stable?** With dense rewards and PPO's clipping, small hyperparameter changes should not break convergence. We verify this empirically: three seeds with the same hyperparameters all reach 100% success (see Reproduce It).
+Third, **is the solution stable?** With dense rewards and PPO's clipping, small hyperparameter changes should not break convergence. We verify this empirically: three seeds with the same hyperparameters all reach 100% success (see Reproduce It).
 
 These questions become more interesting for harder tasks. For dense Reach, the answers are reassuring -- which is precisely the point. We start here so that success validates the full pipeline, and any issues can be traced directly to implementation bugs rather than task difficulty.
 
@@ -170,15 +164,9 @@ PPO maintains two neural networks (or two heads of one network):
 
 **Critic** $V_\phi(x)$: Given the same input, estimate the expected return. This is what we use to compute advantages.
 
-Why two networks, not one? Three reasons:
+Why two networks, not one? The actor maximizes expected return (finding good actions) while the critic minimizes prediction error (producing accurate value estimates), and these gradients can conflict so that improving one hurts the other. They also produce different output types -- the actor outputs a probability distribution (mean and variance for continuous actions), whereas the critic outputs a single scalar -- so forcing both through the same final layers creates unnecessary coupling. There is also a stability concern: the critic's value estimates feed into advantages, which train the actor, so if actor updates destabilize the critic, advantages become noisy, which destabilizes the actor further in a vicious cycle.
 
-1. **Different objectives.** The actor maximizes expected return (wants to find good actions). The critic minimizes prediction error (wants accurate value estimates). These gradients can conflict -- improving one may hurt the other.
-
-2. **Different output types.** The actor outputs a probability distribution (mean and variance for continuous actions). The critic outputs a single scalar. Forcing these through the same final layers creates unnecessary coupling.
-
-3. **Stability.** The critic's value estimates feed into advantages, which train the actor. If actor updates destabilize the critic, advantages become noisy, which destabilizes the actor further -- a vicious cycle.
-
-In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"). This captures shared features while keeping the objectives separate. SB3 uses this approach by default.
+In practice, implementations often share early layers (a "backbone") with separate final layers ("heads"), capturing shared features while keeping the objectives separate. SB3 uses this approach by default.
 
 ### The training loop
 
@@ -193,19 +181,19 @@ repeat:
     5. Discard data, go to 1
 ```
 
-**Step 1: Collect data.** Run the policy for `n_steps` in each of `n_envs` parallel environments. This gives us `n_steps * n_envs` transitions to learn from.
+**Step 1: Collect data.** Run the policy for `n_steps` in each of `n_envs` parallel environments, giving us `n_steps * n_envs` transitions to learn from.
 
-**Step 2: Compute advantages.** We use Generalized Advantage Estimation (GAE), which balances bias and variance via a parameter $\lambda$. The full equation appears in Section 3.4 where we implement it.
+**Step 2: Compute advantages.** We use Generalized Advantage Estimation (GAE), which balances bias and variance via a parameter $\lambda$. The full equation appears in Section 3.4, where we implement it.
 
-**Steps 3-4: Update networks.** Unlike supervised learning, we do multiple passes over the same data: `n_epochs = 10` is typical for PPO. Each pass uses minibatches of size `batch_size`. This reuses our expensive-to-collect trajectory data while the clipping prevents us from overfitting to it.
+**Steps 3-4: Update networks.** Unlike supervised learning, we do multiple passes over the same data -- `n_epochs = 10` is typical for PPO, with each pass using minibatches of size `batch_size`. This reuses our expensive-to-collect trajectory data while the clipping prevents us from overfitting to it.
 
 **Step 5: Discard and repeat.** This step reveals PPO's key tradeoff.
 
 > **Definition (on-policy learning).** An algorithm is **on-policy** if it can only learn from data collected by the current policy $\pi_\theta$. Every time you update $\theta$, all transitions collected with the old parameters become invalid for computing unbiased gradients. You must throw away the data and collect fresh transitions with the new policy.
 
-Here is what this means concretely. Each update cycle in PPO produces `n_steps * n_envs` transitions (8,192 with our settings). You use these transitions for `n_epochs` gradient steps, then discard all of them -- even though many transitions contain useful information that could improve the policy further. This is sample-inefficient: millions of simulation steps are thrown away after a single use.
+Here is what this means concretely. Each update cycle in PPO produces `n_steps * n_envs` transitions (8,192 with our settings), and you use these transitions for `n_epochs` gradient steps before discarding all of them -- even though many transitions contain useful information that could improve the policy further. This is sample-inefficient, since millions of simulation steps are thrown away after a single use.
 
-Why does this matter for what comes next? The on-policy constraint is the main reason we move to SAC in Chapter 4. Off-policy methods store transitions in a replay buffer and reuse them across many updates, so every simulation step contributes to learning not once but repeatedly. More importantly, the replay buffer is what makes Hindsight Experience Replay (Chapter 5) possible -- you cannot relabel goals in data you have already discarded.
+Why does this matter for what comes next? The on-policy constraint is the main reason we move to SAC in Chapter 4. Off-policy methods store transitions in a replay buffer and reuse them across many updates, so every simulation step contributes to learning not once but repeatedly. More importantly, the replay buffer is what makes Hindsight Experience Replay (Chapter 5) possible, because you cannot relabel goals in data you have already discarded.
 
 ### Key hyperparameters
 
@@ -221,7 +209,7 @@ Why does this matter for what comes next? The on-policy constraint is the main r
 | `gamma` | 0.99 | Discount factor |
 | `ent_coef` | 0.0 | Entropy bonus (exploration incentive) |
 
-For FetchReachDense-v4, SB3 defaults work well. We find it helpful to verify the baseline with these default values first, before experimenting with hyperparameter changes.
+For FetchReachDense-v4, SB3 defaults work well, and we find it helpful to verify the baseline with these default values first before experimenting with hyperparameter changes.
 
 ### Compact equation summary
 
@@ -276,9 +264,9 @@ class ActorCritic(nn.Module):
         return dist, value
 ```
 
-The actor outputs a Gaussian distribution parameterized by a learned mean and a state-independent log standard deviation. The critic outputs a single scalar -- the estimated value $V(x)$. Both share the backbone features but have independent output layers.
+The actor outputs a Gaussian distribution parameterized by a learned mean and a state-independent log standard deviation, while the critic outputs a single scalar -- the estimated value $V(x)$. Both share the backbone features but have independent output layers.
 
-The network is small by design -- Fetch tasks use MLPs, not CNNs. For FetchReach, the input dimension is 16 (10D observation + 3D achieved goal + 3D desired goal, concatenated by SB3's `MultiInputPolicy`), and the output is 4D (dx, dy, dz, gripper).
+The network is deliberately small, since Fetch tasks use MLPs rather than CNNs. For FetchReach, the input dimension is 16 (10D observation + 3D achieved goal + 3D desired goal, concatenated by SB3's `MultiInputPolicy`), and the output is 4D (dx, dy, dz, gripper).
 
 > **Checkpoint.** Instantiate the network with `obs_dim=16, act_dim=4` and run a forward pass with a random input. You should see: action mean shape `(1, 4)`, value shape `(1,)`, total parameters around 5,577. All outputs should be finite. If you get a shape error, check that `obs_dim` matches your concatenated observation size.
 
@@ -332,9 +320,9 @@ def compute_gae(rewards, values, next_value, dones,
     return advantages, returns
 ```
 
-The key line is the GAE recursion: `last_gae = delta + gamma * gae_lambda * (1 - done) * last_gae`. This accumulates TD residuals backwards, decaying each by $\gamma\lambda$. The `(1 - done)` term resets the accumulation at episode boundaries -- when an episode ends, future advantages from a different episode should not bleed in.
+The key line is the GAE recursion: `last_gae = delta + gamma * gae_lambda * (1 - done) * last_gae`. This accumulates TD residuals backwards, decaying each by $\gamma\lambda$, and the `(1 - done)` term resets the accumulation at episode boundaries so that future advantages from a different episode do not bleed in.
 
-The **returns** are computed as `advantages + values`. These serve as the target for the value function: $\hat{G}_t = \hat{A}_t + V_{\text{rollout}}(x_t)$.
+The **returns** are then computed as `advantages + values`, which serve as the target for the value function: $\hat{G}_t = \hat{A}_t + V_{\text{rollout}}(x_t)$.
 
 | Math | Code | Meaning |
 |------|------|---------|
@@ -378,7 +366,7 @@ def compute_ppo_loss(dist, old_log_probs, actions,
     policy_loss = -torch.min(surr1, surr2).mean()
 ```
 
-The ratio is computed in log-space (`exp(log_new - log_old)`) for numerical stability. The `min` operation is the pessimistic bound -- it takes the more conservative of the clipped and unclipped surrogate, ensuring we never overestimate the benefit of a policy change.
+The ratio is computed in log-space (`exp(log_new - log_old)`) for numerical stability, and the `min` operation is the pessimistic bound -- it takes the more conservative of the clipped and unclipped surrogate, ensuring we never overestimate the benefit of a policy change.
 
 The function also returns diagnostics that track training health:
 
@@ -446,7 +434,7 @@ The **explained variance** is a useful diagnostic. It measures how much of the r
 - EV = 0: predictions are no better than predicting the mean
 - EV < 0: predictions are worse than predicting the mean
 
-At initialization, the critic predicts near-zero for everything, so explained variance starts near 0. As training progresses, it should climb toward 0.5-0.9. If it stays at 0 or goes negative, the critic is not learning -- check that the optimizer is attached to the critic's parameters.
+At initialization the critic predicts near-zero for everything, so explained variance starts near 0, but as training progresses it should climb toward 0.5-0.9. If it stays at 0 or goes negative, the critic is not learning -- check that the optimizer is attached to the critic's parameters.
 
 > **Checkpoint.** Create near-zero value predictions and random returns. You should see `value_loss` around 0.5 (the predictions are wrong, so the squared error is roughly the variance of the returns) and `explained_variance` near 0.0 (the critic has no prediction skill yet). If `value_loss` is exactly 0, the critic and return tensors may be the same object -- check that you are using `.detach()` or separate computations.
 
@@ -504,11 +492,7 @@ The combined loss and gradient step:
             "grad_norm": grad_norm.item()}
 ```
 
-A few things to notice:
-
-- **Advantage normalization.** Before computing the policy loss, we subtract the mean and divide by the standard deviation of the advantages. This is standard practice -- it reduces the sensitivity to reward scale and makes the gradient magnitudes more consistent across batches.
-- **Gradient clipping.** We clip the gradient norm at `max_grad_norm=0.5`. This prevents a single bad batch from causing an explosively large update. This is separate from the PPO ratio clipping -- gradient clipping limits the step size in parameter space, while PPO clipping limits the step size in probability space.
-- **The entropy term.** We negate the entropy because we minimize the total loss but want to *maximize* entropy. With `entropy_coef=0.0`, this term has no effect -- for FetchReachDense, the dense reward signal is enough to drive learning without an explicit exploration bonus.
+A few things to notice. Before computing the policy loss, we normalize advantages by subtracting the mean and dividing by the standard deviation -- this is standard practice that reduces sensitivity to reward scale and makes gradient magnitudes more consistent across batches. We also clip the gradient norm at `max_grad_norm=0.5`, which prevents a single bad batch from causing an explosively large update. This gradient clipping is separate from PPO's ratio clipping: gradient clipping limits the step size in parameter space, while PPO clipping limits the step size in probability space. Finally, we negate the entropy because we minimize the total loss but want to *maximize* entropy. With `entropy_coef=0.0`, this term has no effect -- for FetchReachDense, the dense reward signal is enough to drive learning without an explicit exploration bonus.
 
 > **Checkpoint.** Run 10 updates on a mock batch (random observations, actions, advantages, returns). The value loss should decrease from its initial value -- the critic is learning to predict returns. The `approx_kl` should stay small (below 0.05) -- the clipping is preventing overly large policy changes. If the value loss does not decrease, verify that `optimizer.step()` is being called and that the model parameters are actually changing.
 
@@ -569,7 +553,7 @@ Here are the results we got (your numbers may vary slightly with different seeds
 | 15 | 31k | 129 | 32.0 | Getting close |
 | 18 | 37k | 254 | 14.2 | Solved (threshold: 195) |
 
-CartPole is a much easier task than FetchReach, but it demonstrates that the algorithm works end-to-end: the policy improves, the value loss eventually decreases, and the KL divergence stays bounded (typically below 0.05). This is the same algorithm SB3 uses -- the from-scratch version just makes every step explicit.
+CartPole is a much easier task than FetchReach, but it demonstrates that the algorithm works end-to-end: the policy improves, the value loss eventually decreases, and the KL divergence stays bounded (typically below 0.05). This is the same algorithm SB3 uses; the from-scratch version just makes every step explicit.
 
 ![Learning curve from the PPO from-scratch demo on CartPole-v1: episode return on the y-axis increases from around 20 to above 200 over 40k training steps on the x-axis](figures/ppo_demo_learning_curve.png)
 
@@ -601,9 +585,9 @@ Figure 3.3: Learning curve from the from-scratch PPO implementation on CartPole-
 
 ## 3.9 Bridge: From-scratch to SB3
 
-We have built PPO from scratch and verified it component by component. SB3 implements the same math in a production-grade library. Before we use SB3 for the real training run, let's confirm that the two implementations agree on the same computation.
+We have built PPO from scratch and verified it component by component. SB3 implements the same math in a production-grade library, so before we use SB3 for the real training run, let us confirm that the two implementations agree on the same computation.
 
-The bridging proof feeds the same random data (rewards, values, dones) through our `compute_gae` and through SB3's `RolloutBuffer.compute_returns_and_advantage`. Both use gamma=0.99, gae_lambda=0.95, and the same seed:
+The bridging proof feeds the same random data (rewards, values, dones) through our `compute_gae` and through SB3's `RolloutBuffer.compute_returns_and_advantage`, with both using gamma=0.99, gae_lambda=0.95, and the same seed:
 
 ```bash
 bash docker/dev.sh python scripts/labs/ppo_from_scratch.py --compare-sb3
@@ -620,7 +604,7 @@ Max abs returns diff:   ~0
 [PASS] Our GAE matches SB3 RolloutBuffer
 ```
 
-The two implementations produce identical advantages and returns within floating-point precision (tolerance 1e-6). This means the same math drives both codebases.
+The two implementations produce identical advantages and returns within floating-point precision (tolerance 1e-6), which confirms that the same math drives both codebases.
 
 ### What SB3 adds beyond our from-scratch code
 
@@ -644,7 +628,7 @@ When you train with SB3 and open TensorBoard, the logged metrics correspond dire
 | `train/policy_gradient_loss` | `compute_ppo_loss` -> `info["policy_loss"]` | Clipped surrogate objective |
 | `rollout/ep_rew_mean` | (environment) | Mean episode return |
 
-This mapping is worth internalizing. When you see `train/clip_fraction = 0.15` in TensorBoard, you know what that means -- 15% of the probability ratios exceeded the $[0.8, 1.2]$ clip range, and those updates were constrained. That number came from the same calculation as the `clip_fraction` in our `compute_ppo_loss`. Having built these components yourself, you can read every TensorBoard metric as a quantity you understand from the inside.
+This mapping is worth internalizing. When you see `train/clip_fraction = 0.15` in TensorBoard, you know that 15% of the probability ratios exceeded the $[0.8, 1.2]$ clip range and those updates were constrained -- the number comes from the same calculation as the `clip_fraction` in our `compute_ppo_loss`. Having built these components yourself, you can read every TensorBoard metric as a quantity you understand from the inside.
 
 
 ## 3.10 Run It: Training PPO on FetchReachDense-v4
@@ -690,7 +674,7 @@ The one-command version:
 bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py all --seed 0
 ```
 
-This runs training, evaluation, and generates artifacts. It takes about 5-10 minutes on a GPU. For a quick sanity check that finishes in about 1 minute:
+This runs training, evaluation, and generates all artifacts in about 5-10 minutes on a GPU. For a quick sanity check that finishes in about 1 minute:
 
 ```bash
 bash docker/dev.sh python scripts/ch02_ppo_dense_reach.py train --total-steps 50000
@@ -735,7 +719,7 @@ Then open http://localhost:6006 in your browser. Here is what healthy training l
 | `train/clip_fraction` | 0.1-0.3 | Some updates clipped, not all |
 | `train/entropy_loss` | Slowly moves toward 0 | Policy becoming more deterministic |
 
-Remember, these are the same quantities you implemented in the Build It sections. `train/value_loss` is the output of your `compute_value_loss`. `train/clip_fraction` comes from your `compute_ppo_loss`. You know exactly what these numbers mean because you have computed them yourself.
+Remember that these are the same quantities you implemented in the Build It sections -- `train/value_loss` is the output of your `compute_value_loss`, and `train/clip_fraction` comes from your `compute_ppo_loss`. You know exactly what these numbers mean because you have computed them yourself.
 
 ### Verifying results
 
@@ -757,27 +741,21 @@ Key fields to verify:
 }
 ```
 
-The passing criteria are: success rate above 90%, mean return above -10, and final distance below 0.02 meters. Our runs consistently exceed these thresholds. If yours do not, see What Can Go Wrong below.
+The passing criteria are success rate above 90%, mean return above -10, and final distance below 0.02 meters. Our runs consistently exceed these thresholds; if yours do not, see What Can Go Wrong below.
 
 ### What the trained policy does
 
-The trained network maps the 16D concatenated observation (10D proprioceptive + 3D achieved goal + 3D desired goal) to 4D actions (dx, dy, dz, gripper). It has learned that to reach a goal, it should output velocities that point toward the goal position -- subtracting its current position from the desired position and scaling appropriately. The network discovered this purely from trial and error, using the dense reward signal as guidance.
+The trained network maps the 16D concatenated observation (10D proprioceptive + 3D achieved goal + 3D desired goal) to 4D actions (dx, dy, dz, gripper). It has learned that to reach a goal, it should output velocities that point toward the goal position -- effectively subtracting its current position from the desired position and scaling appropriately. The network discovered this purely from trial and error, using the dense reward signal as guidance.
 
-What does this look like in practice? The robot arm starts at a default position. At each timestep, the policy sees the current gripper position (in `achieved_goal`) and the target position (in `desired_goal`), and outputs a 4D action that moves the gripper toward the target. Within about 10-15 steps (out of 50 per episode), the gripper reaches the target and holds position for the remaining steps. The gripper dimension (index 3) is largely irrelevant for Reach -- there is nothing to grasp -- so the policy typically outputs near-zero values for it.
+In practice, the robot arm starts at a default position, and at each timestep the policy sees the current gripper position (in `achieved_goal`) and the target position (in `desired_goal`), then outputs a 4D action that moves the gripper toward the target. Within about 10-15 steps (out of 50 per episode) the gripper reaches the target and holds position for the remaining steps. The gripper dimension (index 3) is largely irrelevant for Reach since there is nothing to grasp, so the policy typically outputs near-zero values for it.
 
 The final distance of 4.6mm (0.0046 meters) means the policy overshoots the target by less than 5mm on average. The success threshold is 50mm (0.05 meters), so the policy is roughly 10x more precise than required. This margin gives us confidence that the solution is robust, not barely passing.
 
 ### Why this validates your pipeline
 
-If PPO succeeds on dense Reach, you know:
+If PPO succeeds on dense Reach, you know that the environment is configured correctly (observations and actions have the right shapes and semantics), that the network architecture works (`MultiInputPolicy` correctly processes dictionary observations), that GPU acceleration works (training completes in reasonable time), that the evaluation protocol is sound (you can load checkpoints and run deterministic rollouts), and that metrics are computed correctly (success rate matches what you observe).
 
-1. **Environment is configured correctly** -- observations and actions have the right shapes and semantics
-2. **Network architecture works** -- `MultiInputPolicy` correctly processes dictionary observations
-3. **GPU acceleration works** -- training completes in reasonable time
-4. **Evaluation protocol is sound** -- you can load checkpoints and run deterministic rollouts
-5. **Metrics are computed correctly** -- success rate matches what you observe
-
-This is the pipeline baseline. Every future chapter builds on this infrastructure. When something goes wrong with SAC in Chapter 4 or HER in Chapter 5, you can always come back here and verify that the foundation still works.
+This is the pipeline baseline. Every future chapter builds on this infrastructure, so when something goes wrong with SAC in Chapter 4 or HER in Chapter 5, you can always come back here and verify that the foundation still works.
 
 
 ## 3.11 What can go wrong
@@ -837,7 +815,7 @@ You should see `observation (10,)`, `achieved_goal (3,)`, `desired_goal (3,)`. A
 
 **Likely cause.** The GPU may not be in use, or `n_envs` is too low.
 
-**Diagnostic.** Run `nvidia-smi` inside the container and check for a python process using GPU memory. If the GPU is being used but throughput is still 500-1300 fps, that is normal -- RL training on Fetch is CPU-bound on MuJoCo simulation, not GPU-bound on neural network operations. This is expected behavior, not a bug. With small networks (5k parameters) and batch sizes (256), GPU operations complete in microseconds while the CPU runs physics.
+**Diagnostic.** Run `nvidia-smi` inside the container and check for a python process using GPU memory. If the GPU is being used but throughput is still 500-1300 fps, that is actually normal -- RL training on Fetch is CPU-bound on MuJoCo simulation rather than GPU-bound on neural network operations, since with small networks (5k parameters) and batch sizes (256), GPU operations complete in microseconds while the CPU runs physics.
 
 ### `--compare-sb3` shows mismatch above 1e-6
 
@@ -854,7 +832,7 @@ You should see `observation (10,)`, `achieved_goal (3,)`, `desired_goal (3,)`. A
 
 ## 3.12 Summary
 
-This chapter derived PPO from first principles and built it from the ground up. Here is what you accomplished:
+This chapter derived PPO from first principles and built it from the ground up. Here is what you accomplished along the way:
 
 - **The objective.** We want to maximize expected discounted return $J(\theta)$. The policy gradient theorem tells us how to differentiate this, and the advantage function tells us which actions are better than average.
 
@@ -868,7 +846,7 @@ This chapter derived PPO from first principles and built it from the ground up. 
 
 - **On-policy limitation.** PPO discards all data after each update because it is on-policy. This is sample-inefficient -- millions of simulation steps are thrown away after a single use.
 
-That last point is the gap that Chapter 4 addresses. SAC (Soft Actor-Critic) is off-policy: it stores transitions in a replay buffer and reuses them across many updates. This means every simulation step contributes to learning not once, but repeatedly. On FetchReachDense, you will see SAC converge faster than PPO using less total simulation. More importantly, the replay buffer is a prerequisite for Chapter 5's Hindsight Experience Replay (HER), which turns failed trajectories into learning signal by relabeling goals -- a technique that requires stored transitions to relabel.
+That last point is the gap that Chapter 4 addresses. SAC (Soft Actor-Critic) is off-policy: it stores transitions in a replay buffer and reuses them across many updates, so every simulation step contributes to learning not once but repeatedly. On FetchReachDense, you will see SAC converge faster than PPO using less total simulation. More importantly, the replay buffer is a prerequisite for Chapter 5's Hindsight Experience Replay (HER), which turns failed trajectories into learning signal by relabeling goals -- a technique that requires stored transitions to relabel.
 
 
 ---

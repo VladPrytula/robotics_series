@@ -29,13 +29,13 @@ Figure 9.1: FetchPush-v4 at 84x84 resolution -- what the pixel agent sees. The p
 
 Every pixel RL challenge from earlier chapters compounds when we add object interaction:
 
-**1. Tiny objects.** The puck in FetchPush is roughly 5 pixels wide at 84x84 resolution. The gripper is roughly 4 pixels. The spatial relationship between gripper and puck -- the signal the policy needs to act on -- occupies a tiny fraction of the image.
+**1. Tiny objects.** The puck in FetchPush is roughly 5 pixels wide at 84x84 resolution, and the gripper is roughly 4 pixels, so the spatial relationship between them -- the signal the policy needs to act on -- occupies a tiny fraction of the image.
 
-**2. Sparse rewards plus pixels.** FetchReachDense gave continuous distance feedback -- every arm movement changed the reward. FetchPush with sparse rewards ($R = 0$ on success, $R = -1$ otherwise) means the CNN must learn useful spatial features with almost no reward signal. HER helps by relabeling goals, but the CNN still needs to extract spatial coordinates from pixels before HER's relabeled rewards become useful.
+**2. Sparse rewards plus pixels.** FetchReachDense gave continuous distance feedback, meaning every arm movement changed the reward. FetchPush with sparse rewards ($R = 0$ on success, $R = -1$ otherwise) means the CNN must learn useful spatial features with almost no reward signal. HER helps by relabeling goals, but the CNN still needs to extract spatial coordinates from pixels before HER's relabeled rewards become useful.
 
-**3. Two learning problems at once.** The agent must simultaneously learn visual representations (CNN: pixels to spatial features) and learn a control policy (actor-critic: spatial features to push actions). In state-based Push, the first problem does not exist -- the observation IS the spatial features. Adding pixels means the agent must solve representation learning AND policy learning from scratch, using the same sparse reward signal.
+**3. Two learning problems at once.** The agent must simultaneously learn visual representations (CNN: pixels to spatial features) and a control policy (actor-critic: spatial features to push actions). In state-based Push, the first problem does not exist because the observation IS the spatial features. Adding pixels means the agent must solve representation learning AND policy learning from scratch, using the same sparse reward signal for both.
 
-**4. Contact dynamics from images.** Pushing requires understanding what happens after contact: does the puck move in the right direction? How far? This temporal reasoning must be inferred from sequences of pixel observations. Frame stacking (4 frames, concatenated along the channel dimension) provides a weak velocity signal -- pixel differences between consecutive frames imply motion direction and speed. But the motion signal is subtle at 84x84: a puck moving 1 cm per timestep shifts by roughly 1 pixel. Without frame stacking, the environment becomes a POMDP (partially observable MDP), because a single static image cannot distinguish "puck moving left" from "puck moving right."
+**4. Contact dynamics from images.** Pushing requires understanding what happens after contact -- does the puck move in the right direction, and how far? This temporal reasoning must be inferred from sequences of pixel observations. Frame stacking (4 frames, concatenated along the channel dimension) provides a weak velocity signal, since pixel differences between consecutive frames imply motion direction and speed. But the motion signal is subtle at 84x84: a puck moving 1 cm per timestep shifts by roughly 1 pixel. Without frame stacking, the environment becomes a POMDP (partially observable MDP), because a single static image cannot distinguish "puck moving left" from "puck moving right."
 
 ### The observation design space
 
@@ -60,7 +60,7 @@ desired_goal (3D)        -> passthrough
                             Total: 80D feature vector
 ```
 
-Why proprioception? The CNN should only learn about the WORLD -- where the puck is, where obstacles are. The robot's own state (joint positions, velocities, gripper width) comes from direct sensors with millimeter precision at microsecond latency. Forcing the CNN to also learn "where is my arm?" wastes capacity on a problem that cheaper sensors already solve. This mirrors how real robotic systems operate: joint encoders plus cameras, never cameras alone. We call this the **sensor separation principle**.
+Why proprioception? The CNN should only learn about the WORLD -- where the puck is, where obstacles are -- because the robot's own state (joint positions, velocities, gripper width) comes from direct sensors with millimeter precision at microsecond latency. Forcing the CNN to also learn "where is my arm?" wastes capacity on a problem that cheaper sensors already solve. This mirrors how real robotic systems operate (joint encoders plus cameras, never cameras alone), and we call it the **sensor separation principle**.
 
 ### Visual HER: two kinds
 
@@ -77,22 +77,18 @@ This creates an intentional **information asymmetry**: the policy must learn to 
 
 ### Hadamard check
 
-Before investing 40+ hours of GPU time per seed (at 30-50 fps, 5M steps takes 28-46 hours), we check our three practical questions:
-
-1. **Can this be solved?** Yes -- we have the 89% state-based result as existence proof. The information is in the image (you can see the puck and gripper). The question is whether a CNN can extract it.
-2. **Is the solution reliable?** We will need 3 seeds to find out. One seed at 95% could be lucky.
-3. **Is the solution stable?** Prior experience with pixel RL says no -- small changes in hyperparameters, encoder architecture, or gradient routing can mean the difference between 95% and 5%. Henderson et al. (2018) showed that even state-based RL exhibits high variance across seeds and implementations. Adding a CNN encoder multiplies the sensitivity surface. This chapter maps that sensitivity by systematically varying components and observing their impact.
+Before investing 40+ hours of GPU time per seed (at 30-50 fps, 5M steps takes 28-46 hours), we check our three practical questions. **Can this be solved?** Yes -- we have the 89% state-based result as existence proof, and the information is visually present in the image (you can see the puck and gripper), so the question reduces to whether a CNN can extract it. **Is the solution reliable?** We will need 3 seeds to find out, since one seed at 95% could be lucky. **Is the solution stable?** Prior experience with pixel RL says no -- small changes in hyperparameters, encoder architecture, or gradient routing can mean the difference between 95% and 5%. Henderson et al. (2018) showed that even state-based RL exhibits high variance across seeds and implementations, and adding a CNN encoder multiplies the sensitivity surface. This chapter maps that sensitivity by systematically varying components and observing their impact.
 
 
 ## 9.2 Build It: The visual observation pipeline
 
-We now build the components that convert raw camera frames into training data. The visual pipeline has three parts: a rendering function that captures camera images, a wrapper that integrates them into Gymnasium's observation structure with frame stacking and proprioception, and a replay buffer that stores pixel transitions without exhausting system memory. Each component is individually testable -- we verify shapes and types before connecting them.
+We now build the components that convert raw camera frames into training data. The visual pipeline has three parts: a rendering function that captures camera images, a wrapper that integrates them into Gymnasium's observation structure with frame stacking and proprioception, and a replay buffer that stores pixel transitions without exhausting system memory. Each component is individually testable, so we verify shapes and types before connecting them.
 
 ### 9.2.1 Rendering and resizing
 
-The rendering function captures a MuJoCo camera frame and converts it to a CHW uint8 tensor that PyTorch and SB3 expect. MuJoCo's `render()` returns an HWC array (height x width x channels) -- the image format used by NumPy and PIL. PyTorch and SB3 expect CHW format (channels first). The transpose from HWC to CHW is a zero-cost memory reinterpretation, not a data copy.
+The rendering function captures a MuJoCo camera frame and converts it to a CHW uint8 tensor that PyTorch and SB3 expect. MuJoCo's `render()` returns an HWC array (height x width x channels) -- the image format used by NumPy and PIL -- but PyTorch and SB3 expect CHW format (channels first), so we transpose. This transpose is a zero-cost memory reinterpretation, not a data copy.
 
-MuJoCo renders at its default resolution (480x480 for Fetch). We resize to 84x84 via PIL bilinear interpolation. When you create the environment with `gym.make("FetchPush-v4", render_mode="rgb_array", width=84, height=84)`, MuJoCo renders directly at 84x84 and the resize step is skipped entirely -- a worthwhile optimization since rendering happens every step.
+MuJoCo renders at its default resolution (480x480 for Fetch), and we resize to 84x84 via PIL bilinear interpolation. When you create the environment with `gym.make("FetchPush-v4", render_mode="rgb_array", width=84, height=84)`, MuJoCo renders directly at 84x84 and the resize step is skipped entirely -- a worthwhile optimization since rendering happens every step.
 
 **Listing 9.1: render_and_resize -- camera capture to CHW tensor**
 
@@ -174,7 +170,7 @@ $$\text{bytes per transition} = 84{,}672 \times 2 = 169{,}344 \approx 165 \text{
 
 Readers with 64 GB should use `--buffer-size 300000`. Readers with 32 GB should use `--buffer-size 100000`. Below 32 GB, pixel Push training is experimental -- verify the pipeline with `--full-state` first, then try pixels with `--buffer-size 50000`.
 
-The key insight: store as uint8 (1 byte per value), convert to float32 only at sample time. The conversion cost is negligible for a 256-sample batch (256 x 84,672 x 4 bytes = 87 MB for obs + next_obs) but would quadruple memory if applied to the full buffer. SB3's `DictReplayBuffer` already stores pixels as uint8 when the observation space dtype is `np.uint8` -- our wrapper defines the pixel space with `dtype=np.uint8` to ensure this. One caveat: SB3's `DictReplayBuffer` does NOT support `optimize_memory_usage=True` (which would avoid storing `next_obs` separately for a 2x savings). It raises `ValueError` if you try. So we live with the full `obs` + `next_obs` cost.
+The key insight is to store pixels as uint8 (1 byte per value) and convert to float32 only at sample time. The conversion cost is negligible for a 256-sample batch (256 x 84,672 x 4 bytes = 87 MB for obs + next_obs) but would quadruple memory if applied to the full buffer. SB3's `DictReplayBuffer` already stores pixels as uint8 when the observation space dtype is `np.uint8`, so our wrapper defines the pixel space with `dtype=np.uint8` to ensure this behavior. One caveat: SB3's `DictReplayBuffer` does NOT support `optimize_memory_usage=True` (which would avoid storing `next_obs` separately for a 2x savings), raising `ValueError` if you try, so we live with the full `obs` + `next_obs` cost.
 
 **Listing 9.3: PixelReplayBuffer -- uint8 storage, float32 sampling**
 
@@ -224,7 +220,7 @@ This is the complete from-scratch implementation. The core insight is in the dty
 
 ## 9.3 Build It: Encoder architecture
 
-The encoder is where pixel observations become features a policy can act on. We build two encoders: NatureCNN (the "wrong" one, to understand why it fails) and ManipulationCNN (the "right" one). Then we add SpatialSoftmax to extract spatial coordinates, and ManipulationExtractor to wire everything together for SB3.
+The encoder is where pixel observations become features a policy can act on. We build two encoders -- NatureCNN (the "wrong" one, to understand why it fails) and ManipulationCNN (the "right" one) -- then add SpatialSoftmax to extract spatial coordinates and ManipulationExtractor to wire everything together for SB3.
 
 ### 9.3.1 NatureCNN -- the "wrong" encoder
 
@@ -260,11 +256,11 @@ class NatureCNN(nn.Module):
         )
 ```
 
-The problem is in the first layer. The puck is roughly 5 pixels wide. After stride-4, it becomes roughly 1 pixel. The spatial relationship between gripper and puck -- the signal the policy needs -- is destroyed in the FIRST layer.
+The problem is in the first layer. The puck is roughly 5 pixels wide, so after stride-4 it becomes roughly 1 pixel, which means the spatial relationship between gripper and puck -- the signal the policy needs -- is destroyed in the FIRST layer.
 
-NatureCNN was designed for Atari, where game sprites are 10-30 pixels wide and decisions are coarse ("go left" vs "go right"). Manipulation requires millimeter-precision spatial reasoning about objects that are 3-5 pixels wide. The architecture is fundamentally mismatched.
+NatureCNN was designed for Atari, where game sprites are 10-30 pixels wide and decisions are coarse ("go left" vs "go right"). Manipulation requires millimeter-precision spatial reasoning about objects that are 3-5 pixels wide, making the architecture fundamentally mismatched.
 
-In our experiments, NatureCNN achieves 5-8% success on FetchPush across 2M+ training steps -- indistinguishable from the random-policy baseline. The algorithm (SAC + HER) is proven to work from state at 89%. The encoder is the bottleneck.
+In our experiments, NatureCNN achieves 5-8% success on FetchPush across 2M+ training steps -- indistinguishable from the random-policy baseline. Since the algorithm (SAC + HER) is proven to work from state at 89%, the encoder is the bottleneck.
 
 ### 9.3.2 ManipulationCNN -- the "right" encoder
 
@@ -313,7 +309,7 @@ Figure 9.2: NatureCNN vs ManipulationCNN spatial progression. A 5-pixel puck bec
 
 ### 9.3.3 SpatialSoftmax -- "where" not "what"
 
-ManipulationCNN produces a `(B, 32, 21, 21)` feature map -- 32 channels, each 21x21 pixels. The standard approach would flatten this into a 14,112-dimensional vector. But for manipulation, we do not need to know what the image looks like. We need to know WHERE things are.
+ManipulationCNN produces a `(B, 32, 21, 21)` feature map -- 32 channels, each 21x21 pixels. The standard approach would flatten this into a 14,112-dimensional vector, but for manipulation we do not need to know what the image looks like; we need to know WHERE things are.
 
 SpatialSoftmax (Levine et al., 2016) extracts the expected $(x, y)$ coordinate of each channel's activation peak. For $C$ channels, the output is $2C$ values in $[-1, 1]$ -- spatial coordinates, not pixel values.
 
@@ -323,7 +319,7 @@ The operation per channel with height $H$ and width $W$:
 2. Expected x-coordinate: $\bar{x} = \sum_{h,w} \alpha_{h,w} \cdot \text{pos}_x(w)$, where $\text{pos}_x \in [-1, 1]$
 3. Expected y-coordinate: $\bar{y} = \sum_{h,w} \alpha_{h,w} \cdot \text{pos}_y(h)$
 
-The temperature $\tau$ is learnable: high temperature produces uniform attention (early training, unsure where to look), low temperature produces peaked attention (converged policy, focusing on precise object locations).
+The temperature $\tau$ is learnable: a high temperature produces uniform attention early in training (when the network is unsure where to look), while a low temperature produces peaked attention once the policy converges (focusing on precise object locations).
 
 **Listing 9.6: SpatialSoftmax -- expected (x, y) coordinates per channel**
 
@@ -355,10 +351,7 @@ The LayerNorm and Tanh layers that follow SpatialSoftmax in the full pipeline (s
 
 ### 9.3.4 ManipulationExtractor -- SB3-compatible wiring
 
-SB3 needs a `BaseFeaturesExtractor` subclass that takes a dict observation space and produces a flat feature vector. ManipulationExtractor routes each key to the appropriate sub-encoder:
-
-- Image keys (detected by `is_image_space`) go through ManipulationCNN + SpatialSoftmax + LayerNorm + Tanh
-- Vector keys (proprioception, goals) pass through unchanged
+SB3 needs a `BaseFeaturesExtractor` subclass that takes a dict observation space and produces a flat feature vector. ManipulationExtractor routes each key to the appropriate sub-encoder: image keys (detected by `is_image_space`) go through ManipulationCNN + SpatialSoftmax + LayerNorm + Tanh, while vector keys (proprioception, goals) pass through unchanged.
 
 **Listing 9.7: ManipulationExtractor -- routing dict observations**
 
@@ -408,9 +401,9 @@ For FetchPush with `spatial_softmax=True`, proprioception, and `goal_mode="both"
 
 ### 9.3.5 Proprioception passthrough and sensor separation
 
-The ManipulationExtractor does not force the CNN to learn about the robot's own body. Joint positions, velocities, and gripper width come from the `"proprioception"` key as a 10D vector that passes through unchanged. The CNN only sees pixels -- it learns about the world (object positions, obstacles), not the self.
+The ManipulationExtractor does not force the CNN to learn about the robot's own body. Joint positions, velocities, and gripper width come from the `"proprioception"` key as a 10D vector that passes through unchanged, so the CNN only sees pixels and learns about the world (object positions, obstacles), not the self.
 
-This is the sensor separation principle in practice: cameras observe the environment; joint encoders observe the robot. Mixing these signals in the CNN wastes network capacity on a problem that cheaper sensors already solve with perfect accuracy. In real robotic systems, proprioception comes from encoders sampling at kHz rates with sub-millimeter resolution. No camera can compete with that for self-state measurement. The CNN should focus on what cameras are uniquely good at: perceiving the world beyond the robot's own body.
+This is the sensor separation principle in practice: cameras observe the environment while joint encoders observe the robot. Mixing these signals in the CNN wastes network capacity on a problem that cheaper sensors already solve with perfect accuracy. In real robotic systems, proprioception comes from encoders sampling at kHz rates with sub-millimeter resolution -- no camera can compete with that for self-state measurement -- so the CNN should focus on what cameras are uniquely good at: perceiving the world beyond the robot's own body.
 
 > **Checkpoint:** Run `bash docker/dev.sh python scripts/labs/manipulation_encoder.py --verify`. Expected: `[ALL PASS] Manipulation encoder verified`. Key checks: `features_dim = 80` (64 spatial + 10 proprio + 3 ag + 3 dg), SpatialSoftmax coordinates in $[-1, 1]$, ManipulationCNN output `(B, 32, 21, 21)`.
 
@@ -450,7 +443,7 @@ class RandomShiftAug(nn.Module):
         ]
 ```
 
-Replicate padding is important -- zero padding would create artificial dark borders that the CNN might learn to exploit as a position signal. Replicate padding extends the border pixels outward, maintaining the visual appearance of the scene edges. The shift magnitudes are small enough ($\pm 4$ pixels on 84x84, roughly $\pm 5\%$) that the augmented images remain plausible views of the same scene.
+Replicate padding is important because zero padding would create artificial dark borders that the CNN might learn to exploit as a position signal. Replicate padding instead extends the border pixels outward, maintaining the visual appearance of the scene edges, and the shift magnitudes are small enough ($\pm 4$ pixels on 84x84, roughly $\pm 5\%$) that the augmented images remain plausible views of the same scene.
 
 > **Checkpoint:** Augment a batch of 8 images twice with the same input. The two outputs should differ (random shifts are independent). Augmenting a constant-valued image should return the same constant (replicate padding of a constant is the same constant).
 
@@ -514,7 +507,7 @@ class HerDrQDictReplayBuffer(HerReplayBuffer):
         return samples
 ```
 
-We override `sample()` rather than `_get_samples()` because HER's internal flow calls `_get_real_samples()` + `_get_virtual_samples()` and merges them -- it does not go through `_get_samples()`. Goals are never augmented; only pixel observations change. This preserves the HER invariant: `compute_reward(achieved_goal, desired_goal)` must be consistent with the reward stored in the transition. Augmenting goal vectors would break this invariant.
+We override `sample()` rather than `_get_samples()` because HER's internal flow calls `_get_real_samples()` + `_get_virtual_samples()` and merges them without going through `_get_samples()`. Goals are never augmented -- only pixel observations change -- which preserves the HER invariant: `compute_reward(achieved_goal, desired_goal)` must be consistent with the reward stored in the transition, and augmenting goal vectors would break this invariant.
 
 > **Checkpoint:** Run `bash docker/dev.sh python scripts/labs/image_augmentation.py --verify`. Expected: `[ALL PASS] Image augmentation verified`. Key checks: augmented images have same shape as input, two augmentations of the same input differ, goals and rewards are unchanged by augmentation.
 
@@ -527,16 +520,13 @@ This is the most subtle component in the pipeline -- and the one that makes the 
 
 When you create SB3's SAC with `share_features_extractor=True` (the default for shared encoders), SB3 puts the encoder parameters in the **actor's** optimizer. During critic training, SB3 wraps the encoder forward pass in `set_grad_enabled(False)` -- gradients do not flow through the encoder during TD loss computation.
 
-This means the encoder learns ONLY from the actor's policy gradient. Early in training, the policy is random -- it pushes in random directions and succeeds roughly 5% of the time by luck. The actor loss gradient is essentially noise: with a near-uniform random policy, the gradient signal says "all directions are equally bad," which gives the encoder nothing to learn from. The encoder remains at its random initialization, the critic cannot distinguish states (they all look the same through a random encoder), and training never bootstraps. In our experiments, this default configuration produces 5-8% success, flat, for 2M+ steps -- regardless of whether you use NatureCNN or ManipulationCNN.
+This means the encoder learns ONLY from the actor's policy gradient. Early in training the policy is random -- it pushes in random directions and succeeds roughly 5% of the time by luck -- so the actor loss gradient is essentially noise: with a near-uniform random policy, the gradient signal says "all directions are equally bad," which gives the encoder nothing to learn from. The encoder therefore remains at its random initialization, the critic cannot distinguish states (since they all look the same through a random encoder), and training never bootstraps. In our experiments, this default configuration produces 5-8% success, flat, for 2M+ steps -- regardless of whether you use NatureCNN or ManipulationCNN.
 
 ### 9.5.2 DrQ-v2 pattern: encoder in the critic optimizer
 
-DrQ-v2 (Yarats et al., 2021) does the opposite:
+DrQ-v2 (Yarats et al., 2021) does the opposite: it places the encoder in the critic's optimizer, so the critic's TD loss directly asks "does this visual feature help predict future value?" -- a rich, stable learning signal. Meanwhile, the actor receives detached features, which prevents noisy policy gradients (especially at low success rates) from corrupting the encoder's representation.
 
-- **Encoder in critic optimizer.** The critic's TD loss directly asks: "does this visual feature help predict future value?" This is a rich, stable learning signal.
-- **Actor receives detached features.** The policy gradient does not flow back into the encoder. This prevents noisy policy gradients (especially at low success rates) from corrupting the encoder's representation.
-
-The key insight: the critic provides value-based supervision ("this state leads to high/low returns"), which is exactly what the encoder needs to learn useful spatial features. Even when success rate is near zero, the critic's TD error still provides signal: "this state where the gripper is near the puck has slightly higher Q than this state where the gripper is far away." That signal is weak, but it is directional -- it consistently pushes the encoder toward features that discriminate states by spatial proximity to goals. The actor's policy gradient, by contrast, is noisy and uninformative until the encoder already represents something useful -- a chicken-and-egg problem that the critic breaks.
+The key insight is that the critic provides value-based supervision ("this state leads to high/low returns"), which is exactly what the encoder needs to learn useful spatial features. Even when success rate is near zero, the critic's TD error still provides signal: "this state where the gripper is near the puck has slightly higher Q than this state where the gripper is far away." That signal is weak, but it is directional -- it consistently pushes the encoder toward features that discriminate states by spatial proximity to goals. The actor's policy gradient, by contrast, is noisy and uninformative until the encoder already represents something useful -- a chicken-and-egg problem that the critic breaks.
 
 The implementation requires one `forward()` override, one `.detach()` call, and an optimizer rewiring.
 
@@ -570,7 +560,7 @@ class CriticEncoderActor(Actor):
         return mean_actions, log_std, {}
 ```
 
-The first override removes the gradient gate so the TD loss updates the encoder. The second adds `.detach()` so the policy loss does NOT update the encoder. Together, they route all encoder learning through the critic.
+The first override removes the gradient gate so that the TD loss updates the encoder, while the second adds `.detach()` so the policy loss does NOT update the encoder. Together, these two changes route all encoder learning through the critic.
 
 ### 9.5.4 DrQv2SACPolicy -- wiring the optimizers
 
@@ -601,7 +591,7 @@ class DrQv2SACPolicy(SACPolicy):
         self.critic_target.load_state_dict(self.critic.state_dict())
 ```
 
-The identity-based filtering (`id(p) not in encoder_ids`) avoids fragility if parameter naming conventions change across SB3 versions -- we match on Python object identity, not parameter name strings. The target critic gets its own separate encoder that is updated via Polyak averaging ($\tau = 0.005$), as in standard SAC. This is important: the target encoder must NOT be the same object as the online encoder, or Polyak averaging would be a no-op.
+The identity-based filtering (`id(p) not in encoder_ids`) avoids fragility if parameter naming conventions change across SB3 versions, since we match on Python object identity rather than parameter name strings. The target critic gets its own separate encoder that is updated via Polyak averaging ($\tau = 0.005$), as in standard SAC -- this is important because the target encoder must NOT be the same object as the online encoder, or Polyak averaging would be a no-op.
 
 It is worth tracing the gradient flow carefully through this shared-encoder setup:
 
@@ -609,9 +599,9 @@ It is worth tracing the gradient flow carefully through this shared-encoder setu
 
 2. **Backward pass:** When PyTorch runs `actor_loss.backward()`, it computes gradients for *every* parameter on the computational graph -- including the shared encoder, because the encoder sits between the pixels and the Q-value.
 
-3. **Why no update happens:** PyTorch's `optimizer.step()` only updates parameters that are in `optimizer.param_groups`. The actor optimizer does not contain encoder parameters (we filtered them out). So even though `.backward()` writes gradients into the encoder's `.grad` tensors, `actor_optimizer.step()` ignores them entirely. The encoder is only updated when `critic_optimizer.step()` runs.
+3. **Why no update happens:** PyTorch's `optimizer.step()` only updates parameters that are in `optimizer.param_groups`, and the actor optimizer does not contain encoder parameters (we filtered them out). So even though `.backward()` writes gradients into the encoder's `.grad` tensors, `actor_optimizer.step()` ignores them entirely, and the encoder is only updated when `critic_optimizer.step()` runs.
 
-4. **The `CriticEncoderActor` detach:** Our actor wrapper detaches features before the policy MLP as a safety measure -- it prevents encoder gradients from being *computed* during the actor loss backward pass. This is a belt-and-suspenders approach: the optimizer filtering (step 3) is sufficient, but the detach avoids wasting compute on gradients that would be ignored anyway.
+4. **The `CriticEncoderActor` detach:** Our actor wrapper detaches features before the policy MLP as a safety measure, preventing encoder gradients from being *computed* during the actor loss backward pass. This is a belt-and-suspenders approach: the optimizer filtering (step 3) is sufficient on its own, but the detach avoids wasting compute on gradients that would be ignored anyway.
 
 The net effect: the encoder learns from Bellman error (critic loss) only, not from the actor's policy gradient. This is the DrQ-v2 design -- the encoder should learn *state features* from TD error, not learn to *fool the critic* via the actor.
 
@@ -627,9 +617,7 @@ The net effect: the encoder learns from Bellman error (critic loss) only, not fr
 
 ## 9.6 Bridge: From scratch to SB3
 
-You have now built 13 components across five lab files: a pixel wrapper, a replay buffer, two CNN encoders, SpatialSoftmax, an SB3-compatible feature extractor, DrQ augmentation, two DrQ replay buffers, and three gradient routing overrides. These are the same components SB3 uses when you launch a pixel training run.
-
-Verify the full pipeline with three commands:
+You have now built 13 components across five lab files: a pixel wrapper, a replay buffer, two CNN encoders, SpatialSoftmax, an SB3-compatible feature extractor, DrQ augmentation, two DrQ replay buffers, and three gradient routing overrides. These are the same components that SB3 uses when you launch a pixel training run, so we can verify the full pipeline with three commands:
 
 ```bash
 bash docker/dev.sh python scripts/labs/pixel_wrapper.py --verify
@@ -638,7 +626,7 @@ bash docker/dev.sh python scripts/labs/image_augmentation.py --verify
 bash docker/dev.sh python scripts/labs/drqv2_sac_policy.py --verify
 ```
 
-All three should print `[ALL PASS]`. Then run the bridging proof to verify that our from-scratch components produce identical results to what SB3 uses internally:
+All four should print `[ALL PASS]`. Then run the bridging proof to verify that our from-scratch components produce identical results to what SB3 uses internally:
 
 ```bash
 bash docker/dev.sh python scripts/labs/drqv2_sac_policy.py --bridge
@@ -652,7 +640,7 @@ Next, run the gradient probe to see how SB3's default compares to our override:
 bash docker/dev.sh python scripts/labs/drqv2_sac_policy.py --probe
 ```
 
-This prints the encoder parameter membership in the actor and critic optimizers for both SB3's default `SACPolicy` and our `DrQv2SACPolicy`. You should see encoder parameters in the actor optimizer only (SB3 default) versus encoder parameters in the critic optimizer only (our override).
+This prints the encoder parameter membership in the actor and critic optimizers for both SB3's default `SACPolicy` and our `DrQv2SACPolicy`, so you should see encoder parameters in the actor optimizer only (SB3 default) versus encoder parameters in the critic optimizer only (our override).
 
 Here is how the Build It components map to what you see in TensorBoard during training:
 
@@ -676,7 +664,7 @@ What SB3 adds on top of our components: vectorized environment rollout (`Subproc
 
 ## 9.7 Run It: The five-step investigation
 
-This is where the components meet reality. We run five experiments, each adding one piece, and watch the success rate. The first two fail. The third succeeds -- eventually. The fourth shows that a standard technique (DrQ) actually hurts. Each failure teaches a transferable debugging principle.
+This is where the components meet reality. We run five experiments, each adding one piece, and watch the success rate. The first two fail, the third succeeds (eventually), and the fourth shows that a standard technique (DrQ) actually hurts. Each failure teaches a transferable debugging principle.
 
 ### Step 0: NatureCNN baseline (pixels are not drop-in)
 
@@ -687,9 +675,9 @@ bash docker/dev.sh python scripts/ch09_pixel_push.py train \
   --seed 0 --total-steps 2000000
 ```
 
-**Result:** 5-8% success, flat, for 2M+ steps. Indistinguishable from a random policy.
+**Result:** 5-8% success, flat, for 2M+ steps -- indistinguishable from a random policy.
 
-The algorithm is proven to work at 89% from state vectors. The only change is the observation modality. Something about the visual processing pipeline is fundamentally wrong.
+The algorithm is proven to work at 89% from state vectors, and the only change is the observation modality, so something about the visual processing pipeline is fundamentally wrong.
 
 Look at the spatial progression from Section 9.3.1: NatureCNN's stride-4 first layer crushes an 84x84 image down to 20x20. The puck, which starts at roughly 5 pixels wide, becomes roughly 1 pixel. The gripper-puck spatial relationship -- the entire signal the policy needs -- is destroyed in the first convolutional layer.
 
@@ -697,15 +685,13 @@ Look at the spatial progression from Section 9.3.1: NatureCNN's stride-4 first l
 
 ### Step 1: Architecture fix (ManipCNN + SpatialSoftmax + proprioception)
 
-Replace NatureCNN with the components from Sections 9.3.2-9.3.5: ManipulationCNN (gentle 3x3 stride-2 downsampling), SpatialSoftmax (extract "where" coordinates, not "what" features), and proprioception passthrough (10D robot state alongside pixel features).
-
-Same pipeline, better encoder. The CNN can now represent precise spatial relationships between 5-pixel objects.
+Replace NatureCNN with the components from Sections 9.3.2-9.3.5: ManipulationCNN (gentle 3x3 stride-2 downsampling), SpatialSoftmax (extract "where" coordinates, not "what" features), and proprioception passthrough (10D robot state alongside pixel features). Same pipeline, better encoder -- the CNN can now represent precise spatial relationships between 5-pixel objects.
 
 **Result:** Still 5-8% flat. Architecture is necessary but not sufficient.
 
-This is the more subtle failure. The encoder CAN represent the right information -- ManipulationCNN preserves the puck at roughly 3 pixels through all four layers, and SpatialSoftmax extracts precise $(x, y)$ coordinates from those activations. But CAN represent and DOES represent are different things. The network has the capacity. The question is: is it learning?
+This is the more subtle failure. The encoder CAN represent the right information -- ManipulationCNN preserves the puck at roughly 3 pixels through all four layers, and SpatialSoftmax extracts precise $(x, y)$ coordinates from those activations -- but CAN represent and DOES represent are different things. The network has the capacity; the question is whether it is learning.
 
-Check where the encoder's gradients come from. In SB3's default configuration, the encoder sits in the actor optimizer. The critic disables gradients through the encoder during TD updates. The encoder learns only from the actor's policy gradient -- which is noisy and weak early in training because the policy is near-random. A random policy generates the gradient signal "all directions are equally bad," which gives the encoder nothing useful to learn from.
+Checking where the encoder's gradients come from reveals the problem. In SB3's default configuration, the encoder sits in the actor optimizer, and the critic disables gradients through the encoder during TD updates, so the encoder learns only from the actor's policy gradient -- which is noisy and weak early in training because the policy is near-random. A random policy generates the gradient signal "all directions are equally bad," which gives the encoder nothing useful to learn from.
 
 **Principle:** Architecture determines what a network CAN represent. Training determines what it DOES represent. We fixed the capacity; now we need to fix the learning signal.
 
@@ -748,11 +734,11 @@ Full multi-seed results: see REPRODUCE IT at end of chapter.
 ---------------------------------------------------------
 ```
 
-**Result:** Flat at 6% for 2M steps. You might think this failed too. It did not. At 2.2M steps, a slow upward trend appears. By 2.5M, success hits 25-34%. By 3.5M, it crosses 70%. By 4.4M, it reaches 95%.
+**Result:** Flat at 6% for 2M steps -- you might think this failed too, but it did not. At 2.2M steps a slow upward trend appears; by 2.5M, success hits 25-34%; by 3.5M it crosses 70%; and by 4.4M it reaches 95%.
 
 This is the **hockey-stick learning curve**: a long flat phase where the encoder is learning spatial structure from the critic's TD signal, followed by a rapid climb once the representation becomes good enough for the policy to exploit. The flat phase is not failure -- it is the representation learning overhead that pixel RL imposes. Section 9.8 explains the three mechanisms behind this curve.
 
-The difference between Step 1 and Step 2 is 15 lines of gradient routing code. The architecture is identical. The only change is WHERE the encoder's learning signal comes from: the critic's TD loss (rich, stable, directional even at low success rates) versus the actor's policy gradient (noisy, uninformative when the policy is near-random). This is the decisive architectural choice of the chapter.
+The difference between Step 1 and Step 2 is 15 lines of gradient routing code -- the architecture is identical. The only change is WHERE the encoder's learning signal comes from: the critic's TD loss (rich, stable, directional even at low success rates) versus the actor's policy gradient (noisy, uninformative when the policy is near-random). This is the decisive choice of the chapter.
 
 **Principle:** Where gradients flow matters as much as what architecture you use. The encoder needs value-based supervision from the critic, not noisy policy gradients from the actor.
 
@@ -760,15 +746,15 @@ The difference between Step 1 and Step 2 is 15 lines of gradient routing code. T
 
 Before adding more components, we pause to understand what just happened. Step 2's curve is not a smooth ascent -- it has three distinct phases, each with a characteristic loss signature. Learning to read this signature helps you decide when to be patient and when to intervene. Section 9.8 unpacks the three-phase loss signature in detail.
 
-The headline: pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps. Pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. If your stop rules are calibrated from state-based experience ("kill the run if no progress at 2M steps"), it helps to recalibrate for pixel RL -- otherwise, runs get killed during Phase 1 before the hockey-stick has a chance to appear.
+The headline: pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps, while pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. If your stop rules are calibrated from state-based experience ("kill the run if no progress at 2M steps"), it helps to recalibrate for pixel RL, because otherwise runs get killed during Phase 1 before the hockey-stick has a chance to appear.
 
 **Principle:** The representation learning phase is an unavoidable overhead. Rising losses during the hockey-stick are good news, not bad. Always read loss curves alongside success rate.
 
 ### Step 4: DrQ ablation -- augmentation versus representation
 
-You might wonder: we never added DrQ data augmentation. DrQ is the standard technique for pixel RL (Kostrikov et al., 2020). Would adding it help?
+You might wonder: we never added DrQ data augmentation, and DrQ is the standard technique for pixel RL (Kostrikov et al., 2020). Would adding it help?
 
-Run Step 2's exact configuration with one change -- DrQ augmentation enabled (omit the `--no-drq` flag). All other hyperparameters (buffer size, HER strength, encoder, gradient routing) are identical to Step 2:
+Run Step 2's exact configuration with one change -- DrQ augmentation enabled (omit the `--no-drq` flag) -- while keeping all other hyperparameters (buffer size, HER strength, encoder, gradient routing) identical to Step 2:
 
 ```bash
 bash docker/dev.sh python scripts/ch09_pixel_push.py train \
@@ -778,9 +764,9 @@ bash docker/dev.sh python scripts/ch09_pixel_push.py train \
 
 **Result:** 3% success, flat at 1.54M steps. DrQ makes things worse. (By comparison, Step 2 showed a clear upward trend by 1.4M steps with the same hyperparameters minus DrQ.)
 
-Here is why. DrQ shifts images by +/-4 pixels via pad-and-crop. After the CNN (84 -> 21 spatial resolution), this becomes +/-1 pixel on the 21x21 feature map. SpatialSoftmax converts this to +/-0.10 in the [-1, 1] coordinate space. Critically, DrQ augments `obs` and `next_obs` independently with different random shifts, doubling the noise in Bellman targets.
+Here is why. DrQ shifts images by +/-4 pixels via pad-and-crop, which after the CNN (84 -> 21 spatial resolution) becomes +/-1 pixel on the 21x21 feature map. SpatialSoftmax converts this to +/-0.10 in the [-1, 1] coordinate space, and -- critically -- DrQ augments `obs` and `next_obs` independently with different random shifts, doubling the noise in Bellman targets.
 
-The gripper-puck distance signal in SpatialSoftmax coordinates is roughly 0.25-0.50 units. With +/-0.10 noise on both `obs` and `next_obs` (independent), the noise-to-signal ratio is 40-80%. The TD target becomes unreliable, and the critic cannot learn the value structure it needs to train the encoder.
+The gripper-puck distance signal in SpatialSoftmax coordinates is roughly 0.25-0.50 units, so with +/-0.10 noise on both `obs` and `next_obs` (independent), the noise-to-signal ratio reaches 40-80%. The TD target becomes unreliable, and the critic cannot learn the value structure it needs to train the encoder.
 
 **Principle:** Data augmentation is not universally good. Choose your representation, then choose your augmentation. SpatialSoftmax extracts precise spatial coordinates; DrQ injects spatial noise. They are fundamentally incompatible.
 
@@ -822,9 +808,7 @@ Figure 9.4: The three-phase loss signature from Step 2. Phase 1: the critic memo
 
 The counterintuitive lesson: **rising losses during Phase 2 are good news.** In supervised learning, rising loss means the model is getting worse. In sparse RL, rising critic loss means the critic has moved past the trivial solution (predict constant $Q = -18.5$ for all states) and is now trying to learn which states actually lead to success. That is a harder prediction problem, so the loss rises -- but it is a productive rise. The success rate climbing alongside the loss confirms this.
 
-Phase 1 declining loss with flat success is the diagnostic red flag. It looks healthy on a loss plot, but the critic is not learning value structure -- it is memorizing the fact that all trajectories fail. If you only watch loss curves without checking success rate, Phase 1 looks indistinguishable from Phase 3.
-
-**Always read loss curves alongside success rate.** The loss value alone is ambiguous.
+Phase 1's declining loss with flat success is the diagnostic red flag: it looks healthy on a loss plot, but the critic is not learning value structure -- it is memorizing the fact that all trajectories fail. If you only watch loss curves without checking success rate, Phase 1 looks indistinguishable from Phase 3, which is why we always read loss curves alongside success rate. The loss value alone is ambiguous.
 
 The actor loss going negative in Phase 3 is a SAC-specific convergence signal. The actor loss is $L_\text{actor} = \alpha \log \pi(a|s) - Q(s, a)$. When $Q$ is high (near 0, meaning "success is likely"), the Q-value term dominates the entropy penalty $\alpha \log \pi$, making the total loss negative. This means the policy is confidently selecting high-value actions -- a sign of convergence, not divergence.
 
@@ -842,7 +826,7 @@ The actor loss going negative in Phase 3 is a SAC-specific convergence signal. T
 
 ### The patience tax
 
-Pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps. Pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. This overhead is the representation learning phase: the encoder must learn useful spatial features before the policy can exploit them. There is no shortcut.
+Pixel RL needs 2-4x the training budget of state-based RL. State-based Push reached 89% at 2M steps, while pixel Push reached 95% at 4.4M steps -- a 2.2x overhead. This overhead is the representation learning phase: the encoder must learn useful spatial features before the policy can exploit them, and there is no shortcut.
 
 We find it helpful to recalibrate stop rules for pixel RL. State-based intuitions ("no progress at 2M means it is broken") can lead to terminating runs during Phase 1, before the hockey-stick has a chance to emerge.
 
@@ -889,13 +873,13 @@ This chapter added a visual observation pipeline to the SAC + HER stack from Cha
 
 **Three transferable principles:**
 
-1. **Architecture must match the task.** NatureCNN's stride-4 was designed for Atari sprites, not 5-pixel manipulation objects. ManipulationCNN's stride-2 with SpatialSoftmax preserves spatial precision.
-2. **Gradient routing is decisive.** The encoder needs the critic's value-based supervision, not the actor's noisy policy gradient. This is 15 lines of code and the difference between 5% and 95%.
-3. **Augmentation must match representation.** DrQ's random shift corrupts SpatialSoftmax's precise coordinates. Choose your representation first, then select compatible augmentation.
+1. **Architecture must match the task.** NatureCNN's stride-4 was designed for Atari sprites, not 5-pixel manipulation objects, so ManipulationCNN's stride-2 with SpatialSoftmax is needed to preserve spatial precision.
+2. **Gradient routing is decisive.** The encoder needs the critic's value-based supervision, not the actor's noisy policy gradient -- 15 lines of code and the difference between 5% and 95%.
+3. **Augmentation must match representation.** DrQ's random shift corrupts SpatialSoftmax's precise coordinates, so choosing the representation first and then selecting compatible augmentation is essential.
 
-**The compositional insight:** This chapter did not invent a new algorithm. It composed SAC (Ch4) + HER (Ch5) + a visual pipeline (this chapter) and discovered that the critical missing piece was not a new loss function or a clever trick, but the routing of gradients through the encoder. The components from earlier chapters transferred directly -- the innovation was in wiring them correctly for pixel observations.
+**The compositional insight:** This chapter did not invent a new algorithm; it composed SAC (Ch4) + HER (Ch5) + a visual pipeline (this chapter) and discovered that the critical missing piece was not a new loss function or a clever trick, but the routing of gradients through the encoder. The components from earlier chapters transferred directly -- the innovation was in wiring them correctly for pixel observations.
 
-**Looking ahead:** We achieved 95% from pixels, but it took 4.4M steps and roughly 40 hours of GPU time per seed. The representation learning phase -- the long flat period before the hockey-stick -- is an unavoidable overhead when learning visual features from scratch. Chapter 10 explores whether pre-trained visual encoders and world models can reduce this tax, and what happens when the gap between simulation and reality becomes the bottleneck.
+**Looking ahead:** We achieved 95% from pixels, but it took 4.4M steps and roughly 40 hours of GPU time per seed, because the representation learning phase -- the long flat period before the hockey-stick -- is an unavoidable overhead when learning visual features from scratch. Chapter 10 explores whether pre-trained visual encoders and world models can reduce this tax, and what happens when the gap between simulation and reality becomes the bottleneck.
 
 ---
 

@@ -41,6 +41,28 @@ a whiteboard, not a professor lecturing from a podium.
 | "One might naively formulate..." | "A first attempt might look like..." |
 | "$(\mathcal{S}, \mathcal{A}, \mathcal{G}, P, R, \gamma)$ denote..." | "The MDP has six pieces: states, actions, goals, transitions, rewards, and a discount factor. Let's name them..." |
 
+**Calibration example -- the same content in two registers:**
+
+> *Staccato (tutorial-era):* SAC uses a maximum-entropy objective. This adds
+> an entropy bonus to the reward. The entropy bonus encourages exploration.
+> The temperature parameter alpha controls the trade-off. Alpha is tuned
+> automatically.
+>
+> *Flowing (book voice):* SAC augments the standard RL objective with an
+> entropy bonus that rewards the policy for maintaining uncertainty -- in
+> effect, the agent gets credit not only for achieving high returns but also
+> for keeping its options open. A temperature parameter alpha controls how
+> much weight this bonus carries relative to the task reward, and SAC tunes
+> alpha automatically so that the policy's entropy tracks a target value
+> (typically the negative of the action dimension, which we will derive in
+> Chapter 4).
+
+The difference is not vocabulary or formality -- both passages use the same
+technical terms. It is *connective tissue*: the second version links each
+sentence to the next ("in effect," "not only...but also," "so that," "which
+we will derive") so that the paragraph reads as a single argument rather than
+five independent assertions.
+
 ### 1.3 Pronoun Policy
 
 - **"you"** for direct instructions and code walkthroughs: "Run this command and check the output."
@@ -740,6 +762,55 @@ The voice must reflect this honestly:
   wrong -- check [specific diagnostic steps]."
 - "We don't fully understand why [X], but empirically it matters. Here's
   what we've observed: [data]."
+
+### 4.8 Prose Rhythm Guidelines
+
+Technical writing defaults to one of two textures: bullet lists (easy to
+write, hard to follow as an argument) and wall-of-equations (precise,
+but disconnected from the reader's reasoning). The book aims for a third
+texture -- sustained expository prose -- where each paragraph advances a
+single idea across four to eight sentences and the reader can feel the
+argument *move*. This subsection names four specific techniques that produce
+that texture, so that "write in flowing prose" becomes a checkable standard
+rather than an aesthetic preference.
+
+**Paragraph-as-argument.** A paragraph is not a container for loosely related
+sentences; it is a unit of reasoning. Each paragraph should open by stating
+or implying its claim, develop that claim through evidence or derivation, and
+close by connecting to what follows. When a paragraph contains six one-sentence
+assertions separated by line breaks, it is a bullet list wearing paragraph
+formatting -- and the fix is to add the connective tissue that makes those
+assertions into an argument. A useful test: can you summarize the paragraph
+in a single "this paragraph argues that..." sentence? If not, it may need
+splitting or restructuring.
+
+**Logical connectives as argument skeleton.** The phrases "so that," "from
+which it follows," "since," "provided that," "which means," and "in effect"
+are not filler -- they are the skeleton that holds an argument together.
+Without them, the reader must infer the logical relationship between
+consecutive sentences, and that inference is surprisingly error-prone when
+the material is unfamiliar. We prefer making the relationship explicit: "SAC
+adds an entropy bonus *so that* the policy maintains exploration" rather than
+"SAC adds an entropy bonus. The policy maintains exploration." The second
+version leaves the reader wondering whether the two sentences are causally
+related, coincidentally adjacent, or describing a separate mechanism entirely.
+
+**Parentheticals woven into sentences.** Qualifications, caveats, and
+cross-references sit most naturally as parentheticals within the sentence
+they modify (like this one), rather than as separate follow-up sentences or
+footnotes. This keeps the qualification close to the claim, which reduces the
+chance that a reader skimming ahead will encounter the claim without its
+caveat. Overuse is possible -- more than two parentheticals per sentence
+starts to feel labyrinthine -- but one or two per paragraph is a sign of
+writing that takes its own claims seriously enough to qualify them.
+
+**Lists for parallel items, not for arguments.** Lists are the right tool
+when the items are genuinely parallel and the reader benefits from scanning:
+environment names, CLI flags, file paths, substitution pairs. They are the
+wrong tool when the "items" are steps in a reasoning chain or facets of a
+single claim that need connective tissue. A useful diagnostic: if removing
+the bullet formatting and joining the items with "and" or "because" produces
+a better paragraph, the list was premature.
 
 ---
 
